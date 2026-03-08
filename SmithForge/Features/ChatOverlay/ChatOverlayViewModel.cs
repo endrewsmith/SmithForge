@@ -22,7 +22,10 @@ namespace SmithForge.Features.ChatOverlay
         {
             Application.Current.Dispatcher.Invoke(() =>
             {
-                var msgVm = new DisplayMessageViewModel(user, msg.Message);
+                var msgVm = new DisplayMessageViewModel(user, msg.Message, msg.MessageNumber, msg.Type);
+                // ОТЛАДКА
+                System.Diagnostics.Debug.WriteLine($"[ChatOverlayViewModel] Создан msgVm: " +
+                    $"User={user.Login}, MessageNumber={msgVm.MessageNumber}");
                 DisplayMessages.Add(msgVm);
 
                 if (DisplayMessages.Count > 8)

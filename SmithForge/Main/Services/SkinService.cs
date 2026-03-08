@@ -18,9 +18,18 @@ namespace SmithForge.Main.Services
                 if (chater == null)
                     return GetDefaultPath();
 
-                // Первые 10 сообщений - всегда дефолт
+                // Первые 10 сообщений - используем rank_0.xaml или дефолт
                 if (chater.MessageCount <= 10)
                 {
+                    // Пробуем rank_0.xaml
+                    string rank0Path = Path.Combine(RanksDir, "rank_0.xaml");
+                    if (File.Exists(rank0Path))
+                    {
+                        System.Diagnostics.Debug.WriteLine($"[SkinService] Используем rank_0.xaml (первые 10 сообщений)");
+                        return rank0Path;
+                    }
+
+                    // Если нет rank_0, пробуем дефолт
                     return GetDefaultPath();
                 }
 
@@ -92,7 +101,13 @@ namespace SmithForge.Main.Services
         private static string GetDefaultPath()
         {
             string defaultPath = Path.Combine(DefaultDir, "default.xaml");
-            return File.Exists(defaultPath) ? defaultPath : string.Empty;
+            if (File.Exists(defaultPath))
+            {
+                return defaultPath;
+            }
+
+            System.Diagnostics.Debug.WriteLine($"[SkinService] default.xaml не найден, SkinLoader использует встроенный шаблон");
+            return string.Empty;
         }
     }
 }

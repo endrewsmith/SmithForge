@@ -99,6 +99,11 @@ namespace SmithForge.ViewModels
                 });
             }
 
+            // ОТЛАДКА
+            Debug.WriteLine($"[MainViewModel] Получено сообщение от {chater.Login}:");
+            Debug.WriteLine($"   - Оригинальный номер из MessageProcessor: {msg.MessageNumber}");
+            Debug.WriteLine($"   - Текст: {uiMessage}");
+
             var overlayMsg = new CommonMessage
             {
                 User = chater,
