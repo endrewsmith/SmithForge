@@ -1,0 +1,65 @@
+<ResourceDictionary 
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:local="clr-namespace:SmithForge.Main.Services;assembly=SmithForge">
+
+    <DataTemplate x:Key="ChatMessageTemplate">
+        <Border x:Name="MainBorder" 
+                Background="#2D2D30" 
+                CornerRadius="4" 
+                Padding="8,6" 
+                Margin="2">
+            
+            <StackPanel>
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock Text="{Binding DisplayName, Mode=OneWay}" 
+                               Foreground="White" 
+                               FontWeight="Bold"/>
+
+                    <TextBlock Text=": " Foreground="White"/>
+
+                    <TextBlock Text="{Binding MessageText, Mode=OneWay}" 
+                               Foreground="#F0F0F0" 
+                               TextWrapping="Wrap"/>
+                </StackPanel>
+
+                <ProgressBar x:Name="MsgProgressBar"
+                             Value="{Binding MessageCount, Mode=OneWay}"
+                             Maximum="10"
+                             Height="0.5"
+                             Margin="0,4,0,0"
+                             Background="#232323"
+                             BorderThickness="0">
+                    <ProgressBar.Foreground>
+                        <Binding Path="MessageCount" Mode="OneWay">
+                            <Binding.Converter>
+                                <x:Static Member="local:ProgressColorConverter.Instance"/>
+                            </Binding.Converter>
+                        </Binding>
+                    </ProgressBar.Foreground>
+                </ProgressBar>
+            </StackPanel>
+        </Border>
+
+        <!-- ПРАВИЛЬНОЕ МЕСТО ДЛЯ ТРИГГЕРОВ -->
+        <DataTemplate.Triggers>
+            <DataTrigger Binding="{Binding MessageCount}" Value="10">
+                <!-- Скрываем полоску по имени -->
+                <Setter TargetName="MsgProgressBar" Property="Visibility" Value="Collapsed"/>
+                
+                <!-- Запускаем вспышку по имени -->
+                <DataTrigger.EnterActions>
+                    <BeginStoryboard>
+                        <Storyboard>
+                            <ColorAnimation Storyboard.TargetName="MainBorder"
+                                            Storyboard.TargetProperty="(Border.Background).(SolidColorBrush.Color)"
+                                            To="White" 
+                                            Duration="0:0:0.2" 
+                                            AutoReverse="True"/>
+                        </Storyboard>
+                    </BeginStoryboard>
+                </DataTrigger.EnterActions>
+            </DataTrigger>
+        </DataTemplate.Triggers>
+    </DataTemplate>
+</ResourceDictionary>
