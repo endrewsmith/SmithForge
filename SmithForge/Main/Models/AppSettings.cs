@@ -1,7 +1,13 @@
-﻿namespace SmithForge.Main.Models
+﻿using CommunityToolkit.Mvvm.ComponentModel;
+using System.Xml.Serialization;
+
+namespace SmithForge.Main.Models
 {
-    public class AppSettings
+    public partial class AppSettings
     {
+        // Константа с значениями по умолчанию - ЕДИНСТВЕННОЕ МЕСТО
+        private static readonly List<int> DefaultRankThresholds = new List<int> { 10, 50, 100, 200, 500, 1000 };
+
         // Проверь, чтобы буква в букву было так:
         public string ProgramPath { get; set; } = "notepad.exe";
 
@@ -25,14 +31,16 @@
         public int KarmaPerMessage { get; set; } = 1; // Значение по умолчанию
         public int MinMessageLength { get; set; } = 1;
 
-        private List<int> _rankThresholds = new List<int> { 10, 50, 100, 200, 500, 1000 };
+        private List<int> _rankThresholds = new List<int>(DefaultRankThresholds); // Копируем дефолтные
+
+        [XmlIgnore]
         public List<int> RankThresholds
         {
             get => _rankThresholds;
-            set => _rankThresholds = value;
+            set => _rankThresholds = value ?? new List<int>(DefaultRankThresholds);
         }
 
-        // Для сериализации в XML
+        // Для сериализации в XML используем только строку
         public string RankThresholdsString
         {
             get => string.Join(",", _rankThresholds);
@@ -44,7 +52,7 @@
                 }
                 catch
                 {
-                    _rankThresholds = new List<int> { 10, 50, 100, 200, 500, 1000 };
+                    _rankThresholds = new List<int>(DefaultRankThresholds); // Используем ту же константу
                 }
             }
         }

@@ -242,7 +242,7 @@
                         </DataGridTemplateColumn>
 
                         <!-- ОПЫТ -->
-                        <DataGridTextColumn Header="Опыт" Binding="{Binding TotalKarma, StringFormat=F1}" Width="80">
+                        <DataGridTextColumn Header="Вся карма" Binding="{Binding TotalKarma, StringFormat=F1}" Width="80">
                             <DataGridTextColumn.ElementStyle>
                                 <Style TargetType="TextBlock">
                                     <Setter Property="VerticalAlignment" Value="Center"/>
@@ -254,7 +254,7 @@
                         </DataGridTextColumn>
 
                         <!-- БАЛАНС -->
-                        <DataGridTextColumn Header="Баланс" Binding="{Binding Karma, StringFormat=F1}" Width="80">
+                        <DataGridTextColumn Header="Карма" Binding="{Binding Karma, StringFormat=F1}" Width="80">
                             <DataGridTextColumn.ElementStyle>
                                 <Style TargetType="TextBlock">
                                     <Setter Property="VerticalAlignment" Value="Center"/>
@@ -414,12 +414,12 @@
                         <!-- Карма -->
                         <UniformGrid Columns="2" Margin="0,0,0,15">
                             <StackPanel Margin="0,0,5,0">
-                                <TextBlock Text="БАЛАНС" FontSize="10" FontWeight="Bold" Foreground="#9E9EAE" Margin="0,0,0,5"/>
+                                <TextBlock Text="Карма" FontSize="10" FontWeight="Bold" Foreground="#9E9EAE" Margin="0,0,0,5"/>
                                 <TextBox Text="{Binding Karma, UpdateSourceTrigger=PropertyChanged, StringFormat=F1}" 
                                          Foreground="#2E7D32" FontWeight="Bold" Padding="5"/>
                             </StackPanel>
                             <StackPanel Margin="5,0,0,0">
-                                <TextBlock Text="ОПЫТ" FontSize="10" FontWeight="Bold" Foreground="#9E9EAE" Margin="0,0,0,5"/>
+                                <TextBlock Text="Вся карма" FontSize="10" FontWeight="Bold" Foreground="#9E9EAE" Margin="0,0,0,5"/>
                                 <TextBox Text="{Binding TotalKarma, UpdateSourceTrigger=PropertyChanged, StringFormat=F1}" 
                                          Foreground="#1565C0" FontWeight="Bold" Padding="5"/>
                             </StackPanel>

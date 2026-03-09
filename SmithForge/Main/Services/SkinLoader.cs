@@ -159,7 +159,7 @@ namespace SmithForge.Main.Services
         <local:StepToVisibilityConverter x:Key=""StepToVisibilityConverter""/>
     </DataTemplate.Resources>
     
-    <Border Background=""#2D2D30"" CornerRadius=""4"" Padding=""8,6"" Margin=""2"">
+    <Border Background=""#2D2D30"" CornerRadius=""4"" Padding=""0,0,0,2"" Margin=""2"">
         <Grid>
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width=""*""/>
@@ -172,67 +172,85 @@ namespace SmithForge.Main.Services
                 <Run Text=""{Binding MessageText, Mode=OneWay}"" Foreground=""#F0F0F0""/>
             </TextBlock>
 
-            <StackPanel Grid.Column=""1"" Margin=""8,0,2,0"" x:Name=""StepPanel"" VerticalAlignment=""Center"">
-                <!-- Черточки сверху вниз (10 - верхняя, 1 - нижняя) -->
-                <Border x:Name=""Step10"" Height=""1.5"" Width=""4"" Margin=""0,0.5"" Background=""#FF4500"" Opacity=""0"">
-                    <Border.Visibility>
-                        <Binding Path=""MessageCount"" Converter=""{StaticResource StepToVisibilityConverter}"" ConverterParameter=""10""/>
-                    </Border.Visibility>
-                </Border>
-                <Border x:Name=""Step9"" Height=""1.5"" Width=""4"" Margin=""0,0.5"" Background=""#FF6347"" Opacity=""0"">
-                    <Border.Visibility>
-                        <Binding Path=""MessageCount"" Converter=""{StaticResource StepToVisibilityConverter}"" ConverterParameter=""9""/>
-                    </Border.Visibility>
-                </Border>
-                <Border x:Name=""Step8"" Height=""1.5"" Width=""4"" Margin=""0,0.5"" Background=""#FF7F50"" Opacity=""0"">
-                    <Border.Visibility>
-                        <Binding Path=""MessageCount"" Converter=""{StaticResource StepToVisibilityConverter}"" ConverterParameter=""8""/>
-                    </Border.Visibility>
-                </Border>
-                <Border x:Name=""Step7"" Height=""1.5"" Width=""4"" Margin=""0,0.5"" Background=""#FF8C00"" Opacity=""0"">
-                    <Border.Visibility>
-                        <Binding Path=""MessageCount"" Converter=""{StaticResource StepToVisibilityConverter}"" ConverterParameter=""7""/>
-                    </Border.Visibility>
-                </Border>
-                <Border x:Name=""Step6"" Height=""1.5"" Width=""4"" Margin=""0,0.5"" Background=""#FFA500"" Opacity=""0"">
-                    <Border.Visibility>
-                        <Binding Path=""MessageCount"" Converter=""{StaticResource StepToVisibilityConverter}"" ConverterParameter=""6""/>
-                    </Border.Visibility>
-                </Border>
-                <Border x:Name=""Step5"" Height=""1.5"" Width=""4"" Margin=""0,0.5"" Background=""#FFB347"" Opacity=""0"">
-                    <Border.Visibility>
-                        <Binding Path=""MessageCount"" Converter=""{StaticResource StepToVisibilityConverter}"" ConverterParameter=""5""/>
-                    </Border.Visibility>
-                </Border>
-                <Border x:Name=""Step4"" Height=""1.5"" Width=""4"" Margin=""0,0.5"" Background=""#FFC84D"" Opacity=""0"">
-                    <Border.Visibility>
-                        <Binding Path=""MessageCount"" Converter=""{StaticResource StepToVisibilityConverter}"" ConverterParameter=""4""/>
-                    </Border.Visibility>
-                </Border>
-                <Border x:Name=""Step3"" Height=""1.5"" Width=""4"" Margin=""0,0.5"" Background=""#FFD700"" Opacity=""0"">
-                    <Border.Visibility>
-                        <Binding Path=""MessageCount"" Converter=""{StaticResource StepToVisibilityConverter}"" ConverterParameter=""3""/>
-                    </Border.Visibility>
-                </Border>
-                <Border x:Name=""Step2"" Height=""1.5"" Width=""4"" Margin=""0,0.5"" Background=""#FFEA00"" Opacity=""0"">
-                    <Border.Visibility>
-                        <Binding Path=""MessageCount"" Converter=""{StaticResource StepToVisibilityConverter}"" ConverterParameter=""2""/>
-                    </Border.Visibility>
-                </Border>
-                <Border x:Name=""Step1"" Height=""1.5"" Width=""4"" Margin=""0,0.5"" Background=""#FFFF00"" Opacity=""0"">
-                    <Border.Visibility>
-                        <Binding Path=""MessageCount"" Converter=""{StaticResource StepToVisibilityConverter}"" ConverterParameter=""1""/>
-                    </Border.Visibility>
-                </Border>
-            </StackPanel>
+            <!-- Контейнер для черточек и звезды -->
+            <Grid Grid.Column=""1"" Margin=""8,0,0,0"" VerticalAlignment=""Bottom"">
+                
+                <!-- Черточки -->
+                <StackPanel x:Name=""StepPanel"" VerticalAlignment=""Bottom"">
+                    <Border x:Name=""Step10"" Height=""1.5"" Width=""4"" Margin=""0,0.5"" Background=""#FF4500"" Opacity=""0"">
+                        <Border.Visibility>
+                            <Binding Path=""MessageCount"" Converter=""{StaticResource StepToVisibilityConverter}"" ConverterParameter=""10""/>
+                        </Border.Visibility>
+                    </Border>
+                    <Border x:Name=""Step9"" Height=""1.5"" Width=""4"" Margin=""0,0.5"" Background=""#FF6347"" Opacity=""0"">
+                        <Border.Visibility>
+                            <Binding Path=""MessageCount"" Converter=""{StaticResource StepToVisibilityConverter}"" ConverterParameter=""9""/>
+                        </Border.Visibility>
+                    </Border>
+                    <Border x:Name=""Step8"" Height=""1.5"" Width=""4"" Margin=""0,0.5"" Background=""#FF7F50"" Opacity=""0"">
+                        <Border.Visibility>
+                            <Binding Path=""MessageCount"" Converter=""{StaticResource StepToVisibilityConverter}"" ConverterParameter=""8""/>
+                        </Border.Visibility>
+                    </Border>
+                    <Border x:Name=""Step7"" Height=""1.5"" Width=""4"" Margin=""0,0.5"" Background=""#FF8C00"" Opacity=""0"">
+                        <Border.Visibility>
+                            <Binding Path=""MessageCount"" Converter=""{StaticResource StepToVisibilityConverter}"" ConverterParameter=""7""/>
+                        </Border.Visibility>
+                    </Border>
+                    <Border x:Name=""Step6"" Height=""1.5"" Width=""4"" Margin=""0,0.5"" Background=""#FFA500"" Opacity=""0"">
+                        <Border.Visibility>
+                            <Binding Path=""MessageCount"" Converter=""{StaticResource StepToVisibilityConverter}"" ConverterParameter=""6""/>
+                        </Border.Visibility>
+                    </Border>
+                    <Border x:Name=""Step5"" Height=""1.5"" Width=""4"" Margin=""0,0.5"" Background=""#FFB347"" Opacity=""0"">
+                        <Border.Visibility>
+                            <Binding Path=""MessageCount"" Converter=""{StaticResource StepToVisibilityConverter}"" ConverterParameter=""5""/>
+                        </Border.Visibility>
+                    </Border>
+                    <Border x:Name=""Step4"" Height=""1.5"" Width=""4"" Margin=""0,0.5"" Background=""#FFC84D"" Opacity=""0"">
+                        <Border.Visibility>
+                            <Binding Path=""MessageCount"" Converter=""{StaticResource StepToVisibilityConverter}"" ConverterParameter=""4""/>
+                        </Border.Visibility>
+                    </Border>
+                    <Border x:Name=""Step3"" Height=""1.5"" Width=""4"" Margin=""0,0.5"" Background=""#FFD700"" Opacity=""0"">
+                        <Border.Visibility>
+                            <Binding Path=""MessageCount"" Converter=""{StaticResource StepToVisibilityConverter}"" ConverterParameter=""3""/>
+                        </Border.Visibility>
+                    </Border>
+                    <Border x:Name=""Step2"" Height=""1.5"" Width=""4"" Margin=""0,0.5"" Background=""#FFEA00"" Opacity=""0"">
+                        <Border.Visibility>
+                            <Binding Path=""MessageCount"" Converter=""{StaticResource StepToVisibilityConverter}"" ConverterParameter=""2""/>
+                        </Border.Visibility>
+                    </Border>
+                    <Border x:Name=""Step1"" Height=""1.5"" Width=""4"" Margin=""0,0.5"" Background=""#FFFF00"" Opacity=""0"">
+                        <Border.Visibility>
+                            <Binding Path=""MessageCount"" Converter=""{StaticResource StepToVisibilityConverter}"" ConverterParameter=""1""/>
+                        </Border.Visibility>
+                    </Border>
+                </StackPanel>
+
+                <!-- Звезда -->
+                <TextBlock x:Name=""RankStar"" 
+                           Text=""★"" 
+                           FontSize=""16"" 
+                           Foreground=""#FFD700""
+                           HorizontalAlignment=""Center""
+                           VerticalAlignment=""Center""
+                           Opacity=""0"">
+                    <TextBlock.RenderTransform>
+                        <ScaleTransform x:Name=""StarScale"" ScaleX=""1"" ScaleY=""1""/>
+                    </TextBlock.RenderTransform>
+                </TextBlock>
+            </Grid>
         </Grid>
     </Border>
 
     <DataTemplate.Triggers>
-        <EventTrigger RoutedEvent=""FrameworkElement.Loaded"">
+    <DataTrigger Binding=""{Binding User.TotalKarma}"" Value=""0"">
+        <DataTrigger.EnterActions>
             <BeginStoryboard>
                 <Storyboard>
-                    <!-- Анимация СНИЗУ ВВЕРХ: Step1 (нижняя) появляется первой -->
+                    <!-- Анимация появления черточек при загрузке -->
                     <DoubleAnimation Storyboard.TargetName=""Step1"" Storyboard.TargetProperty=""Opacity"" From=""0"" To=""1"" Duration=""0:0:0.3"" BeginTime=""0:0:0.5""/>
                     <DoubleAnimation Storyboard.TargetName=""Step2"" Storyboard.TargetProperty=""Opacity"" From=""0"" To=""1"" Duration=""0:0:0.3"" BeginTime=""0:0:0.55""/>
                     <DoubleAnimation Storyboard.TargetName=""Step3"" Storyboard.TargetProperty=""Opacity"" From=""0"" To=""1"" Duration=""0:0:0.3"" BeginTime=""0:0:0.6""/>
@@ -243,10 +261,77 @@ namespace SmithForge.Main.Services
                     <DoubleAnimation Storyboard.TargetName=""Step8"" Storyboard.TargetProperty=""Opacity"" From=""0"" To=""1"" Duration=""0:0:0.3"" BeginTime=""0:0:0.85""/>
                     <DoubleAnimation Storyboard.TargetName=""Step9"" Storyboard.TargetProperty=""Opacity"" From=""0"" To=""1"" Duration=""0:0:0.3"" BeginTime=""0:0:0.9""/>
                     <DoubleAnimation Storyboard.TargetName=""Step10"" Storyboard.TargetProperty=""Opacity"" From=""0"" To=""1"" Duration=""0:0:0.3"" BeginTime=""0:0:0.95""/>
+                    
+                    <!-- Исчезновение черточек через 2.5 секунды -->
+                    <DoubleAnimation Storyboard.TargetName=""StepPanel"" 
+                                   Storyboard.TargetProperty=""Opacity"" 
+                                   To=""0"" Duration=""0:0:0.5"" 
+                                   BeginTime=""0:0:2.5""/>
                 </Storyboard>
             </BeginStoryboard>
-        </EventTrigger>
-    </DataTemplate.Triggers>
+        </DataTrigger.EnterActions>
+    </DataTrigger>
+
+    <!-- Триггер на 10 сообщений (только для ранга 0) -->
+    <DataTrigger Binding=""{Binding MessageCount}"" Value=""10"">
+        <DataTrigger.EnterActions>
+            <BeginStoryboard>
+                <Storyboard>
+<!-- Анимация появления черточек при загрузке -->
+                    <DoubleAnimation Storyboard.TargetName=""Step1"" Storyboard.TargetProperty=""Opacity"" From=""0"" To=""1"" Duration=""0:0:0.3"" BeginTime=""0:0:0.5""/>
+                    <DoubleAnimation Storyboard.TargetName=""Step2"" Storyboard.TargetProperty=""Opacity"" From=""0"" To=""1"" Duration=""0:0:0.3"" BeginTime=""0:0:0.55""/>
+                    <DoubleAnimation Storyboard.TargetName=""Step3"" Storyboard.TargetProperty=""Opacity"" From=""0"" To=""1"" Duration=""0:0:0.3"" BeginTime=""0:0:0.6""/>
+                    <DoubleAnimation Storyboard.TargetName=""Step4"" Storyboard.TargetProperty=""Opacity"" From=""0"" To=""1"" Duration=""0:0:0.3"" BeginTime=""0:0:0.65""/>
+                    <DoubleAnimation Storyboard.TargetName=""Step5"" Storyboard.TargetProperty=""Opacity"" From=""0"" To=""1"" Duration=""0:0:0.3"" BeginTime=""0:0:0.7""/>
+                    <DoubleAnimation Storyboard.TargetName=""Step6"" Storyboard.TargetProperty=""Opacity"" From=""0"" To=""1"" Duration=""0:0:0.3"" BeginTime=""0:0:0.75""/>
+                    <DoubleAnimation Storyboard.TargetName=""Step7"" Storyboard.TargetProperty=""Opacity"" From=""0"" To=""1"" Duration=""0:0:0.3"" BeginTime=""0:0:0.8""/>
+                    <DoubleAnimation Storyboard.TargetName=""Step8"" Storyboard.TargetProperty=""Opacity"" From=""0"" To=""1"" Duration=""0:0:0.3"" BeginTime=""0:0:0.85""/>
+                    <DoubleAnimation Storyboard.TargetName=""Step9"" Storyboard.TargetProperty=""Opacity"" From=""0"" To=""1"" Duration=""0:0:0.3"" BeginTime=""0:0:0.9""/>
+                    <DoubleAnimation Storyboard.TargetName=""Step10"" Storyboard.TargetProperty=""Opacity"" From=""0"" To=""1"" Duration=""0:0:0.3"" BeginTime=""0:0:0.95""/>
+                    
+                    <!-- Исчезновение черточек через 2.5 секунды -->
+                    <DoubleAnimation Storyboard.TargetName=""StepPanel"" 
+                                   Storyboard.TargetProperty=""Opacity"" 
+                                   To=""0"" Duration=""0:0:0.5"" 
+                                   BeginTime=""0:0:2.5""/>
+                    <!-- Появление звезды -->
+                    <DoubleAnimation Storyboard.TargetName=""RankStar"" 
+                                   Storyboard.TargetProperty=""Opacity"" 
+                                   From=""0"" To=""1"" Duration=""0:0:0.3"" 
+                                   BeginTime=""0:0:2.5""/>
+                    
+                    <!-- Пульсация звезды -->
+                    <DoubleAnimation Storyboard.TargetName=""StarScale"" 
+                                   Storyboard.TargetProperty=""ScaleX"" 
+                                   From=""1"" To=""1.2"" Duration=""0:0:1.5"" 
+                                   AutoReverse=""True"" 
+                                   RepeatBehavior=""Forever""
+                                   BeginTime=""0:0:2.6""/>
+                    <DoubleAnimation Storyboard.TargetName=""StarScale"" 
+                                   Storyboard.TargetProperty=""ScaleY"" 
+                                   From=""1"" To=""1.2"" Duration=""0:0:1.5"" 
+                                   AutoReverse=""True"" 
+                                   RepeatBehavior=""Forever""
+                                   BeginTime=""0:0:2.6""/>
+                    
+                    <!-- Исчезновение звезды -->
+                    <DoubleAnimation Storyboard.TargetName=""RankStar"" 
+                                   Storyboard.TargetProperty=""Opacity"" 
+                                   To=""0"" Duration=""0:0:0.3"" 
+                                   BeginTime=""0:0:7.0""/>
+                    
+                    <!-- Переливание цвета -->
+                    <ColorAnimation Storyboard.TargetName=""RankStar"" 
+                                  Storyboard.TargetProperty=""(TextBlock.Foreground).(SolidColorBrush.Color)""
+                                  From=""#FFD700"" To=""#FFE55C"" Duration=""0:0:0.3"" 
+                                  AutoReverse=""True"" 
+                                  RepeatBehavior=""Forever""
+                                  BeginTime=""0:0:2.6""/>
+                </Storyboard>
+            </BeginStoryboard>
+        </DataTrigger.EnterActions>
+    </DataTrigger>
+</DataTemplate.Triggers>
 </DataTemplate>";
 
                     var template = (DataTemplate)XamlReader.Parse(xaml);

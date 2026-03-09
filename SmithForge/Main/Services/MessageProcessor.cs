@@ -81,7 +81,7 @@ namespace SmithForge.Main.Services
                 else
                 {
                     // 4. Начисление опыта за общение (если не было команд)
-                    KarmaService.AddExperience(chater, 10, msg.Type, _settings);
+                    KarmaService.AddExperience(chater, msg, _settings);
                 }
 
                 // 5. Логируем сообщение в историю стрима

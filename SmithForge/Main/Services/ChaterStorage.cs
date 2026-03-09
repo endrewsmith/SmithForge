@@ -19,7 +19,7 @@ namespace SmithForge.Main.Services
         public static event Action<Chater>? OnChaterUpdated;
 
         // 4. КОНСТАНТА для кармы
-        private const double DEFAULT_KARMA_PER_MESSAGE = 10.0;
+        private const double DEFAULT_KARMA_PER_MESSAGE = 0;
 
         /// <summary>
         /// ЕДИНСТВЕННЫЙ МЕТОД AddOrUpdate - добавляет или обновляет чаттера в хранилище

@@ -3,8 +3,10 @@ using SmithForge.Main.Services;
 using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
-using System.Windows.Media;
 using System.Windows.Data;
+using System.Windows.Interop;
+using System.Windows.Media;
+using System.Windows.Shapes;
 
 namespace SmithForge.Main.Models
 {
@@ -21,6 +23,18 @@ namespace SmithForge.Main.Models
 
         [ObservableProperty]
         private string _type;
+
+        [ObservableProperty]
+        private int _displayTimeMs = 5000; // значение по умолчанию
+
+        [ObservableProperty]
+        private int _likes;
+
+        [ObservableProperty]
+        private int _dislikes;
+
+        public string LikesDisplay => Likes > 0 ? Likes.ToString() : string.Empty;
+        public string DislikesDisplay => Dislikes > 0 ? Dislikes.ToString() : string.Empty;
 
         public string DisplayName => User?.EffectiveName ?? "Unknown";
         public int MessageCount => (int)(User?.MessageCount ?? 0);
@@ -120,15 +134,23 @@ namespace SmithForge.Main.Models
             }
         }
 
-        public DisplayMessageViewModel(Chater user, string text, int messageNumber = 0, string type = "")
+        // ЕДИНСТВЕННЫЙ КОНСТРУКТОР
+        public DisplayMessageViewModel(Chater user, CommonMessage msg)
         {
             User = user;
-            MessageText = text;
-            MessageNumber = messageNumber;
-            Type = type;
+            MessageText = msg.Message;
+            MessageNumber = msg.MessageNumber;
+            Type = msg.Type;
+            DisplayTimeMs = msg.DisplayTimeMs;
 
             System.Diagnostics.Debug.WriteLine($"[VM] Создано сообщение: User={user.Login}, " +
-                $"User.MessageCount={user.MessageCount}, MessageNumber={messageNumber}, Type={type}");
+                $"MessageNumber={MessageNumber}, Длина={msg.LengthCategory}, Время={DisplayTimeMs}мс");
+        }
+
+        // Дополнительный конструктор для обратной совместимости (если нужен)
+        public DisplayMessageViewModel(Chater user, string text, int messageNumber = 0, string type = "")
+            : this(user, new CommonMessage { Message = text, MessageNumber = messageNumber, Type = type })
+        {
         }
 
         partial void OnUserChanged(Chater value)
@@ -145,5 +167,7 @@ namespace SmithForge.Main.Models
         {
             OnPropertyChanged(nameof(MessageCount));
         }
+
+
     }
 }
