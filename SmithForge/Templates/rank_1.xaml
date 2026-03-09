@@ -3,23 +3,16 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:utils="clr-namespace:SmithForge.Features.ChatOverlay;assembly=SmithForge">
 
-
     <!-- Конвертер ранга в цвет -->
     <utils:RankToColorConverter x:Key="RankToColorConverter"/>
 
-    <!-- Шаблон сообщения чата -->
     <DataTemplate x:Key="ChatMessageTemplate">
         <Border x:Name="MsgContainer" 
                 Background="#1E1E1E" 
                 CornerRadius="6" 
                 Padding="8,4" 
-                Margin="2,4" 
-                Opacity="0">
+                Margin="2,4">
             
-            <Border.RenderTransform>
-                <TranslateTransform x:Name="MsgTransform" X="-30"/>
-            </Border.RenderTransform>
-
             <StackPanel>
                 <!-- ВЕРХНЯЯ ОБЛАСТЬ (звезды ранга и карма) -->
                 <Grid Margin="0,0,0,4">
@@ -42,35 +35,13 @@
                     </StackPanel>
                 </Grid>
 
-                <!-- СРЕДНЯЯ ОБЛАСТЬ (номер + имя + текст) -->
-                <StackPanel Orientation="Horizontal" Margin="0,2">
-                    
-                    <!-- НОМЕР СООБЩЕНИЯ С ЦВЕТОМ РАНГА -->
-                    <Border Background="{Binding UserRank, Converter={StaticResource RankToColorConverter}}" 
-                            CornerRadius="3" 
-                            Padding="4,1" 
-                            Margin="0,0,6,0"
-                            VerticalAlignment="Center">
-                        <TextBlock Text="{Binding MessageNumber, StringFormat=#{0}}" 
-                                   Foreground="White" 
-                                   FontSize="9" 
-                                   FontWeight="Bold"/>
-                    </Border>
-
-                    <TextBlock x:Name="UserNickname" 
-                               Text="{Binding DisplayName}" 
-                               Foreground="White" 
-                               FontWeight="Bold" 
-                               FontSize="13"/>
-                    
-                    <TextBlock Text=": " Foreground="White"/>
-                    
-                    <TextBlock Text="{Binding MessageText}" 
-                               Foreground="White" 
-                               TextWrapping="Wrap" 
-                               FontSize="13"/>
-                </StackPanel>
-
+                <!-- Текст сообщения: имя: текст -->
+                <TextBlock x:Name="MessageTextBlock" TextWrapping="Wrap">
+                    <Run Text="{Binding DisplayName, Mode=OneWay}" FontWeight="Bold" Foreground="White"/>
+                    <Run Text=": " Foreground="White"/>
+                    <Run Text="{Binding MessageText, Mode=OneWay}" Foreground="#F0F0F0"/>
+                </TextBlock>
+               
                 <!-- НИЖНЯЯ ОБЛАСТЬ (статистика) -->
                 <Grid Margin="0,4,0,0">
                     <Grid.ColumnDefinitions>
@@ -79,8 +50,8 @@
                     </Grid.ColumnDefinitions>
                     
                     <StackPanel Orientation="Horizontal">
-                        <TextBlock Text="Всего: " Foreground="#666666" FontSize="9"/>
-                        <TextBlock Text="{Binding MessageCount}" Foreground="#666666" FontSize="9"/>
+                        <TextBlock Text="N: " Foreground="#666666" FontSize="9"/>
+                        <TextBlock Text="{Binding MessageNumber, Mode=OneWay}" Foreground="#666666" FontSize="9"/>
                     </StackPanel>
 
                     <StackPanel Grid.Column="1" Orientation="Horizontal">
@@ -91,46 +62,28 @@
                     </StackPanel>
                 </Grid>
             </StackPanel>
-
-            <!-- Анимация появления -->
-            <Border.Triggers>
-                <EventTrigger RoutedEvent="FrameworkElement.Loaded">
-                    <BeginStoryboard>
-                        <Storyboard>
-                            <DoubleAnimation Storyboard.TargetProperty="Opacity" From="0" To="1" Duration="0:0:0.4"/>
-                            <DoubleAnimation Storyboard.TargetName="MsgTransform"
-                                             Storyboard.TargetProperty="X" 
-                                             From="-30" To="0" Duration="0:0:0.3">
-                                <DoubleAnimation.EasingFunction>
-                                    <CubicEase EasingMode="EaseOut"/>
-                                </DoubleAnimation.EasingFunction>
-                            </DoubleAnimation>
-                        </Storyboard>
-                    </BeginStoryboard>
-                </EventTrigger>
-            </Border.Triggers>
         </Border>
 
-        <!-- Триггеры для смены цвета ника и звезд -->
+        <!-- Триггеры -->
         <DataTemplate.Triggers>
-            <!-- Цвет ника по платформе -->
+            <!-- Цвет ника по платформе - меняем цвет всего TextBlock -->
             <DataTrigger Binding="{Binding Type}" Value="tw">
-                <Setter TargetName="UserNickname" Property="Foreground" Value="#9146FF"/>
+                <Setter Property="TextElement.Foreground" TargetName="MessageTextBlock" Value="#9146FF"/>
             </DataTrigger>
             <DataTrigger Binding="{Binding Type}" Value="twitch">
-                <Setter TargetName="UserNickname" Property="Foreground" Value="#9146FF"/>
+                <Setter Property="TextElement.Foreground" TargetName="MessageTextBlock" Value="#9146FF"/>
             </DataTrigger>
             <DataTrigger Binding="{Binding Type}" Value="yt">
-                <Setter TargetName="UserNickname" Property="Foreground" Value="#FF0000"/>
+                <Setter Property="TextElement.Foreground" TargetName="MessageTextBlock" Value="#FF0000"/>
             </DataTrigger>
             <DataTrigger Binding="{Binding Type}" Value="youtube">
-                <Setter TargetName="UserNickname" Property="Foreground" Value="#FF0000"/>
+                <Setter Property="TextElement.Foreground" TargetName="MessageTextBlock" Value="#FF0000"/>
             </DataTrigger>
             <DataTrigger Binding="{Binding Type}" Value="gg">
-                <Setter TargetName="UserNickname" Property="Foreground" Value="#00A550"/>
+                <Setter Property="TextElement.Foreground" TargetName="MessageTextBlock" Value="#00A550"/>
             </DataTrigger>
             <DataTrigger Binding="{Binding Type}" Value="goodgame">
-                <Setter TargetName="UserNickname" Property="Foreground" Value="#00A550"/>
+                <Setter Property="TextElement.Foreground" TargetName="MessageTextBlock" Value="#00A550"/>
             </DataTrigger>
 
             <!-- Звезды ранга -->
