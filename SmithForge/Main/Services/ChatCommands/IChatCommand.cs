@@ -10,10 +10,11 @@ namespace SmithForge.Main.Services.ChatCommands
     public interface IChatCommand
     {
         string Name { get; }
-
-        // ВОТ ЭТОЙ СТРОКИ НЕ ХВАТАЛО:
         IEnumerable<string> Aliases { get; }
+        int Cost { get; } // стоимость команды
+        int MinRank { get; } // минимальный ранг для использования
 
-        void Execute(ChatCommand info, Chater chater, CommonMessage msg, AppSettings settings);
+        bool CanExecute(Chater chater); // проверка возможности выполнения
+        void Execute(ChatCommandInfo info, Chater chater, CommonMessage msg, AppSettings settings);
     }
 }

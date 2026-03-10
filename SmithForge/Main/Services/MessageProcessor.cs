@@ -11,12 +11,8 @@ namespace SmithForge.Main.Services
     internal class MessageProcessor
     {
         private readonly AppSettings _settings;
-        private string? _currentSessionId;  // <-- ЭТО ПОЛЕ БЫЛО ПРОПУЩЕНО
-
-        // Мапа для быстрого поиска команд по имени или алиасу
+        private string? _currentSessionId;
         private readonly Dictionary<string, IChatCommand> _commandMap;
-
-        // Регулярка ищет !! и всё до первого пробела (напр. !!mute:ivan:10)
         private static readonly Regex CommandRegex = new Regex(@"!!([^\s]+)", RegexOptions.Compiled);
 
         public MessageProcessor(AppSettings settings)
@@ -24,14 +20,14 @@ namespace SmithForge.Main.Services
             _settings = settings ?? throw new ArgumentNullException(nameof(settings));
             _commandMap = new Dictionary<string, IChatCommand>(StringComparer.OrdinalIgnoreCase);
 
-            // --- 1. СПИСОК ВСЕХ ЭКЗЕМПЛЯРОВ КОМАНД ---
             var commandsList = new List<IChatCommand>
             {
-                new HelpCommand(_commandMap), 
-                // Добавляй сюда новые классы команд по мере создания
+                new HelpCommand(_commandMap),
+                new BoldCommand(),
+                new ItalicCommand(),
+                new ColorCommand(),
             };
 
-            // --- 2. РЕГИСТРАЦИЯ (Основное имя + Алиасы) ---
             foreach (var cmd in commandsList)
             {
                 _commandMap[cmd.Name] = cmd;
@@ -45,9 +41,7 @@ namespace SmithForge.Main.Services
             }
         }
 
-        // Событие для MainViewModel
-        public event Action<Chater, CommonMessage, List<ChatCommand>>? OnProcessed;
-
+        public event Action<Chater, CommonMessage, List<ChatCommandInfo>>? OnProcessed;
         public void SetSession(string sessionId) => _currentSessionId = sessionId;
 
         public void Process(CommonMessage msg)
@@ -56,35 +50,20 @@ namespace SmithForge.Main.Services
 
             try
             {
-                // 1. Обновляем юзера (БД + Кэш)
                 var chater = ChaterStorage.UpdateFromMessage(msg, _settings);
                 msg.User = chater;
 
-                // 2. Парсим команды (!!cmd:arg1)
                 var commandsFound = ParseCommands(msg.Message);
 
-                // 3. Выполняем логику команд
                 if (commandsFound.Count > 0)
                 {
-                    foreach (var cmd in commandsFound)
-                    {
-                        if (_commandMap.TryGetValue(cmd.Name, out var commandAction))
-                        {
-                            commandAction.Execute(cmd, chater, msg, _settings);
-                        }
-                        else
-                        {
-                            Debug.WriteLine($"[CMD] Неизвестная команда: {cmd.Name}");
-                        }
-                    }
+                    ProcessCommands(chater, msg, commandsFound);
                 }
                 else
                 {
-                    // 4. Начисление опыта за общение (если не было команд)
                     KarmaService.AddExperience(chater, msg, _settings);
                 }
 
-                // 5. Логируем сообщение в историю стрима
                 if (!string.IsNullOrEmpty(_currentSessionId))
                 {
                     var logMessage = new ChatLogMessage
@@ -103,9 +82,29 @@ namespace SmithForge.Main.Services
                     Debug.WriteLine($"[Message] Стрим #{_currentSessionId}, Сообщение #{msg.MessageNumber} от {chater.EffectiveName}");
                 }
 
-                // 6. ЖЕСТКИЙ ФИЛЬТР UI
                 if (!string.IsNullOrWhiteSpace(msg.Message) && msg.Message.Length >= _settings.MinMessageLength)
                 {
+                    // Если сообщение не обработано командой, проверяем можно ли оставить разметку
+                    if (!msg.IsProcessedByCommand)
+                    {
+                        // Разрешаем прямую разметку только с 5 ранга
+                        if (chater.Rank >= 5)
+                        {
+                            // Оставляем теги - пользователь может писать разметку вручную
+                            Debug.WriteLine($"[MARKUP] Прямая разметка разрешена для ранга {chater.Rank}");
+                        }
+                        else
+                        {
+                            // Удаляем все теги для низких рангов
+                            string originalMessage = msg.Message;
+                            msg.Message = RemoveAllTags(msg.Message);
+                            if (originalMessage != msg.Message)
+                            {
+                                Debug.WriteLine($"[MARKUP] Теги удалены для ранга {chater.Rank}");
+                            }
+                        }
+                    }
+
                     msg.User = chater;
                     OnProcessed?.Invoke(chater, msg, commandsFound);
                 }
@@ -120,28 +119,155 @@ namespace SmithForge.Main.Services
             }
         }
 
-        private List<ChatCommand> ParseCommands(string text)
+        private void ProcessCommands(Chater chater, CommonMessage msg, List<ChatCommandInfo> commandsFound)
         {
-            var results = new List<ChatCommand>();
+            Debug.WriteLine($"[CMD] Исходное сообщение: {msg.Message}");
+
+            // ===== ДОБАВЛЕННАЯ ОТЛАДКА =====
+            Debug.WriteLine($"[CMD] Всего команд в _commandMap: {_commandMap.Count}");
+            Debug.WriteLine($"[CMD] Ключи в _commandMap: {string.Join(", ", _commandMap.Keys)}");
+
+            Debug.WriteLine($"[CMD] Найдено команд в сообщении: {commandsFound.Count}");
+            foreach (var c in commandsFound)
+            {
+                Debug.WriteLine($"[CMD]   - {c.Name} (Raw: {c.Raw})");
+                Debug.WriteLine($"[CMD]     Есть в _commandMap? {_commandMap.ContainsKey(c.Name)}");
+                if (_commandMap.ContainsKey(c.Name))
+                {
+                    var cmd = _commandMap[c.Name] as BaseCommand;
+                    Debug.WriteLine($"[CMD]     MinRank: {cmd?.MinRank}, Cost: {cmd?.Cost}");
+                    Debug.WriteLine($"[CMD]     CanExecute: {cmd?.CanExecute(chater)}");
+                }
+            }
+            // ===== КОНЕЦ ОТЛАДКИ =====
+
+            var availableCommands = commandsFound
+                .Where(c => _commandMap.ContainsKey(c.Name))
+                .Select(c => new {
+                    Info = c,
+                    Command = _commandMap[c.Name] as BaseCommand
+                })
+                .Where(c => c.Command != null && c.Command.CanExecute(chater))
+                .OrderBy(c => c.Command.Cost)
+                .ToList();
+
+            Debug.WriteLine($"[CMD] Доступные команды после фильтрации: {availableCommands.Count}");
+            foreach (var cmdInfo in availableCommands)
+            {
+                Debug.WriteLine($"[CMD]   - {cmdInfo.Info.Name} (Cost: {cmdInfo.Command.Cost})");
+            }
+
+            foreach (var cmd in commandsFound.Where(cmdInfo => _commandMap.ContainsKey(cmdInfo.Name) && !_commandMap[cmdInfo.Name].CanExecute(chater)))
+            {
+                var baseCmd = _commandMap[cmd.Name] as BaseCommand;
+                Debug.WriteLine($"[CMD] {cmd.Name} недоступна (нужен ранг {baseCmd?.MinRank ?? 0}, у вас {chater.Rank})");
+            }
+
+            string cleanMessage = msg.Message;
+            Debug.WriteLine($"[CMD] До удаления команд: {cleanMessage}");
+
+            foreach (var cmd in commandsFound.OrderByDescending(c => c.Index))
+            {
+                Debug.WriteLine($"[CMD] Удаляем команду: {cmd.Raw} с позиции {cmd.Index}, длина {cmd.Length}");
+                cleanMessage = cleanMessage.Remove(cmd.Index, cmd.Length).Trim();
+                Debug.WriteLine($"[CMD] После удаления: {cleanMessage}");
+            }
+
+            double totalCost = 0;
+            var executedCommands = new List<ChatCommandInfo>();
+
+            foreach (var cmdInfo in availableCommands)
+            {
+                int commandCost = cmdInfo.Command.GetCostForRank(chater.Rank);
+
+                if (chater.Karma >= totalCost + commandCost)
+                {
+                    Debug.WriteLine($"[CMD] Выполняем команду: {cmdInfo.Command.Name}");
+                    Debug.WriteLine($"[CMD] Текст ДО выполнения: {cleanMessage}");
+
+                    var tempMsg = new CommonMessage
+                    {
+                        Message = cleanMessage,
+                        Type = msg.Type,
+                        Login = msg.Login,
+                        IsProcessedByCommand = false
+                    };
+
+                    cmdInfo.Command.Execute(cmdInfo.Info, chater, tempMsg, _settings);
+
+                    Debug.WriteLine($"[CMD] Текст ПОСЛЕ выполнения: {tempMsg.Message}");
+                    Debug.WriteLine($"[CMD] IsProcessedByCommand: {tempMsg.IsProcessedByCommand}");
+
+                    if (tempMsg.IsProcessedByCommand)
+                    {
+                        cleanMessage = tempMsg.Message;
+                        Debug.WriteLine($"[CMD] Текст сохранен: {cleanMessage}");
+                    }
+
+                    totalCost += commandCost;
+                    executedCommands.Add(cmdInfo.Info);
+
+                    Debug.WriteLine($"[CMD] Выполнена {cmdInfo.Command.Name} (стоимость {commandCost})");
+                }
+                else
+                {
+                    Debug.WriteLine($"[CMD] Не хватает кармы на {cmdInfo.Command.Name} (нужно {commandCost})");
+                }
+            }
+
+            if (totalCost > 0)
+            {
+                chater.Karma -= totalCost;
+                chater.TotalKarma += totalCost;
+                DatabaseService.UpdateChaterStats(chater);
+                Debug.WriteLine($"[CMD] Списано {totalCost} кармы. Остаток: {chater.Karma:F1}");
+            }
+
+            // Устанавливаем финальный текст и флаг
+            msg.Message = cleanMessage;
+            msg.IsProcessedByCommand = executedCommands.Count > 0;
+
+            Debug.WriteLine($"[CMD] Финальный текст: {cleanMessage}");
+            Debug.WriteLine($"[CMD] IsProcessedByCommand: {msg.IsProcessedByCommand}");
+        }
+        private List<ChatCommandInfo> ParseCommands(string text)
+        {
+            var results = new List<ChatCommandInfo>();
             if (string.IsNullOrWhiteSpace(text)) return results;
 
+            Debug.WriteLine($"[PARSE] Исходный текст: '{text}'");
+
             var matches = CommandRegex.Matches(text);
+            Debug.WriteLine($"[PARSE] Найдено совпадений: {matches.Count}");
+
             foreach (Match m in matches)
             {
+                Debug.WriteLine($"[PARSE] Найдена команда: '{m.Value}' на позиции {m.Index}");
+
                 var fullPath = m.Groups[1].Value;
                 var parts = fullPath.Split(':', StringSplitOptions.RemoveEmptyEntries);
 
                 if (parts.Length > 0)
                 {
-                    results.Add(new ChatCommand
+                    Debug.WriteLine($"[PARSE] Части: {string.Join(" | ", parts)}");
+
+                    results.Add(new ChatCommandInfo
                     {
                         Name = parts[0].ToLower(),
                         Arguments = parts.Skip(1).ToList(),
-                        Raw = m.Value
+                        Raw = m.Value,
+                        Index = m.Index,
+                        Length = m.Length
                     });
                 }
             }
-            return results;
+
+            return results.OrderBy(cmd => cmd.Index).ToList();
+        }
+
+        private string RemoveAllTags(string input)
+        {
+            return Regex.Replace(input, @"<[^>]*>", string.Empty);
         }
     }
 }

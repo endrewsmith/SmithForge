@@ -14,6 +14,7 @@ public class CommonMessage
     public Chater? User { get; set; }
     public string TypeLogin => $"{Type}-{Login}";
 
+    public bool IsProcessedByCommand { get; set; }
     public MessageLength LengthCategory
     {
         get

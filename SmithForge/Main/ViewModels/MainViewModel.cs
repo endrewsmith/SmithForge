@@ -2,6 +2,7 @@
 using CommunityToolkit.Mvvm.Input;
 using SmithForge.Main.Models;
 using SmithForge.Main.Services;
+using SmithForge.Main.Services.ChatCommands;
 using SmithForge.Main.Services.SmithForge.Main.Services;
 using System;
 using System.Collections.Generic;
@@ -86,11 +87,10 @@ namespace SmithForge.ViewModels
             }
         }
 
-        private void OnMessageProcessed(Chater chater, CommonMessage msg, List<ChatCommand> commands)
+        private void OnMessageProcessed(Chater chater, CommonMessage msg, List<ChatCommandInfo> commands)
         {
+            // НЕ удаляем команды из текста - они уже удалены в MessageProcessor
             string uiMessage = msg.Message;
-            foreach (var cmd in commands) uiMessage = uiMessage.Replace(cmd.Raw, "");
-            uiMessage = uiMessage.Trim();
 
             if (msg.Message.Length >= Settings.MinMessageLength)
             {
@@ -103,6 +103,7 @@ namespace SmithForge.ViewModels
             Debug.WriteLine($"[MainViewModel] Получено сообщение от {chater.Login}:");
             Debug.WriteLine($"   - Оригинальный номер из MessageProcessor: {msg.MessageNumber}");
             Debug.WriteLine($"   - Текст: {uiMessage}");
+            Debug.WriteLine($"   - IsProcessedByCommand из MessageProcessor: {msg.IsProcessedByCommand}");
 
             var overlayMsg = new CommonMessage
             {
@@ -111,15 +112,17 @@ namespace SmithForge.ViewModels
                 Type = msg.Type.ToLower(),
                 Message = uiMessage,
                 KarmaKeyDisplay = $"#{chater.KarmaKey}",
-                MessageNumber = msg.MessageNumber
+                MessageNumber = msg.MessageNumber,
+                IsProcessedByCommand = msg.IsProcessedByCommand // ← передаем флаг
             };
+
+            Debug.WriteLine($"[MainViewModel] overlayMsg.IsProcessedByCommand: {overlayMsg.IsProcessedByCommand}");
 
             if (!string.IsNullOrWhiteSpace(uiMessage))
             {
                 _overlayService.AddMessage(chater, overlayMsg);
             }
         }
-
         private void EnsureSessionByNumber(int number)
         {
             if (number <= 0) return;
