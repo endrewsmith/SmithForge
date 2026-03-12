@@ -30,4 +30,15 @@ public abstract class BaseCommand : IChatCommand
     {
         return info.Arguments.Count > index ? info.Arguments[index] : defaultValue;
     }
+
+    public virtual int GetTotalCost(ChatCommandInfo info, Chater chater)
+    {
+        // По умолчанию возвращаем базовую стоимость
+        return GetCostForRank(chater.Rank);
+    }
+
+    public virtual bool ShouldCharge(ChatCommandInfo info, Chater chater, CommonMessage msg)
+    {
+        return true; // по умолчанию списываем
+    }
 }

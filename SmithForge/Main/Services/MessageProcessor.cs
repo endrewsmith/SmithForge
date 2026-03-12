@@ -26,6 +26,9 @@ namespace SmithForge.Main.Services
                 new BoldCommand(),
                 new ItalicCommand(),
                 new ColorCommand(),
+                new ExtendCommand(),
+                new LikeCommand(),
+                new DislikeCommand(),
             };
 
             foreach (var cmd in commandsList)
@@ -123,7 +126,6 @@ namespace SmithForge.Main.Services
         {
             Debug.WriteLine($"[CMD] Исходное сообщение: {msg.Message}");
 
-            // ===== ДОБАВЛЕННАЯ ОТЛАДКА =====
             Debug.WriteLine($"[CMD] Всего команд в _commandMap: {_commandMap.Count}");
             Debug.WriteLine($"[CMD] Ключи в _commandMap: {string.Join(", ", _commandMap.Keys)}");
 
@@ -139,7 +141,6 @@ namespace SmithForge.Main.Services
                     Debug.WriteLine($"[CMD]     CanExecute: {cmd?.CanExecute(chater)}");
                 }
             }
-            // ===== КОНЕЦ ОТЛАДКИ =====
 
             var availableCommands = commandsFound
                 .Where(c => _commandMap.ContainsKey(c.Name))
@@ -178,7 +179,7 @@ namespace SmithForge.Main.Services
 
             foreach (var cmdInfo in availableCommands)
             {
-                int commandCost = cmdInfo.Command.GetCostForRank(chater.Rank);
+                int commandCost = cmdInfo.Command.GetTotalCost(cmdInfo.Info, chater);
 
                 if (chater.Karma >= totalCost + commandCost)
                 {
@@ -190,24 +191,51 @@ namespace SmithForge.Main.Services
                         Message = cleanMessage,
                         Type = msg.Type,
                         Login = msg.Login,
-                        IsProcessedByCommand = false
+                        IsProcessedByCommand = false,
+                        ShouldChargeForCommand = true // по умолчанию списываем
                     };
 
                     cmdInfo.Command.Execute(cmdInfo.Info, chater, tempMsg, _settings);
 
                     Debug.WriteLine($"[CMD] Текст ПОСЛЕ выполнения: {tempMsg.Message}");
                     Debug.WriteLine($"[CMD] IsProcessedByCommand: {tempMsg.IsProcessedByCommand}");
+                    Debug.WriteLine($"[CMD] ShouldChargeForCommand: {tempMsg.ShouldChargeForCommand}");
 
                     if (tempMsg.IsProcessedByCommand)
                     {
                         cleanMessage = tempMsg.Message;
+                        msg.DisplayTimeMs = tempMsg.DisplayTimeMs;
                         Debug.WriteLine($"[CMD] Текст сохранен: {cleanMessage}");
+                        Debug.WriteLine($"[CMD] Время сохранено: {msg.DisplayTimeMs}мс");
                     }
 
-                    totalCost += commandCost;
-                    executedCommands.Add(cmdInfo.Info);
+                    // Определяем, нужно ли списывать карму
+                    bool shouldCharge = true;
 
-                    Debug.WriteLine($"[CMD] Выполнена {cmdInfo.Command.Name} (стоимость {commandCost})");
+                    // Проверка через ShouldChargeForCommand (установленный в команде или обработчике)
+                    if (!tempMsg.ShouldChargeForCommand)
+                    {
+                        shouldCharge = false;
+                        Debug.WriteLine($"[CMD] ShouldChargeForCommand = false - не списываем");
+                    }
+
+                    // Проверка через ShouldCharge (метод команды)
+                    if (!cmdInfo.Command.ShouldCharge(cmdInfo.Info, chater, tempMsg))
+                    {
+                        shouldCharge = false;
+                        Debug.WriteLine($"[CMD] ShouldCharge = false - не списываем");
+                    }
+
+                    if (shouldCharge)
+                    {
+                        totalCost += commandCost;
+                        executedCommands.Add(cmdInfo.Info);
+                        Debug.WriteLine($"[CMD] Выполнена {cmdInfo.Command.Name} (стоимость {commandCost})");
+                    }
+                    else
+                    {
+                        Debug.WriteLine($"[CMD] Команда {cmdInfo.Command.Name} выполнена бесплатно");
+                    }
                 }
                 else
                 {
@@ -223,9 +251,9 @@ namespace SmithForge.Main.Services
                 Debug.WriteLine($"[CMD] Списано {totalCost} кармы. Остаток: {chater.Karma:F1}");
             }
 
-            // Устанавливаем финальный текст и флаг
             msg.Message = cleanMessage;
-            msg.IsProcessedByCommand = executedCommands.Count > 0;
+            // Если в сообщении была хоть одна команда (даже неудачная) — помечаем как обработанное
+            msg.IsProcessedByCommand = commandsFound.Count > 0;
 
             Debug.WriteLine($"[CMD] Финальный текст: {cleanMessage}");
             Debug.WriteLine($"[CMD] IsProcessedByCommand: {msg.IsProcessedByCommand}");

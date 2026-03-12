@@ -74,7 +74,13 @@ namespace SmithForge.Main.Views
             win.Owner = this;
             win.ShowDialog();
         }
-
+        private void ToggleDashboard_Click(object sender, RoutedEventArgs e)
+        {
+            if (DataContext is SmithForge.ViewModels.MainViewModel vm)
+            {
+                vm.ToggleDashboardCommand?.Execute(null);
+            }
+        }
         private void IntegerValidationTextBox(object sender, TextCompositionEventArgs e)
         {
             Regex regex = new Regex("[^0-9]+");

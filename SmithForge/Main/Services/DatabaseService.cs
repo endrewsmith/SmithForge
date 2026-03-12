@@ -576,5 +576,15 @@ namespace SmithForge.Main.Services
                 "SELECT * FROM StreamSessions WHERE Number = @number ORDER BY StartTime DESC LIMIT 1",
                 new { number });
         }
+
+        public static string? GetChaterIdByMessageNumber(int messageNumber)
+        {
+            using var db = new Microsoft.Data.Sqlite.SqliteConnection(ConnectionString);
+            // Ищем ID автора последнего сообщения с таким номером
+            return db.QueryFirstOrDefault<string>(
+                "SELECT ChaterId FROM ChatLogs WHERE MessageNumber = @number ORDER BY Timestamp DESC LIMIT 1",
+                new { number = messageNumber });
+        }
+
     }
 }

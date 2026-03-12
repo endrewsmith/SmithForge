@@ -32,6 +32,8 @@ namespace SmithForge.Features.ChaterManager
             SaveChaterCommand?.NotifyCanExecuteChanged();
             DeleteChaterCommand?.NotifyCanExecuteChanged();
             AddAccountCommand?.NotifyCanExecuteChanged();
+            MergeCommand?.NotifyCanExecuteChanged();
+            MergeCommand?.NotifyCanExecuteChanged();
 
             // Также обновляем глобально
             CommandManager.InvalidateRequerySuggested();
@@ -50,12 +52,17 @@ namespace SmithForge.Features.ChaterManager
         [ObservableProperty]
         private string _newAccountLogin = string.Empty;
 
+        // ========== ДЛЯ ОБЪЕДИНЕНИЯ АККАУНТОВ ==========
+        [ObservableProperty]
+        private string _mergeDonorId = string.Empty;
+
         // ========== КОМАНДЫ ==========
         public IRelayCommand CreateNewCommand { get; }
         public IRelayCommand AddAccountCommand { get; }
         public IRelayCommand<ExternalAccount> RemoveAccountCommand { get; }
         public IRelayCommand SaveChaterCommand { get; }
         public IRelayCommand DeleteChaterCommand { get; }
+        public IRelayCommand MergeCommand { get; }
 
         // ========== КОНСТРУКТОР ==========
         public ChatersViewModel()
@@ -68,6 +75,7 @@ namespace SmithForge.Features.ChaterManager
             RemoveAccountCommand = new RelayCommand<ExternalAccount>(RemoveAccount);
             SaveChaterCommand = new RelayCommand(Save, () => SelectedChater != null);
             DeleteChaterCommand = new RelayCommand(Delete, () => SelectedChater != null);
+            MergeCommand = new RelayCommand(Merge, CanMerge);
 
             // Загрузка данных из БД
             LoadAllFromDatabase();
@@ -80,6 +88,18 @@ namespace SmithForge.Features.ChaterManager
         {
             return SelectedChater != null && !string.IsNullOrWhiteSpace(NewAccountLogin);
         }
+
+        private bool CanMerge()
+        {
+            return SelectedChater != null && !string.IsNullOrWhiteSpace(MergeDonorId);
+        }
+
+        partial void OnMergeDonorIdChanged(string value)
+        {
+            Debug.WriteLine($"[VM] MergeDonorId изменен: '{value}'");
+            MergeCommand?.NotifyCanExecuteChanged();
+        }
+
 
         // ========== ЗАГРУЗКА ИЗ БД ==========
         private void LoadAllFromDatabase()
@@ -114,11 +134,19 @@ namespace SmithForge.Features.ChaterManager
                 return;
             }
 
+            var searchLower = SearchText.ToLower().Trim();
+
             var filtered = Chaters.Where(c =>
-                (c.DisplayName?.Contains(SearchText, StringComparison.OrdinalIgnoreCase) == true) ||
-                (c.EffectiveName?.Contains(SearchText, StringComparison.OrdinalIgnoreCase) == true) ||
-                c.Accounts.Any(a => a.OriginalName?.Contains(SearchText, StringComparison.OrdinalIgnoreCase) == true) ||
-                c.Accounts.Any(a => a.Platform?.Contains(SearchText, StringComparison.OrdinalIgnoreCase) == true)
+                // Поиск по основному логину
+                (c.Login?.ToLower().Contains(searchLower) == true) ||
+                // Поиск по отображаемому имени
+                (c.DisplayName?.ToLower().Contains(searchLower) == true) ||
+                // Поиск по привязанным аккаунтам (оригинальное имя)
+                c.Accounts.Any(a => a.OriginalName?.ToLower().Contains(searchLower) == true) ||
+                // Поиск по платформе
+                c.Accounts.Any(a => a.Platform?.ToLower().Contains(searchLower) == true) ||
+                // Поиск по полному отображению (платформа:логин)
+                c.Accounts.Any(a => a.DisplayName?.ToLower().Contains(searchLower) == true)
             ).ToList();
 
             FilteredChaters = new ObservableCollection<Chater>(filtered);
@@ -387,6 +415,110 @@ namespace SmithForge.Features.ChaterManager
             }
 
             Debug.WriteLine("========== DELETE METHOD END ==========");
+        }
+
+        // ========== ОБЪЕДИНЕНИЕ АККАУНТОВ ==========
+        private void Merge()
+        {
+            Debug.WriteLine("========== MERGE START ==========");
+            if (!CanMerge()) return;
+
+            // Получаем поглотителя (текущий выбранный)
+            var absorber = SelectedChater!;
+            // Ищем донора по ID
+            var donor = ChaterStorage.GetById(MergeDonorId.Trim());
+
+            if (donor == null)
+            {
+                MessageBox.Show("Донор с таким ID не найден.", "Ошибка",
+                    MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            if (donor.Id == absorber.Id)
+            {
+                MessageBox.Show("Нельзя поглотить самого себя.", "Ошибка",
+                    MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            var result = MessageBox.Show(
+                $"Поглотить аккаунт {donor.EffectiveName} (ID: {donor.Id}) в {absorber.EffectiveName}?\n" +
+                "Все аккаунты и статистика будут перенесены. Донор будет удалён.",
+                "Подтверждение", MessageBoxButton.YesNo, MessageBoxImage.Question);
+
+            if (result != MessageBoxResult.Yes) return;
+
+            try
+            {
+                // 1. Имя остается у поглотителя (не меняем DisplayName)
+
+                // 2. Выбираем наибольший ранг
+                absorber.Rank = Math.Max(absorber.Rank, donor.Rank);
+
+                // 3. Переносим все внешние аккаунты донора
+                foreach (var acc in donor.Accounts.ToList())
+                {
+                    // Проверяем, нет ли уже такого аккаунта у поглотителя
+                    bool exists = absorber.Accounts.Any(a =>
+                        a.Platform.Equals(acc.Platform, StringComparison.OrdinalIgnoreCase) &&
+                        a.OriginalName.Equals(acc.OriginalName, StringComparison.OrdinalIgnoreCase));
+
+                    if (!exists)
+                    {
+                        // Создаём новый аккаунт (с новым ExternalId)
+                        var newAcc = new ExternalAccount
+                        {
+                            ExternalId = $"{acc.Platform}:{acc.OriginalName}".ToLower(),
+                            Platform = acc.Platform,
+                            OriginalName = acc.OriginalName
+                        };
+                        absorber.Accounts.Add(newAcc);
+                    }
+                }
+
+                // 4. Суммируем статистику
+                absorber.MessageCount += donor.MessageCount;
+                absorber.Karma += donor.Karma;
+                absorber.TotalKarma += donor.TotalKarma;
+
+                // 5. Берем самую раннюю дату первого появления
+                if (donor.FirstSeen < absorber.FirstSeen)
+                    absorber.FirstSeen = donor.FirstSeen;
+
+                // 6. Удаляем донора из БД
+                DatabaseService.DeleteChater(donor.Id);
+
+                // 7. Удаляем донора из кэша (нужен метод RemoveById в ChaterStorage)
+                // ChaterStorage.RemoveById(donor.Id);
+
+                // 8. Сохраняем поглотителя
+                DatabaseService.SaveChater(absorber);
+                ChaterStorage.AddOrUpdate(absorber);
+
+                // 9. Удаляем донора из коллекции Chaters
+                var donorInList = Chaters.FirstOrDefault(c => c.Id == donor.Id);
+                if (donorInList != null)
+                    Chaters.Remove(donorInList);
+
+                // 10. Обновляем фильтр
+                FilterChaters();
+
+                // 11. Очищаем поле ввода
+                MergeDonorId = string.Empty;
+
+                Debug.WriteLine($"Аккаунт {donor.EffectiveName} успешно поглощён {absorber.EffectiveName}");
+                MessageBox.Show("Объединение выполнено успешно.", "Успех",
+                    MessageBoxButton.OK, MessageBoxImage.Information);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"Ошибка при объединении: {ex.Message}");
+                MessageBox.Show($"Ошибка: {ex.Message}", "Ошибка",
+                    MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+
+            Debug.WriteLine("========== MERGE END ==========");
         }
 
         // ========== ВСПОМОГАТЕЛЬНЫЕ МЕТОДЫ ==========

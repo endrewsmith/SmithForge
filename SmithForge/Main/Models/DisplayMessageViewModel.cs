@@ -33,6 +33,9 @@ namespace SmithForge.Main.Models
         [ObservableProperty]
         private int _dislikes;
 
+        [ObservableProperty]
+        private bool _shouldChargeReaction = true; // Добавлено новое свойство
+
         public string LikesDisplay => Likes > 0 ? Likes.ToString() : string.Empty;
         public string DislikesDisplay => Dislikes > 0 ? Dislikes.ToString() : string.Empty;
 
@@ -142,6 +145,7 @@ namespace SmithForge.Main.Models
             MessageNumber = msg.MessageNumber;
             Type = msg.Type;
             DisplayTimeMs = msg.DisplayTimeMs;
+            ShouldChargeReaction = true; // По умолчанию списываем
 
             System.Diagnostics.Debug.WriteLine($"[VM] Создано сообщение: User={user.Login}, " +
                 $"MessageNumber={MessageNumber}, Длина={msg.LengthCategory}, Время={DisplayTimeMs}мс");
@@ -167,7 +171,5 @@ namespace SmithForge.Main.Models
         {
             OnPropertyChanged(nameof(MessageCount));
         }
-
-
     }
 }

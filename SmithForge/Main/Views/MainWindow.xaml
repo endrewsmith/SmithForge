@@ -25,7 +25,6 @@
         </Grid.RowDefinitions>
 
         <!-- МЕНЮ (Строка 0) -->
-        <!-- МЕНЮ (Строка 0) -->
         <Menu Grid.Row="0" Background="White" Padding="2">
             <MenuItem Header="Файл">
                 <MenuItem Header="Выход" Click="Exit_Click"/>
@@ -39,6 +38,12 @@
                 <MenuItem Header="История стримов" Click="OpenStreams_Click">
                     <MenuItem.Icon>
                         <TextBlock Text="🎬"/>
+                    </MenuItem.Icon>
+                </MenuItem>
+                <!-- НОВАЯ КНОПКА ДЛЯ ДАШБОРДА -->
+                <MenuItem Header="Дашборд (скрытый чат)" Click="ToggleDashboard_Click">
+                    <MenuItem.Icon>
+                        <TextBlock Text="📊"/>
                     </MenuItem.Icon>
                 </MenuItem>
             </MenuItem>

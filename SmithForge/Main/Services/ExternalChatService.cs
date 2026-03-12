@@ -74,8 +74,9 @@ namespace SmithForge.Main.Services
                 }
 
                 string arguments = $"-Xmx200m -Xms100m -XX:+UseG1GC " +
-                                 $"-javaagent:\"{_agentPath}\" " +
-                                 $"-jar \"{_jarPath}\"";
+                 $"-javaagent:\"{_agentPath}\" " +
+                 $"-jar \"{_jarPath}\"";
+
 
                 var process = new Process
                 {

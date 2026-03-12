@@ -9,12 +9,16 @@ public class CommonMessage
     public long Timestamp { get; set; }
     public string KarmaKeyDisplay { get; set; } = string.Empty;
 
-    public int MessageNumber { get; set; }  // <-- ДОБАВЛЕНО
+    public int MessageNumber { get; set; }
 
     public Chater? User { get; set; }
     public string TypeLogin => $"{Type}-{Login}";
 
     public bool IsProcessedByCommand { get; set; }
+
+    // Добавляем поле для хранения базового времени
+    private int _baseDisplayTimeMs;
+
     public MessageLength LengthCategory
     {
         get
@@ -26,11 +30,23 @@ public class CommonMessage
         }
     }
 
-    public int DisplayTimeMs => LengthCategory switch
+    // Базовое время (вычисляется на лету)
+    public int BaseDisplayTimeMs => LengthCategory switch
     {
-        MessageLength.Short => 7000,   // 3 секунды
-        MessageLength.Medium => 20000,  // 5 секунд
-        MessageLength.Long => 30000,    // 8 секунд
+        MessageLength.Short => 7000,
+        MessageLength.Medium => 20000,
+        MessageLength.Long => 30000,
         _ => 5000
     };
+
+    private int? _customDisplayTimeMs;
+
+    // Итоговое время отображения
+    public int DisplayTimeMs
+    {
+        get => _customDisplayTimeMs ?? BaseDisplayTimeMs;
+        set => _customDisplayTimeMs = value;
+    }
+
+    public bool ShouldChargeForCommand { get; set; } = true;
 }

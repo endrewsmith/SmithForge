@@ -17,6 +17,7 @@ namespace SmithForge.ViewModels
 {
     internal partial class MainViewModel : ObservableObject
     {
+        private readonly DashboardService _dashboardService = new();
         private readonly MessageProcessor _processor;
         private readonly OverlayService _overlayService;
         private readonly ExternalChatService _chatService = new();
@@ -41,6 +42,7 @@ namespace SmithForge.ViewModels
             FolderManager.EnsureDirectoriesExist();
             Settings = ConfigService.Load();
             DatabaseService.Initialize();
+
 
             _overlayService = new OverlayService();
             _overlayService.Initialize(Settings.OverlayTop, Settings.OverlayLeft);
@@ -75,6 +77,8 @@ namespace SmithForge.ViewModels
             _processor.SetSession(CurrentSession.Id);
             LoadInitialData();
             _chatService.ProcessExited += (s, e) => OnProcessExited();
+
+            _dashboardService.Initialize();
         }
 
         private void LoadInitialData()
@@ -89,7 +93,6 @@ namespace SmithForge.ViewModels
 
         private void OnMessageProcessed(Chater chater, CommonMessage msg, List<ChatCommandInfo> commands)
         {
-            // НЕ удаляем команды из текста - они уже удалены в MessageProcessor
             string uiMessage = msg.Message;
 
             if (msg.Message.Length >= Settings.MinMessageLength)
@@ -99,7 +102,6 @@ namespace SmithForge.ViewModels
                 });
             }
 
-            // ОТЛАДКА
             Debug.WriteLine($"[MainViewModel] Получено сообщение от {chater.Login}:");
             Debug.WriteLine($"   - Оригинальный номер из MessageProcessor: {msg.MessageNumber}");
             Debug.WriteLine($"   - Текст: {uiMessage}");
@@ -113,14 +115,18 @@ namespace SmithForge.ViewModels
                 Message = uiMessage,
                 KarmaKeyDisplay = $"#{chater.KarmaKey}",
                 MessageNumber = msg.MessageNumber,
-                IsProcessedByCommand = msg.IsProcessedByCommand // ← передаем флаг
+                IsProcessedByCommand = msg.IsProcessedByCommand
             };
 
             Debug.WriteLine($"[MainViewModel] overlayMsg.IsProcessedByCommand: {overlayMsg.IsProcessedByCommand}");
 
             if (!string.IsNullOrWhiteSpace(uiMessage))
             {
+                // Отправляем в основной оверлей
                 _overlayService.AddMessage(chater, overlayMsg);
+
+                // Отправляем в дашборд (скрытый чат)
+                _dashboardService.AddMessage(chater, overlayMsg);
             }
         }
         private void EnsureSessionByNumber(int number)
@@ -258,6 +264,15 @@ namespace SmithForge.ViewModels
         {
             if (System.IO.File.Exists(ProgramPath))
                 Process.Start(new ProcessStartInfo(ProgramPath) { UseShellExecute = true });
+        }
+
+        [RelayCommand]
+        private void ToggleDashboard()
+        {
+            if (_dashboardService.IsVisible)
+                _dashboardService.Hide();
+            else
+                _dashboardService.Show();
         }
     }
 }

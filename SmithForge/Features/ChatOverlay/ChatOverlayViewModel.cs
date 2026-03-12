@@ -5,6 +5,8 @@ using System.Collections.ObjectModel;
 using System.Windows;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
+using System.Text.RegularExpressions;
+using System.Linq;
 
 namespace SmithForge.Features.ChatOverlay
 {
@@ -24,26 +26,34 @@ namespace SmithForge.Features.ChatOverlay
         {
             Application.Current.Dispatcher.Invoke(() =>
             {
-                var msgVm = new DisplayMessageViewModel(user, msg.Message, msg.MessageNumber, msg.Type);
+                var msgVm = new DisplayMessageViewModel(user, msg);
 
-                // Устанавливаем время отображения из CommonMessage
-                msgVm.DisplayTimeMs = msg.DisplayTimeMs;
+                // Проверяем, не является ли сообщение реакцией
+                bool isReaction = msg.Message.Contains("<like") || msg.Message.Contains("<dislike");
+
+                if (isReaction)
+                {
+                    // Обрабатываем реакцию, но НЕ добавляем в список отображаемых
+                    ProcessReactionTags(msgVm);
+                    System.Diagnostics.Debug.WriteLine($"[REACT] Обработана реакция на сообщение, сама команда скрыта");
+                    return; // ← ВАЖНО: выходим, не добавляя в DisplayMessages
+                }
+
+                // Обычное сообщение - отображаем
+                DisplayMessages.Add(msgVm);
 
                 // ОТЛАДКА
                 System.Diagnostics.Debug.WriteLine($"[ChatOverlayViewModel] Создан msgVm: " +
                     $"User={user.Login}, MessageNumber={msgVm.MessageNumber}, " +
-                    $"Длина={msg.Message?.Length ?? 0}, Время={msgVm.DisplayTimeMs}мс");
-
-                DisplayMessages.Add(msgVm);
+                    $"Длина={msg.Message?.Length ?? 0}, Время={msgVm.DisplayTimeMs}мс, " +
+                    $"IsProcessedByCommand={msg.IsProcessedByCommand}");
 
                 if (DisplayMessages.Count > 8)
                 {
-                    // Плавно удаляем самое старое сообщение
                     var oldestMsg = DisplayMessages[0];
                     AnimateAndRemove(oldestMsg);
                 }
 
-                // Запускаем таймер для плавного удаления
                 Task.Delay(msgVm.DisplayTimeMs).ContinueWith(_ =>
                 {
                     Application.Current.Dispatcher.Invoke(() =>
@@ -57,6 +67,38 @@ namespace SmithForge.Features.ChatOverlay
             });
         }
 
+        private void ProcessReactionTags(DisplayMessageViewModel msgVm)
+        {
+            if (string.IsNullOrEmpty(msgVm.MessageText)) return;
+
+            // Проверяем, есть ли тег лайка
+            var likeMatch = Regex.Match(msgVm.MessageText, @"<like msg='(\d+)' user='([^']+)' />");
+            if (likeMatch.Success && int.TryParse(likeMatch.Groups[1].Value, out int targetMsgNumber))
+            {
+                string userId = likeMatch.Groups[2].Value;
+                var targetMsg = DisplayMessages.FirstOrDefault(m => m.MessageNumber == targetMsgNumber);
+
+                if (targetMsg != null)
+                {
+                    if (targetMsg.User?.Id == userId)
+                    {
+                        System.Diagnostics.Debug.WriteLine($"[REACT] Запрещено: нельзя лайкать свое сообщение #{targetMsgNumber}");
+                        msgVm.ShouldChargeReaction = false;
+                    }
+                    else
+                    {
+                        targetMsg.Likes++;
+                        msgVm.ShouldChargeReaction = true;
+                    }
+                }
+                else
+                {
+                    msgVm.ShouldChargeReaction = false;
+                }
+                msgVm.MessageText = Regex.Replace(msgVm.MessageText, @"<like msg='\d+' user='[^']+' />", "").Trim();
+            }
+        }
+
         private void AnimateAndRemove(DisplayMessageViewModel msgVm)
         {
             // Находим визуальный элемент для анимации
@@ -65,9 +107,6 @@ namespace SmithForge.Features.ChatOverlay
             {
                 // Находим индекс удаляемого элемента
                 int index = DisplayMessages.IndexOf(msgVm);
-
-                // Сохраняем оригинальный Margin
-                var originalMargin = fe.Margin;
 
                 // Устанавливаем трансформацию
                 var scaleTransform = new ScaleTransform(1, 1);
@@ -157,65 +196,6 @@ namespace SmithForge.Features.ChatOverlay
             {
                 // Если не нашли элемент - просто удаляем
                 DisplayMessages.Remove(msgVm);
-            }
-        }
-
-        private void AnimateReposition(int startIndex)
-        {
-            // Анимируем появление элементов на новых позициях
-            for (int i = startIndex; i < DisplayMessages.Count; i++)
-            {
-                var msg = DisplayMessages[i];
-                var fe = FindFrameworkElement(msg);
-
-                if (fe != null)
-                {
-                    // Небольшая задержка для создания эффекта волны
-                    int delay = (i - startIndex) * 30;
-
-                    // Начинаем с почти прозрачного состояния
-                    fe.Opacity = 0.5;
-
-                    // Анимация плавного появления
-                    var opacityAnimation = new DoubleAnimation
-                    {
-                        From = 0.5,
-                        To = 1.0,
-                        Duration = TimeSpan.FromMilliseconds(400),
-                        BeginTime = TimeSpan.FromMilliseconds(delay),
-                        EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseOut }
-                    };
-
-                    Storyboard.SetTarget(opacityAnimation, fe);
-                    Storyboard.SetTargetProperty(opacityAnimation, new PropertyPath("Opacity"));
-
-                    // Небольшое смещение для эффекта
-                    var translateTransform = new TranslateTransform(0, -10);
-                    fe.RenderTransform = translateTransform;
-
-                    var translateAnimation = new DoubleAnimation
-                    {
-                        From = -10,
-                        To = 0,
-                        Duration = TimeSpan.FromMilliseconds(400),
-                        BeginTime = TimeSpan.FromMilliseconds(delay),
-                        EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseOut }
-                    };
-
-                    Storyboard.SetTarget(translateAnimation, fe);
-                    Storyboard.SetTargetProperty(translateAnimation, new PropertyPath("(UIElement.RenderTransform).(TranslateTransform.Y)"));
-
-                    var storyboard = new Storyboard();
-                    storyboard.Children.Add(opacityAnimation);
-                    storyboard.Children.Add(translateAnimation);
-
-                    storyboard.Completed += (s, e) =>
-                    {
-                        fe.RenderTransform = null;
-                    };
-
-                    storyboard.Begin();
-                }
             }
         }
 

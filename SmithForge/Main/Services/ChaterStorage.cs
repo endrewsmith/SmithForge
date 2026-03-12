@@ -265,5 +265,27 @@ namespace SmithForge.Main.Services
             Cache.Clear();
             Debug.WriteLine("[ChaterStorage] Хранилище очищено");
         }
+
+        /// <summary>
+        /// Удаление чаттера по ID
+        /// </summary>
+        public static void RemoveById(string id)
+        {
+            if (string.IsNullOrEmpty(id)) return;
+
+            if (_allChaters.TryRemove(id, out var chater))
+            {
+                // Удаляем все его аккаунты из кэша
+                foreach (var a in chater.Accounts)
+                {
+                    if (!string.IsNullOrEmpty(a.ExternalId))
+                    {
+                        Cache.TryRemove(a.ExternalId.ToLower(), out _);
+                    }
+                }
+
+                Debug.WriteLine($"[ChaterStorage] Удален чаттер по ID: {chater.EffectiveName} (ID: {chater.Id})");
+            }
+        }
     }
 }

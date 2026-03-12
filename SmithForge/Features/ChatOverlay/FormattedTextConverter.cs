@@ -88,6 +88,17 @@ namespace SmithForge.Main.Services
                                 Debug.WriteLine($"[FormattedTextConverter] Цвет: '{colorValue}'");
                                 run.Foreground = GetColorBrush(colorValue);
                             }
+                            // Тег продления (не влияет на отображение, просто пропускаем)
+                            else if (tagName == "extend")
+                            {
+                                string extendValue = "0";
+                                if (tagLower.StartsWith("extend="))
+                                {
+                                    extendValue = tagLower.Substring(7);
+                                }
+                                Debug.WriteLine($"[FormattedTextConverter] Тег продления: {extendValue} мс (не влияет на отображение)");
+                                // Просто пропускаем, ничего не меняем в отображении
+                            }
                             else
                             {
                                 Debug.WriteLine($"[FormattedTextConverter] Неизвестный тег: '{tagLower}'");
