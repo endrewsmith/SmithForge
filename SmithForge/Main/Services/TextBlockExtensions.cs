@@ -6,7 +6,6 @@ namespace SmithForge.Main.Services
 {
     public static class TextBlockExtensions
     {
-        // Регистрируем Attached Property
         public static readonly DependencyProperty FormattedInlinesProperty =
             DependencyProperty.RegisterAttached(
                 "FormattedInlines",
@@ -14,29 +13,78 @@ namespace SmithForge.Main.Services
                 typeof(TextBlockExtensions),
                 new PropertyMetadata(null, OnFormattedInlinesChanged));
 
-        // Геттер
         public static Inline GetFormattedInlines(DependencyObject obj)
         {
             return (Inline)obj.GetValue(FormattedInlinesProperty);
         }
 
-        // Сеттер
         public static void SetFormattedInlines(DependencyObject obj, Inline value)
         {
             obj.SetValue(FormattedInlinesProperty, value);
         }
 
-        // Логика обновления: когда конвертер возвращает Span, мы вставляем его в TextBlock
         private static void OnFormattedInlinesChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
         {
-            if (d is TextBlock textBlock)
+            // Проверяем, что свойство висит на Inline (Run или Span)
+            if (d is Inline currentInline)
             {
-                textBlock.Inlines.Clear();
-                if (e.NewValue is Inline inline)
+                // Пытаемся найти родительский TextBlock
+                if (currentInline.Parent is TextBlock textBlock)
                 {
-                    textBlock.Inlines.Add(inline);
+                    // Находим индекс текущего элемента вручную
+                    int index = -1;
+                    int count = 0;
+                    foreach (var inline in textBlock.Inlines)
+                    {
+                        if (inline == currentInline)
+                        {
+                            index = count;
+                            break;
+                        }
+                        count++;
+                    }
+
+                    if (index != -1)
+                    {
+                        // Удаляем всё, что идет ПОСЛЕ нашего элемента (старый текст сообщения)
+                        while (textBlock.Inlines.Count > index + 1)
+                        {
+                            textBlock.Inlines.Remove(textBlock.Inlines.LastInline);
+                        }
+
+                        // Добавляем новый текст из конвертера в конец коллекции
+                        if (e.NewValue is Inline newInline)
+                        {
+                            textBlock.Inlines.Add(newInline);
+                        }
+                    }
                 }
             }
         }
+
+
+
+        private static void UpdateInlines(TextBlock textBlock, Inline? newInline)
+        {
+            // Если XAML еще не отрисовал ник и двоеточие, выходим. 
+            // WPF вызовет это снова, когда отработает привязка ника.
+            if (textBlock.Inlines.Count < 2) return;
+
+            // Удаляем ВСЁ, что идет после индекса 1 (после ника и двоеточия)
+            while (textBlock.Inlines.Count > 2)
+            {
+                textBlock.Inlines.Remove(textBlock.Inlines.LastInline);
+            }
+
+            // Добавляем текст сообщения
+            if (newInline != null)
+            {
+                // Чтобы избежать ошибки "Inline уже принадлежит другому объекту"
+                // (если сообщение обновляется), можно сделать проверку на родителя, 
+                // но обычно в конвертере создается новый объект, так что Add достаточно.
+                textBlock.Inlines.Add(newInline);
+            }
+        }
+
     }
 }

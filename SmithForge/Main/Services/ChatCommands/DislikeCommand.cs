@@ -24,9 +24,10 @@ namespace SmithForge.Main.Services.ChatCommands
             if (!int.TryParse(messageNumberStr, out int messageNumber) || messageNumber <= 0)
             {
                 Debug.WriteLine($"[DislikeCommand] Ошибка: неверный номер '{messageNumberStr}'");
-                msg.Message = string.Empty;
+                // Оставляем тег даже при ошибке, чтобы сообщение было скрыто
+                msg.Message = $"<dislike msg='{messageNumber}' user='{chater.Id}' />";
                 msg.IsProcessedByCommand = true;
-                msg.ShouldChargeForCommand = false; // За ошибку ввода не списываем
+                msg.ShouldChargeForCommand = false;
                 return;
             }
 
@@ -36,7 +37,7 @@ namespace SmithForge.Main.Services.ChatCommands
             if (string.IsNullOrEmpty(targetAuthorId))
             {
                 Debug.WriteLine($"[DislikeCommand] Сообщение #{messageNumber} не найдено");
-                msg.Message = string.Empty;
+                msg.Message = $"<dislike msg='{messageNumber}' user='{chater.Id}' />";
                 msg.IsProcessedByCommand = true;
                 msg.ShouldChargeForCommand = false;
                 return;
@@ -46,9 +47,9 @@ namespace SmithForge.Main.Services.ChatCommands
             if (targetAuthorId == chater.Id)
             {
                 Debug.WriteLine($"[DislikeCommand] ЗАПРЕТ: {chater.Login} пытался дизлайкнуть себя.");
-                msg.Message = string.Empty;         // Убираем текст ошибки
-                msg.IsProcessedByCommand = true;    // Считаем команду выполненной (чтобы она не вылезла как текст)
-                msg.ShouldChargeForCommand = false; // Не списываем карму
+                msg.Message = $"<dislike msg='{messageNumber}' user='{chater.Id}' />"; // ВСЕГДА создаем тег
+                msg.IsProcessedByCommand = true;
+                msg.ShouldChargeForCommand = false;
                 return;
             }
 
@@ -58,14 +59,13 @@ namespace SmithForge.Main.Services.ChatCommands
             // Формируем тег для UI
             msg.Message = $"<dislike msg='{messageNumber}' user='{chater.Id}' />";
             msg.IsProcessedByCommand = true;
-            msg.ShouldChargeForCommand = true; // Разрешаем списание 1 кармы
+            msg.ShouldChargeForCommand = true;
 
             Debug.WriteLine($"[DislikeCommand] ========== КОНЕЦ ==========");
         }
 
         public override bool ShouldCharge(ChatCommandInfo info, Chater chater, CommonMessage msg)
         {
-            // Списываем только если выполнение было валидным
             return msg.ShouldChargeForCommand;
         }
     }

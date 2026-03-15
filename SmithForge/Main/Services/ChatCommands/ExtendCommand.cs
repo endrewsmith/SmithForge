@@ -1,4 +1,5 @@
 ﻿using SmithForge.Main.Models;
+using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 
@@ -11,44 +12,70 @@ namespace SmithForge.Main.Services.ChatCommands
         private const int MAX_EXTEND = 10;
         public override string Description => "Увеличить время показа сообщения: !!ext или !!ext:5";
 
-        // Этот метод вызовет MessageProcessor ПЕРЕД выполнением
         public override int GetTotalCost(ChatCommandInfo info, Chater chater)
         {
-            /// Для 10-го ранга и выше бесплатно
-            if (chater.Rank >= 10) return 0;
+            Debug.WriteLine($"[Extend.GetTotalCost] Ранг: {chater.Rank}, Аргументы: {string.Join(", ", info.Arguments)}");
 
-            // Если аргументов нет (!!ext) -> списываем максимум, сколько есть у юзера (но не больше 10)
+            // Для 5-го ранга и выше бесплатно
+            if (chater.Rank >= 5)
+            {
+                Debug.WriteLine("[Extend.GetTotalCost] Бесплатно (ранг >=5)");
+                return 0;
+            }
+
+            // Если аргументов нет (!!ext)
             if (info.Arguments.Count == 0)
             {
-                return (int)Math.Min(chater.Karma, MAX_EXTEND);
+                int cost = (int)Math.Min(chater.Karma, MAX_EXTEND);
+                Debug.WriteLine($"[Extend.GetTotalCost] Нет аргументов, стоимость: {cost}");
+                return cost;
             }
 
-            // Если аргумент есть (!!ext:5) -> берем число
+            // Если аргумент есть (!!ext:5)
             if (int.TryParse(info.Arguments[0], out int minutes))
             {
-                return Math.Clamp(minutes, 1, MAX_EXTEND);
+                int cost = Math.Clamp(minutes, 1, MAX_EXTEND);
+                Debug.WriteLine($"[Extend.GetTotalCost] Аргумент: {minutes}, стоимость: {cost}");
+                return cost;
             }
 
-            return 1; // Дефолт
+            Debug.WriteLine("[Extend.GetTotalCost] Дефолт 1");
+            return 1;
         }
 
         public override void Execute(ChatCommandInfo info, Chater chater, CommonMessage msg, AppSettings settings)
         {
-            // В MessageProcessor карма уже списана методом GetTotalCost
-            // Нам нужно просто применить время
-            int minutes = GetTotalCost(info, chater);
+            Debug.WriteLine($"[Extend.Execute] НАЧАЛО - Текст: '{msg.Message}'");
+            Debug.WriteLine($"[Extend.Execute] Аргументы: {string.Join(", ", info.Arguments)}");
+            Debug.WriteLine($"[Extend.Execute] Ранг: {chater.Rank}");
+            Debug.WriteLine($"[Extend.Execute] Текущее время: {msg.DisplayTimeMs}мс");
 
-            // Если у игрока 5 ранг, GetTotalCost вернул 0, но продлить-то надо!
-            if (chater.Rank >= 5 && info.Arguments.Count == 0) minutes = MAX_EXTEND;
-            else if (chater.Rank >= 5 && int.TryParse(info.Arguments[0], out int m)) minutes = m;
+            // Определяем, сколько минут продлевать
+            int minutes;
 
-            if (minutes <= 0) minutes = 1;
+            if (info.Arguments.Count == 0)
+            {
+                minutes = MAX_EXTEND;
+                Debug.WriteLine($"[Extend.Execute] Нет аргументов, продлеваем на {minutes} мин");
+            }
+            else if (int.TryParse(info.Arguments[0], out int m))
+            {
+                minutes = Math.Clamp(m, 1, MAX_EXTEND);
+                Debug.WriteLine($"[Extend.Execute] Аргумент: {m}, продлеваем на {minutes} мин");
+            }
+            else
+            {
+                minutes = 1;
+                Debug.WriteLine($"[Extend.Execute] Ошибка парсинга, продлеваем на 1 мин");
+            }
 
-            msg.DisplayTimeMs += minutes * 60 * 1000;
+            int additionalMs = minutes * 60 * 1000;
+            msg.DisplayTimeMs += additionalMs;
             msg.IsProcessedByCommand = true;
 
-            Debug.WriteLine($"[Extend] Продлено на {minutes} мин. (Карма списана процессором)");
+            Debug.WriteLine($"[Extend.Execute] Добавлено {additionalMs}мс");
+            Debug.WriteLine($"[Extend.Execute] Новое время: {msg.DisplayTimeMs}мс");
+            Debug.WriteLine($"[Extend.Execute] КОНЕЦ");
         }
     }
-
 }

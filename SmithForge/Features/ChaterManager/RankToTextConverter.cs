@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Globalization;
 using System.Windows.Data;
+using System.Windows;
 
 namespace SmithForge.Features.ChaterManager
 {
@@ -17,7 +18,9 @@ namespace SmithForge.Features.ChaterManager
                     2 => "★★",
                     3 => "★★★",
                     4 => "★★★★",
-                    _ => rank.ToString()
+                    5 => "★★★★★",
+                    >= 6 => $"★ {rank}",  // пробел между звездой и цифрой
+                    _ => "?"
                 };
             }
             return "?";

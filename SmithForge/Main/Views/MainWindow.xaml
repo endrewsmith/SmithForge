@@ -11,17 +11,11 @@
     <Grid Margin="0">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
-            <!-- Меню -->
             <RowDefinition Height="Auto"/>
-            <!-- Управление -->
             <RowDefinition Height="Auto"/>
-            <!-- Стрим Инфо -->
             <RowDefinition Height="Auto"/>
-            <!-- Последнее сообщение -->
             <RowDefinition Height="*"/>
-            <!-- Список -->
             <RowDefinition Height="Auto"/>
-            <!-- Статус -->
         </Grid.RowDefinitions>
 
         <!-- МЕНЮ (Строка 0) -->
@@ -40,7 +34,6 @@
                         <TextBlock Text="🎬"/>
                     </MenuItem.Icon>
                 </MenuItem>
-                <!-- НОВАЯ КНОПКА ДЛЯ ДАШБОРДА -->
                 <MenuItem Header="Дашборд (скрытый чат)" Click="ToggleDashboard_Click">
                     <MenuItem.Icon>
                         <TextBlock Text="📊"/>
@@ -55,14 +48,13 @@
                         <StackPanel Orientation="Horizontal">
                             <TextBlock Text="Множитель: x" VerticalAlignment="Center" Width="90"/>
                             <TextBox Text="{Binding Settings.KarmaRateTwitch, UpdateSourceTrigger=PropertyChanged, Delay=800, ConverterCulture='en-US'}" 
-             Width="50" 
-             HorizontalContentAlignment="Center"
-             PreviewTextInput="DecimalValidationTextBox"
-             CommandManager.PreviewExecuted="TextBox_PreviewExecuted"/>
+                                     Width="50" 
+                                     HorizontalContentAlignment="Center"
+                                     PreviewTextInput="DecimalValidationTextBox"
+                                     CommandManager.PreviewExecuted="TextBox_PreviewExecuted"/>
                         </StackPanel>
                     </MenuItem.Header>
                 </MenuItem>
-
                 <Separator/>
 
                 <!-- СЕКЦИЯ YOUTUBE -->
@@ -72,23 +64,23 @@
                         <StackPanel Orientation="Horizontal">
                             <TextBlock Text="Множитель: x" VerticalAlignment="Center" Width="90"/>
                             <TextBox Text="{Binding Settings.KarmaRateYouTube, Delay=800, UpdateSourceTrigger=PropertyChanged}" 
-                         Width="50" HorizontalContentAlignment="Center"
-                         PreviewTextInput="DecimalValidationTextBox"/>
+                                     Width="50" HorizontalContentAlignment="Center"
+                                     PreviewTextInput="DecimalValidationTextBox"/>
                         </StackPanel>
                     </MenuItem.Header>
                 </MenuItem>
 
                 <Separator/>
 
-                <!-- НОВАЯ СЕКЦИЯ GOODGAME -->
+                <!-- СЕКЦИЯ GOODGAME -->
                 <MenuItem Header="🔵 GoodGame.ru" IsHitTestVisible="False" FontWeight="Bold" Foreground="#007bff"/>
                 <MenuItem StaysOpenOnClick="True">
                     <MenuItem.Header>
                         <StackPanel Orientation="Horizontal">
                             <TextBlock Text="Множитель: x" VerticalAlignment="Center" Width="90"/>
-                            <TextBox Text="{Binding Settings.KarmaRateGoodGame, Delay=800,  UpdateSourceTrigger=PropertyChanged}" 
-                         Width="50" HorizontalContentAlignment="Center"
-                         PreviewTextInput="DecimalValidationTextBox"/>
+                            <TextBox Text="{Binding Settings.KarmaRateGoodGame, Delay=800, UpdateSourceTrigger=PropertyChanged}" 
+                                     Width="50" HorizontalContentAlignment="Center"
+                                     PreviewTextInput="DecimalValidationTextBox"/>
                         </StackPanel>
                     </MenuItem.Header>
                 </MenuItem>
@@ -96,7 +88,7 @@
                 <Separator/>
                 <MenuItem Header="💾 Применить и сохранить" Command="{Binding SaveSettingsCommand}" FontWeight="Bold"/>
             </MenuItem>
-
+            <MenuItem Header="Shorts Overlay" Click="ToggleShortsOverlay_Click"/>
         </Menu>
 
         <!-- ПАНЕЛЬ УПРАВЛЕНИЯ (Строка 1) -->
@@ -105,55 +97,56 @@
                     Background="LightBlue" Width="100" Height="30" Margin="0,0,10,0"/>
             <Button Content="СТОП" Command="{Binding StopCommand}" 
                     Background="LightCoral" Width="100" Height="30"/>
-            <!-- ВОТ ЭТОТ ПЕРЕКЛЮЧАТЕЛЬ -->
-            <CheckBox Content="Настройка оверлея" 
-              IsChecked="{Binding IsOverlaySetupMode}" 
+            <CheckBox Content="Показать окна чатов" 
+                      IsChecked="{Binding IsOverlaySetupMode}" 
+                      VerticalAlignment="Center" 
+                      Margin="20,0,0,0"
+                      FontSize="14" FontWeight="Bold"/>
+            <!-- НОВЫЙ ЧЕКБОКС для скрытия окон за экран -->
+            <CheckBox Content="Спрятать окна" 
+              IsChecked="{Binding IsOverlayHidden}" 
               VerticalAlignment="Center" 
               Margin="20,0,0,0"
               FontSize="14" FontWeight="Bold"/>
         </StackPanel>
 
-        <!-- ОБНОВЛЕННАЯ ПОЛОСКА СТРИМА -->
+        <!-- ПОЛОСКА СТРИМА (Строка 2) -->
         <Border Grid.Row="2" Background="#FFFDE7" BorderBrush="#FFE082" BorderThickness="0,1" Padding="10,8">
             <StackPanel Orientation="Horizontal" VerticalAlignment="Bottom">
 
                 <!-- ГРУППА: НОМЕР -->
                 <StackPanel Margin="0,0,10,0">
                     <TextBlock Text="{Binding LastStreamNumber, StringFormat='Был номер: {0}', FallbackValue='Был номер: 0'}" 
-           FontSize="10" 
-           Foreground="#A1887F" 
-           FontWeight="Bold"
-           Margin="62,0,0,2"/>
-                    <!-- Сдвиг, чтобы быть ровно над цифрами -->
-
+                               FontSize="10" 
+                               Foreground="#A1887F" 
+                               FontWeight="Bold"
+                               Margin="62,0,0,2"/>
                     <StackPanel Orientation="Horizontal">
                         <TextBlock Text="СТРИМ №" FontWeight="Bold" VerticalAlignment="Center" Foreground="#795548"/>
                         <TextBox Text="{Binding CurrentSession.Number, UpdateSourceTrigger=PropertyChanged}" 
-                         Width="100" Height="24" Margin="5,0,0,0" 
-                         VerticalContentAlignment="Center" HorizontalContentAlignment="Center"
-                         FontWeight="Bold" Foreground="#E65100"
-                         PreviewTextInput="IntegerValidationTextBox"
-                         CommandManager.PreviewExecuted="TextBox_PreviewExecuted"/>
+                                 Width="100" Height="24" Margin="5,0,0,0" 
+                                 VerticalContentAlignment="Center" HorizontalContentAlignment="Center"
+                                 FontWeight="Bold" Foreground="#E65100"
+                                 PreviewTextInput="IntegerValidationTextBox"
+                                 CommandManager.PreviewExecuted="TextBox_PreviewExecuted"/>
                     </StackPanel>
                 </StackPanel>
 
-                <!-- КНОПКА СЛЕДУЮЩИЙ (чуть ниже, чтобы быть вровень с TextBox) -->
+                <!-- КНОПКА СЛЕДУЮЩИЙ -->
                 <Button Content="СЛЕДУЮЩИЙ" Command="{Binding NextStreamCommand}" 
-                Background="LightGreen" Width="100" Height="24" Margin="10,0,20,0"
-                FontSize="11" FontWeight="SemiBold" VerticalAlignment="Bottom"/>
+                        Background="LightGreen" Width="100" Height="24" Margin="10,0,20,0"
+                        FontSize="11" FontWeight="SemiBold" VerticalAlignment="Bottom"/>
 
                 <!-- ГРУППА: НАЗВАНИЕ -->
                 <StackPanel>
                     <TextBlock Text="ТЕКУЩАЯ ТЕМА" FontSize="10" Foreground="#A1887F" FontWeight="Bold" Margin="5,0,0,2"/>
                     <TextBox Text="{Binding CurrentSession.Title, UpdateSourceTrigger=PropertyChanged}" 
-                     Width="400" Height="24" VerticalContentAlignment="Center" Margin="5,0,0,0"/>
+                             Width="400" Height="24" VerticalContentAlignment="Center" Margin="5,0,0,0"/>
                 </StackPanel>
-
             </StackPanel>
         </Border>
 
-
-        <!-- ПАНЕЛЬ ПОСЛЕДНЕГО СООБЩЕНИЯ (Строка 2) -->
+        <!-- ПОСЛЕДНЕЕ СООБЩЕНИЕ (Строка 3) -->
         <Border Grid.Row="3" Background="#F8F8F8" BorderBrush="#DDD" BorderThickness="0,1" Padding="10,5">
             <StackPanel Orientation="Horizontal">
                 <TextBlock Text="ПОСЛЕДНЕЕ: " FontWeight="Bold" VerticalAlignment="Center"/>
@@ -161,8 +154,7 @@
             </StackPanel>
         </Border>
 
-        <!-- СПИСОК ПОЛЬЗОВАТЕЛЕЙ ИЗ БД (Строка 3) -->
-        <!-- Добавлена виртуализация для работы с 1000+ записей -->
+        <!-- СПИСОК ПОЛЬЗОВАТЕЛЕЙ (Строка 4) - ИСПРАВЛЕНО -->
         <ListBox Grid.Row="4" ItemsSource="{Binding Users}" Margin="10"
                  VirtualizingStackPanel.IsVirtualizing="True"
                  VirtualizingStackPanel.VirtualizationMode="Recycling"
@@ -172,19 +164,23 @@
                     <Grid Margin="0,2">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="50"/>
-                            <!-- Платформа -->
                             <ColumnDefinition Width="150"/>
-                            <!-- Имя -->
                             <ColumnDefinition Width="*"/>
-                            <!-- Статистика -->
                         </Grid.ColumnDefinitions>
 
-                        <TextBlock Grid.Column="0" Text="{Binding Platform}" 
-                                   FontWeight="Bold" Foreground="DarkBlue" Opacity="0.7"/>
+                        <!-- Платформа (первый аккаунт) -->
+                        <TextBlock Grid.Column="0" 
+           Text="{Binding Accounts[0].PlatformShort}" 
+           FontWeight="Bold" 
+           Foreground="{Binding Accounts[0].PlatformColor}" 
+           Opacity="0.7"/>
 
-                        <TextBlock Grid.Column="1" Text="{Binding Username}" 
+                        <!-- Имя пользователя -->
+                        <TextBlock Grid.Column="1" 
+                                   Text="{Binding EffectiveName}" 
                                    FontWeight="SemiBold"/>
 
+                        <!-- Статистика -->
                         <StackPanel Grid.Column="2" Orientation="Horizontal">
                             <TextBlock Text="сообщений: " Foreground="Gray" FontSize="11"/>
                             <TextBlock Text="{Binding MessageCount}" FontWeight="Bold" Foreground="#444"/>
@@ -194,7 +190,7 @@
             </ListBox.ItemTemplate>
         </ListBox>
 
-        <!-- СТАТУС-БАР (Строка 6) -->
+        <!-- СТАТУС-БАР (Строка 5) -->
         <StatusBar Grid.Row="5">
             <TextBlock Text="Юзеров в базе: "/>
             <TextBlock Text="{Binding Users.Count}"/>

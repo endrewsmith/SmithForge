@@ -21,4 +21,14 @@
     <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.3" />
   </ItemGroup>
 
+  <!-- Добавь эту секцию для шрифтов -->
+  <ItemGroup>
+    <Resource Include="Assets\Fonts\SpectralSC-Regular.ttf" />
+    <Resource Include="Assets\Fonts\SpectralSC-Bold.ttf" />
+    <Resource Include="Assets\Fonts\SpectralSC-Italic.ttf" />
+    <Resource Include="Assets\Fonts\SpectralSC-Medium.ttf" />
+    <Resource Include="Assets\Fonts\SpectralSC-SemiBold.ttf" />
+    <Resource Include="Assets\Fonts\SpectralSC-Light.ttf" />
+  </ItemGroup>
+
 </Project>

@@ -14,10 +14,14 @@ namespace SmithForge.Main.Services
         private string? _currentSessionId;
         private readonly Dictionary<string, IChatCommand> _commandMap;
         private static readonly Regex CommandRegex = new Regex(@"!!([^\s]+)", RegexOptions.Compiled);
-
+        private readonly Regex _commandRegex;
         public MessageProcessor(AppSettings settings)
         {
             _settings = settings ?? throw new ArgumentNullException(nameof(settings));
+
+            // Создаем регулярку из всех префиксов
+            string prefixes = string.Join("|", settings.CommandPrefixes.Select(p => Regex.Escape(p)));
+            _commandRegex = new Regex($@"({prefixes})([^\s]+)", RegexOptions.Compiled);
             _commandMap = new Dictionary<string, IChatCommand>(StringComparer.OrdinalIgnoreCase);
 
             var commandsList = new List<IChatCommand>
@@ -29,6 +33,7 @@ namespace SmithForge.Main.Services
                 new ExtendCommand(),
                 new LikeCommand(),
                 new DislikeCommand(),
+                new NickCommand(),
             };
 
             foreach (var cmd in commandsList)
@@ -265,14 +270,16 @@ namespace SmithForge.Main.Services
 
             Debug.WriteLine($"[PARSE] Исходный текст: '{text}'");
 
-            var matches = CommandRegex.Matches(text);
+            var matches = _commandRegex.Matches(text);
             Debug.WriteLine($"[PARSE] Найдено совпадений: {matches.Count}");
 
             foreach (Match m in matches)
             {
                 Debug.WriteLine($"[PARSE] Найдена команда: '{m.Value}' на позиции {m.Index}");
 
-                var fullPath = m.Groups[1].Value;
+                // Группа 1 - префикс (!!, .., ,,)
+                // Группа 2 - остальная часть команды
+                string fullPath = m.Groups[2].Value;
                 var parts = fullPath.Split(':', StringSplitOptions.RemoveEmptyEntries);
 
                 if (parts.Length > 0)
@@ -292,7 +299,6 @@ namespace SmithForge.Main.Services
 
             return results.OrderBy(cmd => cmd.Index).ToList();
         }
-
         private string RemoveAllTags(string input)
         {
             return Regex.Replace(input, @"<[^>]*>", string.Empty);

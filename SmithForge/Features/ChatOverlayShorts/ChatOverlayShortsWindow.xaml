@@ -1,0 +1,76 @@
+﻿<Window x:Class="SmithForge.Features.ChatOverlayShorts.ChatOverlayShortsWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:local="clr-namespace:SmithForge.Features.ChatOverlay"
+        Title="Shorts Overlay" Height="600" Width="450"
+        WindowStyle="None" AllowsTransparency="True" Background="Transparent"
+        Topmost="False" ShowInTaskbar="False"
+        MouseLeftButtonDown="Window_MouseLeftButtonDown">
+
+    <Window.Resources>
+        <BooleanToVisibilityConverter x:Key="BoolToVis"/>
+        <local:RankToColorConverter x:Key="RankToColorConverter"/>
+    </Window.Resources>
+
+    <Grid>
+        <!-- Сообщения -->
+        <ItemsControl x:Name="MessagesList" 
+                      ItemsSource="{Binding DisplayMessages}" 
+                      VerticalAlignment="Bottom"
+                      IsHitTestVisible="False">
+            <ItemsControl.ItemsPanel>
+                <ItemsPanelTemplate>
+                    <StackPanel VerticalAlignment="Bottom"/>
+                </ItemsPanelTemplate>
+            </ItemsControl.ItemsPanel>
+
+            <ItemsControl.ItemTemplate>
+                <DataTemplate>
+                    <!-- Та же анимация, что и в основном оверлее - с ScaleTransform -->
+                    <Grid x:Name="MsgContainer" Opacity="0">
+                        <Grid.LayoutTransform>
+                            <ScaleTransform x:Name="LayoutScale" ScaleY="0"/>
+                        </Grid.LayoutTransform>
+
+                        <ContentControl Content="{Binding}" ContentTemplate="{Binding MessageSkin}"/>
+
+                        <Grid.Triggers>
+                            <EventTrigger RoutedEvent="Loaded">
+                                <BeginStoryboard>
+                                    <Storyboard>
+                                        <!-- Плавно увеличиваем масштаб по вертикали -->
+                                        <DoubleAnimation Storyboard.TargetName="LayoutScale"
+                                                         Storyboard.TargetProperty="ScaleY"
+                                                         From="0" To="1" Duration="0:0:0.4">
+                                            <DoubleAnimation.EasingFunction>
+                                                <CubicEase EasingMode="EaseOut"/>
+                                            </DoubleAnimation.EasingFunction>
+                                        </DoubleAnimation>
+
+                                        <!-- Плавное проявление -->
+                                        <DoubleAnimation Storyboard.TargetProperty="Opacity"
+                                                         From="0" To="1" Duration="0:0:0.3"/>
+                                    </Storyboard>
+                                </BeginStoryboard>
+                            </EventTrigger>
+                        </Grid.Triggers>
+                    </Grid>
+                </DataTemplate>
+            </ItemsControl.ItemTemplate>
+        </ItemsControl>
+
+        <!-- Область перетаскивания -->
+        <Border x:Name="DragArea" 
+                Background="#44000000" 
+                BorderBrush="Cyan" 
+                BorderThickness="2"
+                Visibility="{Binding IsSetupMode, Converter={StaticResource BoolToVis}}"
+                Cursor="SizeAll">
+            <TextBlock Text="[ SHORTS CHAT ]" 
+                       Foreground="Cyan" 
+                       HorizontalAlignment="Center" 
+                       VerticalAlignment="Center" 
+                       Opacity="0.5"/>
+        </Border>
+    </Grid>
+</Window>

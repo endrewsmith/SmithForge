@@ -116,9 +116,9 @@ namespace SmithForge.Main.Models
 
         public string PlatformColor => Platform.ToLower() switch
         {
-            "tw" or "twitch" => "#9146FF",
-            "yt" or "youtube" => "#FF0000",
-            "gg" or "goodgame" => "#00A550",
+            "tw" or "twitch" => "#b863a7",
+            "yt" or "youtube" => "#e85873",
+            "gg" or "goodgame" => "#7392d8",
             _ => "#666666"
         };
     }

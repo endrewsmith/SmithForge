@@ -1,5 +1,6 @@
 ﻿using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using SmithForge.Features.ChatOverlayShorts;
 using SmithForge.Main.Models;
 using SmithForge.Main.Services;
 using SmithForge.Main.Services.ChatCommands;
@@ -17,9 +18,11 @@ namespace SmithForge.ViewModels
 {
     internal partial class MainViewModel : ObservableObject
     {
+        [ObservableProperty]
+        private bool _isOverlayHidden;
+
         private readonly DashboardService _dashboardService = new();
         private readonly MessageProcessor _processor;
-        private readonly OverlayService _overlayService;
         private readonly ExternalChatService _chatService = new();
         private CancellationTokenSource? _pollingcts;
 
@@ -37,16 +40,16 @@ namespace SmithForge.ViewModels
 
         public ObservableCollection<Chater> Users { get; } = new();
 
+        private readonly ChatOverlayService _overlayService = new();
+        private readonly ChatOverlayShortsService _shortsService = new();
+
         public MainViewModel()
         {
             FolderManager.EnsureDirectoriesExist();
             Settings = ConfigService.Load();
+            _isOverlaySetupMode = Settings.IsOverlaySetupMode;
+            _isOverlayHidden = Settings.IsOverlayHidden; // ← Загружаем состояние скрытия
             DatabaseService.Initialize();
-
-
-            _overlayService = new OverlayService();
-            _overlayService.Initialize(Settings.OverlayTop, Settings.OverlayLeft);
-            _overlayService.SetMode(IsOverlaySetupMode);
 
             _processor = new MessageProcessor(Settings);
             _processor.OnProcessed += OnMessageProcessed;
@@ -79,6 +82,34 @@ namespace SmithForge.ViewModels
             _chatService.ProcessExited += (s, e) => OnProcessExited();
 
             _dashboardService.Initialize();
+
+            // Основной оверлей
+            _overlayService.Initialize(
+                Settings.OverlayTop,
+                Settings.OverlayLeft,
+                _isOverlaySetupMode
+            );
+            _overlayService.LoadPosition(Settings);
+
+            // Применяем состояние скрытия после загрузки позиции
+            if (_isOverlayHidden)
+            {
+                _overlayService.SetHidden(true);
+            }
+
+            // Оверлей для шортов
+            _shortsService.Initialize(
+                Settings.ShortsWindowTop,
+                Settings.ShortsWindowLeft,
+                _isOverlaySetupMode
+            );
+            _shortsService.LoadPosition(Settings);
+
+            // Применяем состояние скрытия для шортов
+            if (_isOverlayHidden)
+            {
+                _shortsService.SetHidden(true);
+            }
         }
 
         private void LoadInitialData()
@@ -106,6 +137,7 @@ namespace SmithForge.ViewModels
             Debug.WriteLine($"   - Оригинальный номер из MessageProcessor: {msg.MessageNumber}");
             Debug.WriteLine($"   - Текст: {uiMessage}");
             Debug.WriteLine($"   - IsProcessedByCommand из MessageProcessor: {msg.IsProcessedByCommand}");
+            Debug.WriteLine($"   - DisplayTimeMs из MessageProcessor: {msg.DisplayTimeMs}мс");
 
             var overlayMsg = new CommonMessage
             {
@@ -115,20 +147,27 @@ namespace SmithForge.ViewModels
                 Message = uiMessage,
                 KarmaKeyDisplay = $"#{chater.KarmaKey}",
                 MessageNumber = msg.MessageNumber,
-                IsProcessedByCommand = msg.IsProcessedByCommand
+                IsProcessedByCommand = msg.IsProcessedByCommand,
+                DisplayTimeMs = msg.DisplayTimeMs
             };
 
             Debug.WriteLine($"[MainViewModel] overlayMsg.IsProcessedByCommand: {overlayMsg.IsProcessedByCommand}");
+            Debug.WriteLine($"[MainViewModel] overlayMsg.DisplayTimeMs: {overlayMsg.DisplayTimeMs}мс");
 
             if (!string.IsNullOrWhiteSpace(uiMessage))
             {
-                // Отправляем в основной оверлей
                 _overlayService.AddMessage(chater, overlayMsg);
-
-                // Отправляем в дашборд (скрытый чат)
+                _shortsService.AddMessage(chater, overlayMsg);
                 _dashboardService.AddMessage(chater, overlayMsg);
             }
         }
+
+        [RelayCommand]
+        private void ToggleShortsOverlay()
+        {
+            _shortsService.Toggle();
+        }
+
         private void EnsureSessionByNumber(int number)
         {
             if (number <= 0) return;
@@ -251,7 +290,20 @@ namespace SmithForge.ViewModels
         partial void OnIsOverlaySetupModeChanged(bool oldValue, bool newValue)
         {
             _overlayService.SetMode(newValue);
-            if (!newValue) _overlayService.SavePosition(Settings);
+            _shortsService.SetMode(newValue);
+
+            if (!newValue)
+            {
+                _overlayService.SavePosition(Settings);
+                _shortsService.SavePosition(Settings);
+            }
+        }
+
+        partial void OnIsOverlayHiddenChanged(bool oldValue, bool newValue)
+        {
+            _overlayService.SetHidden(newValue);
+            _shortsService.SetHidden(newValue);
+            ConfigService.Save(Settings); // сразу сохраняем настройки
         }
 
         public void SaveOverlayPosition() => _overlayService.SavePosition(Settings);
@@ -273,6 +325,11 @@ namespace SmithForge.ViewModels
                 _dashboardService.Hide();
             else
                 _dashboardService.Show();
+        }
+
+        public void SaveShortsPosition()
+        {
+            _shortsService.SavePosition(Settings);
         }
     }
 }

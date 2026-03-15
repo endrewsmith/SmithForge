@@ -16,6 +16,8 @@ namespace SmithForge.Main.Services
         /// <summary> Записывает настройки в SF_Data/Config/settings.xml </summary>
         public static void Save(AppSettings settings)
         {
+            // Убираем дубликаты перед сохранением
+            settings.CommandPrefixes = settings.CommandPrefixes.Distinct().ToList();
             // Используем FilePath вместо FileName
             using var writer = new StreamWriter(FilePath);
             Serializer.Serialize(writer, settings);

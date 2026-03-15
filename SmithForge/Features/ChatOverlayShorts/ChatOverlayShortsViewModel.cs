@@ -8,16 +8,16 @@ using System.Windows.Media.Animation;
 using System.Text.RegularExpressions;
 using System.Linq;
 
-namespace SmithForge.Features.ChatOverlay
+namespace SmithForge.Features.ChatOverlayShorts
 {
-    public partial class ChatOverlayViewModel : ObservableObject
+    public partial class ChatOverlayShortsViewModel : ObservableObject
     {
         [ObservableProperty]
         private bool _isSetupMode;
 
         public ObservableCollection<DisplayMessageViewModel> DisplayMessages { get; } = new();
 
-        public ChatOverlayViewModel()
+        public ChatOverlayShortsViewModel()
         {
             ChaterStorage.OnChaterUpdated += OnChaterUpdated;
         }
@@ -30,7 +30,7 @@ namespace SmithForge.Features.ChatOverlay
                 {
                     var msgVm = new DisplayMessageViewModel(user, msg);
 
-                    // Обработка скрытых команд (лайки, ники и т.д.)
+                    // Проверяем, не является ли сообщение реакцией или сменой ника
                     bool isReaction = msg.Message.Contains("<like") || msg.Message.Contains("<dislike");
                     bool isNickChange = msg.Message.Contains("<nick");
 
@@ -38,6 +38,8 @@ namespace SmithForge.Features.ChatOverlay
                     {
                         if (isReaction) ProcessReactionTags(msgVm);
                         if (isNickChange) ProcessNickTag(msgVm);
+
+                        System.Diagnostics.Debug.WriteLine($"[Shorts] Скрытое сообщение: {msg.Message}");
                         return;
                     }
 
@@ -53,13 +55,14 @@ namespace SmithForge.Features.ChatOverlay
                         Application.Current.Dispatcher.Invoke(() => AnimateAppear(msgVm));
                     });
 
-                    // Лимит сообщений (например, 8)
-                    if (DisplayMessages.Count > 30)
+                    // Для Shorts храним больше сообщений (но используем ту же анимацию)
+                    if (DisplayMessages.Count > 50)
                     {
-                        AnimateAndRemove(DisplayMessages[0]);
+                        var oldestMsg = DisplayMessages[0];
+                        AnimateAndRemove(oldestMsg);
                     }
 
-                    // Таймер удаления
+                    // Удаление по таймеру
                     Task.Delay(msgVm.DisplayTimeMs).ContinueWith(t =>
                     {
                         if (t.IsCanceled || t.IsFaulted) return;
@@ -69,47 +72,42 @@ namespace SmithForge.Features.ChatOverlay
                         });
                     });
                 }
-                catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"[Add] {ex.Message}"); }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine($"[Shorts AddMessage] Ошибка: {ex.Message}");
+                }
             });
         }
-
         private void AnimateAppear(DisplayMessageViewModel msgVm)
         {
-            // Используем Dispatcher с приоритетом Render, чтобы успеть ДО отрисовки прыжка
             Application.Current.Dispatcher.BeginInvoke(new Action(async () =>
             {
-                // 1. Ждем появления элемента
                 var fe = FindFrameworkElement(msgVm) as FrameworkElement;
                 if (fe == null) return;
 
-                // 2. Мгновенно скрываем его высоту, чтобы StackPanel не раздвинулась
                 double height = fe.ActualHeight;
                 if (height <= 0)
                 {
-                    fe.UpdateLayout(); // Принудительно замеряем, если еще 0
+                    fe.UpdateLayout();
                     height = fe.ActualHeight;
                 }
 
-                // Прячем элемент в "минус", чтобы он не толкал соседа сверху
+                // Прячем элемент
                 fe.Margin = new Thickness(0, 0, 0, -height);
                 fe.Opacity = 0;
                 fe.RenderTransform = new TranslateTransform(0, height);
 
-                // 3. Запускаем анимацию "вырастания"
                 var sb = new Storyboard();
 
-                // Раздвигаем Margin (поднимает всё, что выше, ПЛАВНО)
                 var marginAnim = new ThicknessAnimation(fe.Margin, new Thickness(0), TimeSpan.FromMilliseconds(500))
                 { EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut } };
                 Storyboard.SetTarget(marginAnim, fe);
                 Storyboard.SetTargetProperty(marginAnim, new PropertyPath("Margin"));
 
-                // Проявление
                 var opacityAnim = new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(300));
                 Storyboard.SetTarget(opacityAnim, fe);
                 Storyboard.SetTargetProperty(opacityAnim, new PropertyPath("Opacity"));
 
-                // Движение самого сообщения
                 var translateAnim = new DoubleAnimation(height, 0, TimeSpan.FromMilliseconds(500))
                 { EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseOut } };
                 Storyboard.SetTarget(translateAnim, fe);
@@ -122,7 +120,6 @@ namespace SmithForge.Features.ChatOverlay
                 sb.Begin();
             }), System.Windows.Threading.DispatcherPriority.Render);
         }
-
         private void ProcessReactionTags(DisplayMessageViewModel msgVm)
         {
             try
@@ -140,14 +137,14 @@ namespace SmithForge.Features.ChatOverlay
                     {
                         if (targetMsg.User?.Id == userId)
                         {
-                            System.Diagnostics.Debug.WriteLine($"[REACT] Запрещено: нельзя лайкать свое сообщение #{targetLikeNum}");
+                            System.Diagnostics.Debug.WriteLine($"[Shorts React] Запрещено: нельзя лайкать свое сообщение #{targetLikeNum}");
                             msgVm.ShouldChargeReaction = false;
                         }
                         else
                         {
                             targetMsg.Likes++;
                             msgVm.ShouldChargeReaction = true;
-                            System.Diagnostics.Debug.WriteLine($"[REACT] Лайк на #{targetLikeNum} засчитан");
+                            System.Diagnostics.Debug.WriteLine($"[Shorts React] Лайк на #{targetLikeNum} засчитан");
                         }
                     }
                     else { msgVm.ShouldChargeReaction = false; }
@@ -166,14 +163,14 @@ namespace SmithForge.Features.ChatOverlay
                     {
                         if (targetMsg.User?.Id == userId)
                         {
-                            System.Diagnostics.Debug.WriteLine($"[REACT] Запрещено: нельзя дизлайкать свое сообщение #{targetDisNum}");
+                            System.Diagnostics.Debug.WriteLine($"[Shorts React] Запрещено: нельзя дизлайкать свое сообщение #{targetDisNum}");
                             msgVm.ShouldChargeReaction = false;
                         }
                         else
                         {
                             targetMsg.Dislikes++;
                             msgVm.ShouldChargeReaction = true;
-                            System.Diagnostics.Debug.WriteLine($"[REACT] Дизлайк на #{targetDisNum} засчитан");
+                            System.Diagnostics.Debug.WriteLine($"[Shorts React] Дизлайк на #{targetDisNum} засчитан");
                         }
                     }
                     else { msgVm.ShouldChargeReaction = false; }
@@ -183,7 +180,7 @@ namespace SmithForge.Features.ChatOverlay
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"[ProcessReactionTags] Ошибка: {ex.Message}");
+                System.Diagnostics.Debug.WriteLine($"[Shorts ProcessReactionTags] Ошибка: {ex.Message}");
             }
         }
 
@@ -196,12 +193,12 @@ namespace SmithForge.Features.ChatOverlay
                 {
                     string oldName = nickMatch.Groups[1].Value;
                     string newName = nickMatch.Groups[2].Value;
-                    System.Diagnostics.Debug.WriteLine($"[NICK] {oldName} → {newName}");
+                    System.Diagnostics.Debug.WriteLine($"[Shorts Nick] {oldName} → {newName}");
                 }
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"[ProcessNickTag] Ошибка: {ex.Message}");
+                System.Diagnostics.Debug.WriteLine($"[Shorts ProcessNickTag] Ошибка: {ex.Message}");
             }
         }
 
@@ -209,52 +206,99 @@ namespace SmithForge.Features.ChatOverlay
         {
             try
             {
-                // Находим контейнер сообщения (тот самый Grid из ItemTemplate)
-                var fe = FindFrameworkElement(msgVm) as FrameworkElement;
-                if (fe == null)
+                var fe = FindFrameworkElement(msgVm);
+                if (fe != null)
                 {
-                    DisplayMessages.Remove(msgVm);
-                    return;
+                    int index = DisplayMessages.IndexOf(msgVm);
+
+                    var scaleTransform = new ScaleTransform(1, 1);
+                    fe.RenderTransform = scaleTransform;
+                    fe.RenderTransformOrigin = new Point(0.5, 1);
+
+                    var scaleYAnimation = new DoubleAnimation
+                    {
+                        To = 0,
+                        Duration = TimeSpan.FromMilliseconds(300),
+                        EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseIn }
+                    };
+
+                    var opacityAnimation = new DoubleAnimation
+                    {
+                        To = 0,
+                        Duration = TimeSpan.FromMilliseconds(300)
+                    };
+
+                    Storyboard.SetTarget(scaleYAnimation, fe);
+                    Storyboard.SetTargetProperty(scaleYAnimation, new PropertyPath("(UIElement.RenderTransform).(ScaleTransform.ScaleY)"));
+
+                    Storyboard.SetTarget(opacityAnimation, fe);
+                    Storyboard.SetTargetProperty(opacityAnimation, new PropertyPath("Opacity"));
+
+                    var storyboard = new Storyboard();
+                    storyboard.Children.Add(scaleYAnimation);
+                    storyboard.Children.Add(opacityAnimation);
+
+                    storyboard.Completed += (s, e) =>
+                    {
+                        try
+                        {
+                            fe.RenderTransform = null;
+                            DisplayMessages.Remove(msgVm);
+
+                            for (int i = 0; i < index; i++)
+                            {
+                                if (i < DisplayMessages.Count)
+                                {
+                                    var upperMsg = DisplayMessages[i];
+                                    var upperFe = FindFrameworkElement(upperMsg);
+
+                                    if (upperFe != null)
+                                    {
+                                        var translateYAnimation = new DoubleAnimation
+                                        {
+                                            From = -fe.ActualHeight,
+                                            To = 0,
+                                            Duration = TimeSpan.FromMilliseconds(400),
+                                            EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseOut }
+                                        };
+
+                                        var translateTransform = new TranslateTransform(0, -fe.ActualHeight);
+                                        upperFe.RenderTransform = translateTransform;
+
+                                        Storyboard.SetTarget(translateYAnimation, upperFe);
+                                        Storyboard.SetTargetProperty(translateYAnimation, new PropertyPath("(UIElement.RenderTransform).(TranslateTransform.Y)"));
+
+                                        var upperStoryboard = new Storyboard();
+                                        upperStoryboard.Children.Add(translateYAnimation);
+
+                                        upperStoryboard.Completed += (_, _) =>
+                                        {
+                                            upperFe.RenderTransform = null;
+                                        };
+
+                                        upperStoryboard.Begin();
+                                    }
+                                }
+                            }
+
+                            System.Diagnostics.Debug.WriteLine($"[ShortsViewModel] Сообщение удалено");
+                        }
+                        catch (Exception ex)
+                        {
+                            System.Diagnostics.Debug.WriteLine($"[Shorts Remove] Ошибка: {ex.Message}");
+                        }
+                    };
+
+                    storyboard.Begin();
                 }
-
-                // 1. Создаем анимацию уменьшения высоты до 0
-                var heightAnimation = new DoubleAnimation
+                else
                 {
-                    From = fe.ActualHeight,
-                    To = 0,
-                    Duration = TimeSpan.FromMilliseconds(300),
-                    EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseIn }
-                };
-
-                // 2. Анимация прозрачности
-                var opacityAnimation = new DoubleAnimation
-                {
-                    To = 0,
-                    Duration = TimeSpan.FromMilliseconds(250)
-                };
-
-                Storyboard.SetTarget(heightAnimation, fe);
-                Storyboard.SetTargetProperty(heightAnimation, new PropertyPath("Height"));
-
-                Storyboard.SetTarget(opacityAnimation, fe);
-                Storyboard.SetTargetProperty(opacityAnimation, new PropertyPath("Opacity"));
-
-                var storyboard = new Storyboard();
-                storyboard.Children.Add(heightAnimation);
-                storyboard.Children.Add(opacityAnimation);
-
-                storyboard.Completed += (s, e) =>
-                {
-                    // Теперь, когда высота стала 0, удаление из коллекции пройдет незаметно
                     DisplayMessages.Remove(msgVm);
-                };
-
-                storyboard.Begin();
+                }
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"[AnimateAndRemove] Ошибка: {ex.Message}");
-                DisplayMessages.Remove(msgVm);
+                System.Diagnostics.Debug.WriteLine($"[Shorts AnimateAndRemove] Ошибка: {ex.Message}");
             }
         }
 
@@ -264,7 +308,7 @@ namespace SmithForge.Features.ChatOverlay
             {
                 foreach (Window window in Application.Current.Windows)
                 {
-                    if (window is ChatOverlayWindow overlayWindow)
+                    if (window is ChatOverlayShortsWindow overlayWindow)
                     {
                         var itemsControl = overlayWindow.FindName("MessagesList") as System.Windows.Controls.ItemsControl;
                         if (itemsControl != null)
@@ -277,7 +321,7 @@ namespace SmithForge.Features.ChatOverlay
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"[FindFrameworkElement] Ошибка: {ex.Message}");
+                System.Diagnostics.Debug.WriteLine($"[Shorts FindFrameworkElement] Ошибка: {ex.Message}");
             }
             return null;
         }
@@ -296,8 +340,17 @@ namespace SmithForge.Features.ChatOverlay
                 }
                 catch (Exception ex)
                 {
-                    System.Diagnostics.Debug.WriteLine($"[OnChaterUpdated] Ошибка: {ex.Message}");
+                    System.Diagnostics.Debug.WriteLine($"[Shorts OnChaterUpdated] Ошибка: {ex.Message}");
                 }
+            });
+        }
+
+        public void ClearMessages()
+        {
+            Application.Current.Dispatcher.Invoke(() =>
+            {
+                DisplayMessages.Clear();
+                System.Diagnostics.Debug.WriteLine("[ShortsViewModel] Сообщения очищены");
             });
         }
     }

@@ -43,7 +43,7 @@ namespace SmithForge.Main.Services
                     }
                 }
 
-                Debug.WriteLine($"[ChaterStorage] Добавлен новый чаттер: {master.EffectiveName} (ID: {master.Id})");
+                //Debug.WriteLine($"[ChaterStorage] Добавлен новый чаттер: {master.EffectiveName} (ID: {master.Id})");
 
                 // Уведомляем о новом чаттере
                 OnChaterUpdated?.Invoke(master);
@@ -58,7 +58,7 @@ namespace SmithForge.Main.Services
             {
                 master.DisplayName = chater.DisplayName;
                 wasUpdated = true;
-                Debug.WriteLine($"[ChaterStorage] Обновлен DisplayName для {master.Login}: {chater.DisplayName}");
+                //Debug.WriteLine($"[ChaterStorage] Обновлен DisplayName для {master.Login}: {chater.DisplayName}");
             }
 
             // Синхронизируем Login (технический), если он изменился
@@ -253,7 +253,7 @@ namespace SmithForge.Main.Services
                 AddOrUpdate(chater);
             }
 
-            Debug.WriteLine($"[ChaterStorage] Загружено {allChaters.Count} чаттеров из БД");
+            //Debug.WriteLine($"[ChaterStorage] Загружено {allChaters.Count} чаттеров из БД");
         }
 
         /// <summary>

@@ -17,5 +17,11 @@ namespace SmithForge.Features.Dashboard
                 this.DragMove();
             }
         }
+
+        private void CloseButton_Click(object sender, RoutedEventArgs e)
+        {
+            this.Hide(); // Скрываем окно (оно остается в памяти)
+            // или this.Close() если нужно полностью закрыть
+        }
     }
 }

@@ -35,7 +35,8 @@ namespace SmithForge.Main.Services
         {
             try
             {
-                var existing = Process.GetProcessesByName("javaw").FirstOrDefault(p => {
+                var existing = Process.GetProcessesByName("javaw").FirstOrDefault(p =>
+                {
                     try
                     {
                         return p.MainModule?.FileName?.Contains("failchat-2.8.6-SNAPSHOT") == true;
@@ -73,9 +74,12 @@ namespace SmithForge.Main.Services
                     return false;
                 }
 
+                //string arguments = $"-Xmx200m -Xms100m -XX:+UseG1GC " +
+                // $"-javaagent:\"{_agentPath}\" " +
+                // $"-jar \"{_jarPath}\" --g NO_GUI";
                 string arguments = $"-Xmx200m -Xms100m -XX:+UseG1GC " +
-                 $"-javaagent:\"{_agentPath}\" " +
-                 $"-jar \"{_jarPath}\"";
+ $"-javaagent:\"{_agentPath}\" " +
+ $"-jar \"{_jarPath}\" --g CHAT_ONLY";
 
 
                 var process = new Process
@@ -185,7 +189,8 @@ namespace SmithForge.Main.Services
             // Ищем и убиваем все оставшиеся процессы failchat
             try
             {
-                var leftovers = Process.GetProcessesByName("javaw").Where(p => {
+                var leftovers = Process.GetProcessesByName("javaw").Where(p =>
+                {
                     try
                     {
                         return p.MainModule?.FileName?.Contains("failchat-2.8.6-SNAPSHOT") == true;

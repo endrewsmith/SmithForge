@@ -19,19 +19,44 @@
 
     <Grid>
         <!-- Верхняя полоса для перетаскивания -->
-        <Border Height="30" VerticalAlignment="Top" Background="#333">
-            <TextBlock Text="📊 DASHBOARD" Foreground="White" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+        <Border Height="30" VerticalAlignment="Top" Background="#333" 
+                MouseLeftButtonDown="Window_MouseLeftButtonDown">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+
+                <TextBlock Grid.Column="0" Text="📊 DASHBOARD" Foreground="White" 
+                           HorizontalAlignment="Center" VerticalAlignment="Center"/>
+
+                <!-- Кнопка закрытия -->
+                <Button Grid.Column="1" 
+                        Content="✕" 
+                        Width="30" 
+                        Height="30"
+                        Background="Transparent"
+                        BorderThickness="0"
+                        Foreground="#999"
+                        FontSize="16"
+                        FontWeight="Bold"
+                        Cursor="Hand"
+                        Click="CloseButton_Click"
+                        ToolTip="Закрыть дашборд"
+                        Margin="0,0,5,0"/>
+            </Grid>
         </Border>
 
-        <!-- Основной контент с отступом сверху -->
-        <ScrollViewer VerticalScrollBarVisibility="Auto" 
+        <!-- Основной контент -->
+        <ScrollViewer x:Name="MainScrollViewer"
+                      VerticalScrollBarVisibility="Auto" 
                       HorizontalScrollBarVisibility="Disabled"
-                      Background="#1E1E1E"
-                      Margin="0,30,0,0">
+                      Background="#373737"
+                      Margin="0,30,0,20"
+                      VerticalContentAlignment="Bottom">
 
             <ItemsControl x:Name="MessagesList" 
                           ItemsSource="{Binding DisplayMessages}" 
-                          VerticalAlignment="Bottom"
                           IsHitTestVisible="False"
                           Margin="10">
                 <ItemsControl.ItemsPanel>
@@ -44,27 +69,21 @@
                     <DataTemplate>
                         <ContentControl Content="{Binding}" 
                                         ContentTemplate="{Binding MessageSkin}"
-                                        Margin="0,2">
-                            <ContentControl.Resources>
-                                <Storyboard x:Key="FadeInStoryboard">
-                                    <DoubleAnimation Storyboard.TargetProperty="Opacity" 
-                                                     From="0" To="1" Duration="0:0:0.4"/>
-                                </Storyboard>
-                            </ContentControl.Resources>
-                            <ContentControl.Triggers>
-                                <EventTrigger RoutedEvent="Loaded">
-                                    <BeginStoryboard Storyboard="{StaticResource FadeInStoryboard}"/>
-                                </EventTrigger>
-                            </ContentControl.Triggers>
-                        </ContentControl>
+                                        Margin="0,2"/>
                     </DataTemplate>
                 </ItemsControl.ItemTemplate>
             </ItemsControl>
         </ScrollViewer>
 
-        <!-- Gripper для изменения размера (правый нижний угол) -->
-        <Border Width="20" Height="20" HorizontalAlignment="Right" VerticalAlignment="Bottom" Background="#555" Opacity="0.5">
-            <TextBlock Text="⬊" Foreground="White" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+        <!-- Gripper для изменения размера -->
+        <Border Width="20" Height="20" 
+                HorizontalAlignment="Right" 
+                VerticalAlignment="Bottom" 
+                Background="#555" 
+                Opacity="0.5">
+            <TextBlock Text="⬊" Foreground="White" 
+                       HorizontalAlignment="Center" 
+                       VerticalAlignment="Center"/>
         </Border>
     </Grid>
 </Window>

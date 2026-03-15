@@ -85,10 +85,10 @@ namespace SmithForge.Main.Models
                 var safeTemplate = new DataTemplate();
 
                 var borderFactory = new FrameworkElementFactory(typeof(Border));
-                borderFactory.SetValue(Border.BackgroundProperty, new SolidColorBrush(Color.FromRgb(45, 45, 48)));
+                borderFactory.SetValue(Border.BackgroundProperty, Brushes.Transparent);
                 borderFactory.SetValue(Border.CornerRadiusProperty, new CornerRadius(4));
-                borderFactory.SetValue(Border.PaddingProperty, new Thickness(8, 4, 8, 4));
-                borderFactory.SetValue(Border.MarginProperty, new Thickness(2));
+                borderFactory.SetValue(Border.PaddingProperty, new Thickness(0));
+                borderFactory.SetValue(Border.MarginProperty, new Thickness(0, 0, 0, 1));
 
                 var contentPresenterFactory = new FrameworkElementFactory(typeof(ContentPresenter));
                 contentPresenterFactory.SetValue(ContentPresenter.ContentProperty, new Binding("."));

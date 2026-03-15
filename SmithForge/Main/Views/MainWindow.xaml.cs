@@ -24,32 +24,41 @@ namespace SmithForge.Main.Views
 
         private void MainWindow_Closing(object sender, System.ComponentModel.CancelEventArgs e)
         {
-            if (DataContext is SmithForge.ViewModels.MainViewModel vm)
-            {
-                vm.Settings.WindowTop = this.Top;
-                vm.Settings.WindowLeft = this.Left;
-                vm.Settings.WindowHeight = this.Height;
-                vm.Settings.WindowWidth = this.Width;
-                ConfigService.Save(vm.Settings);
-            }
-        }
-
-        private void OpenChaters_Click(object sender, RoutedEventArgs e)
-        {
-            var win = new ChatersWindow();
-            win.DataContext = new ChatersViewModel();
-            win.Owner = this;
-            win.ShowDialog();
+            // Ничего не делаем здесь - всё сохраняется в OnClosed
         }
 
         protected override void OnClosed(EventArgs e)
         {
             if (DataContext is SmithForge.ViewModels.MainViewModel vm)
             {
+                // Останавливаем чат если он запущен
+                if (vm.IsProcessRunning)
+                {
+                    vm.StopCommand.Execute(null);
+                }
+
+                // Сохраняем позицию главного окна
+                vm.Settings.WindowTop = this.Top;
+                vm.Settings.WindowLeft = this.Left;
+                vm.Settings.WindowHeight = this.Height;
+                vm.Settings.WindowWidth = this.Width;
+                vm.Settings.IsOverlaySetupMode = vm.IsOverlaySetupMode;
+
+                // Сохраняем позицию оверлеев
                 vm.SaveOverlayPosition();
+                vm.SaveShortsPosition(); // ← добавить этот метод в MainViewModel
+
+                ConfigService.Save(vm.Settings);
             }
             base.OnClosed(e);
             Application.Current.Shutdown();
+        }
+        private void OpenChaters_Click(object sender, RoutedEventArgs e)
+        {
+            var win = new ChatersWindow();
+            win.DataContext = new ChatersViewModel();
+            win.Owner = this;
+            win.ShowDialog();
         }
 
         private void NumberValidationTextBox(object sender, TextCompositionEventArgs e)
@@ -74,6 +83,7 @@ namespace SmithForge.Main.Views
             win.Owner = this;
             win.ShowDialog();
         }
+
         private void ToggleDashboard_Click(object sender, RoutedEventArgs e)
         {
             if (DataContext is SmithForge.ViewModels.MainViewModel vm)
@@ -81,6 +91,7 @@ namespace SmithForge.Main.Views
                 vm.ToggleDashboardCommand?.Execute(null);
             }
         }
+
         private void IntegerValidationTextBox(object sender, TextCompositionEventArgs e)
         {
             Regex regex = new Regex("[^0-9]+");
@@ -94,6 +105,14 @@ namespace SmithForge.Main.Views
             string content = textBox.Text.Insert(textBox.SelectionStart, e.Text);
             Regex regex = new Regex(@"^[0-9]*\.?[0-9]*$");
             e.Handled = !regex.IsMatch(content);
+        }
+
+        private void ToggleShortsOverlay_Click(object sender, RoutedEventArgs e)
+        {
+            if (DataContext is SmithForge.ViewModels.MainViewModel vm)
+            {
+                vm.ToggleShortsOverlayCommand.Execute(null);
+            }
         }
     }
 }
