@@ -66,8 +66,8 @@ namespace SmithForge.Features.ChatOverlayShorts
                 _savedLeft = _window.Left;
 
                 // Выносим за экран
-                _window.Top = -2000;
-                _window.Left = -2000;
+                _window.Top = 1 - _window.Height;
+                _window.Left = 1 - _window.Width;
                 _isHidden = true;
                 System.Diagnostics.Debug.WriteLine("[ShortsService] Окно спрятано за экран");
             }

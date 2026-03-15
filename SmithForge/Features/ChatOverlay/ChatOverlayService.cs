@@ -72,17 +72,28 @@ namespace SmithForge.Main.Services
                 _savedTop = _overlayWindow.Top;
                 _savedLeft = _overlayWindow.Left;
 
-                // Выносим за экран
-                _overlayWindow.Top = -2000;
-                _overlayWindow.Left = -2000;
+                // Оставляем окно на месте, но делаем его полностью прозрачным
+                //_overlayWindow.Opacity = 0.01; // Почти прозрачно, но окно существует
+                //_overlayWindow.Topmost = false; // Убираем поверх всех
+                                                // Выносим за экран (окно остается видимым для OBS)
+                _overlayWindow.Top = 1 - _overlayWindow.Height; 
+                _overlayWindow.Left = 1 - _overlayWindow.Width;  
+
+                // ВАЖНО: окно должно оставаться Visible
+                //_overlayWindow.Visibility = Visibility.Visible;
+
                 _isHidden = true;
                 System.Diagnostics.Debug.WriteLine("[ChatOverlayService] Окно спрятано за экран");
             }
             else if (!isHidden && _isHidden)
             {
+                // Возвращаем видимость
+                //_overlayWindow.Opacity = 1.0;
+                //_overlayWindow.Topmost = true;
                 // Возвращаем на сохраненную позицию
                 _overlayWindow.Top = _savedTop;
                 _overlayWindow.Left = _savedLeft;
+                //_overlayWindow.Visibility = Visibility.Visible;
                 _isHidden = false;
                 System.Diagnostics.Debug.WriteLine("[ChatOverlayService] Окно возвращено на позицию");
             }
