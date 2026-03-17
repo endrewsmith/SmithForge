@@ -10,7 +10,7 @@ namespace SmithForge.Features.ChatOverlayShorts
         private ChatOverlayShortsViewModel? _viewModel;
         private bool _isInitialized = false;
 
-        // Новые поля для скрытия за экран
+        // Поля для скрытия за экран
         private bool _isHidden = false;
         private double _savedTop;
         private double _savedLeft;
@@ -54,7 +54,7 @@ namespace SmithForge.Features.ChatOverlayShorts
             System.Diagnostics.Debug.WriteLine($"[ShortsService] Режим настройки: {isSetupMode}");
         }
 
-        // НОВЫЙ МЕТОД для скрытия за экран
+        // МЕТОД ДЛЯ СКРЫТИЯ ЗА ЭКРАН
         public void SetHidden(bool isHidden)
         {
             if (_window == null) return;
@@ -65,9 +65,9 @@ namespace SmithForge.Features.ChatOverlayShorts
                 _savedTop = _window.Top;
                 _savedLeft = _window.Left;
 
-                // Выносим за экран
-                _window.Top = 1 - _window.Height;
-                _window.Left = 1 - _window.Width;
+                // Выносим за экран (окно остается видимым для OBS)
+                _window.Top = -2000;
+                _window.Left = -2000;
                 _isHidden = true;
                 System.Diagnostics.Debug.WriteLine("[ShortsService] Окно спрятано за экран");
             }

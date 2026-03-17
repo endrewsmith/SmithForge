@@ -14,178 +14,121 @@ namespace SmithForge.Main.Services
         public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
         {
             string text = value as string ?? string.Empty;
-            Debug.WriteLine($"[FormattedTextConverter] ========== НАЧАЛО ==========");
-            Debug.WriteLine($"[FormattedTextConverter] Входной текст: '{text}'");
-            Debug.WriteLine($"[FormattedTextConverter] Длина текста: {text.Length}");
-
             var span = new Span();
-            int inlinesCount = 0;
-
             int index = 0;
+
             while (index < text.Length)
             {
-                Debug.WriteLine($"[FormattedTextConverter] Обработка с позиции {index}, осталось: '{(index < text.Length ? text.Substring(index) : "")}'");
+                // 1. Ищем начало тега
+                int openTagIndex = text.IndexOf('<', index);
 
-                if (index < text.Length && text[index] == '<')
+                // 2. Если '<' больше нет — добавляем остаток и выходим
+                if (openTagIndex < 0)
                 {
-                    Debug.WriteLine($"[FormattedTextConverter] Найден открывающий тег на позиции {index}");
+                    span.Inlines.Add(new Run(text.Substring(index)));
+                    break;
+                }
 
-                    int closeTag = text.IndexOf('>', index);
-                    if (closeTag > index)
+                // 3. Добавляем текст ДО символа '<'
+                if (openTagIndex > index)
+                {
+                    span.Inlines.Add(new Run(text.Substring(index, openTagIndex - index)));
+                }
+
+                bool tagProcessed = false;
+
+                // 4. Проверяем, не является ли это закрывающим тегом '</' сразу
+                if (openTagIndex + 1 < text.Length && text[openTagIndex + 1] != '/')
+                {
+                    int closeTagIndex = text.IndexOf('>', openTagIndex);
+
+                    // Если есть закрывающая '>'
+                    if (closeTagIndex > openTagIndex)
                     {
-                        string tag = text.Substring(index + 1, closeTag - index - 1);
+                        string fullTag = text.Substring(openTagIndex + 1, closeTagIndex - openTagIndex - 1);
+                        string tagName = fullTag.Split(new[] { ' ', '=' }, StringSplitOptions.RemoveEmptyEntries).FirstOrDefault()?.ToLower() ?? "";
+                        string closeTagStr = $"</{tagName}>";
 
-                        // Извлекаем имя тега (до первого пробела или =)
-                        string tagName = tag.Split(new[] { ' ', '=' }, StringSplitOptions.RemoveEmptyEntries)[0];
-                        string closeTagName = $"</{tagName}>";
+                        // Ищем парный закрывающий тег
+                        int endTagIndex = text.IndexOf(closeTagStr, closeTagIndex + 1, StringComparison.OrdinalIgnoreCase);
 
-                        Debug.WriteLine($"[FormattedTextConverter] Тег: '{tag}', имя: '{tagName}', закрывающий: '{closeTagName}'");
-
-                        int endTag = text.IndexOf(closeTagName, closeTag + 1);
-
-                        if (endTag > closeTag)
+                        if (endTagIndex > closeTagIndex)
                         {
-                            string content = text.Substring(closeTag + 1, endTag - closeTag - 1);
-                            Debug.WriteLine($"[FormattedTextConverter] Содержимое тега: '{content}'");
-
+                            // ТЕГ ВАЛИДНЫЙ - берем содержимое
+                            string content = text.Substring(closeTagIndex + 1, endTagIndex - closeTagIndex - 1);
                             var run = new Run(content);
 
-                            // Обработка различных тегов
-                            string tagLower = tag.ToLower();
-                            Debug.WriteLine($"[FormattedTextConverter] Обработка тега: '{tagLower}'");
-
-                            // Жирный текст
-                            if (tagLower == "bold" || tagLower == "b" || tagName == "bold" || tagName == "b")
-                            {
-                                run.FontWeight = FontWeights.Bold;
-                                Debug.WriteLine($"[FormattedTextConverter] Применен жирный шрифт");
-                            }
-                            // Курсив
-                            else if (tagLower == "italic" || tagLower == "i" || tagName == "italic" || tagName == "i")
-                            {
-                                run.FontStyle = FontStyles.Italic;
-                                Debug.WriteLine($"[FormattedTextConverter] Применен курсив");
-                            }
-                            // Цвет (color=red или просто c)
-                            else if (tagLower.StartsWith("color=") || tagName == "color" || tagName == "c")
-                            {
-                                string colorValue = "red"; // по умолчанию
-
-                                if (tagLower.StartsWith("color="))
-                                {
-                                    colorValue = tagLower.Substring(6);
-                                }
-                                else if (tagName == "c" && tag.Contains("="))
-                                {
-                                    // Тег вида <c=red>
-                                    int equalsPos = tag.IndexOf('=');
-                                    if (equalsPos > 0)
-                                    {
-                                        colorValue = tag.Substring(equalsPos + 1);
-                                    }
-                                }
-
-                                Debug.WriteLine($"[FormattedTextConverter] Цвет: '{colorValue}'");
-                                run.Foreground = GetColorBrush(colorValue);
-                            }
-                            // Тег продления (не влияет на отображение, просто пропускаем)
-                            else if (tagName == "extend")
-                            {
-                                string extendValue = "0";
-                                if (tagLower.StartsWith("extend="))
-                                {
-                                    extendValue = tagLower.Substring(7);
-                                }
-                                Debug.WriteLine($"[FormattedTextConverter] Тег продления: {extendValue} мс (не влияет на отображение)");
-                                // Просто пропускаем, ничего не меняем в отображении
-                            }
-                            else
-                            {
-                                Debug.WriteLine($"[FormattedTextConverter] Неизвестный тег: '{tagLower}'");
-                            }
+                            // ПРИМЕНЯЕМ СТИЛИ
+                            ApplyStyle(run, tagName, fullTag.ToLower());
 
                             span.Inlines.Add(run);
-                            inlinesCount++;
-                            Debug.WriteLine($"[FormattedTextConverter] Добавлен Run #{inlinesCount}");
-
-                            index = endTag + closeTagName.Length;
-                            Debug.WriteLine($"[FormattedTextConverter] Перемещаем индекс на {index}");
-                            continue;
-                        }
-                        else
-                        {
-                            Debug.WriteLine($"[FormattedTextConverter] Не найден закрывающий тег для '{tag}'");
+                            index = endTagIndex + closeTagStr.Length;
+                            tagProcessed = true;
                         }
                     }
                 }
 
-                int nextTag = text.IndexOf('<', index);
-                if (nextTag < 0) nextTag = text.Length;
-
-                if (nextTag > index)
+                // 5. ГАРАНТИЯ ОТ ЗАЦИКЛИВАНИЯ: Если тег битый, одиночный '<' или '</'
+                if (!tagProcessed)
                 {
-                    string content = text.Substring(index, nextTag - index);
-                    Debug.WriteLine($"[FormattedTextConverter] Обычный текст: '{content}'");
-
-                    span.Inlines.Add(new Run(content));
-                    inlinesCount++;
-                    Debug.WriteLine($"[FormattedTextConverter] Добавлен обычный текст #{inlinesCount}");
+                    span.Inlines.Add(new Run("<"));
+                    index = openTagIndex + 1; // Всегда сдвигаемся минимум на 1 символ
                 }
-                index = nextTag;
             }
 
-            Debug.WriteLine($"[FormattedTextConverter] Всего добавлено элементов: {inlinesCount}");
-            Debug.WriteLine($"[FormattedTextConverter] ========== КОНЕЦ ==========");
             return span;
+        }
+
+        private void ApplyStyle(Run run, string tagName, string fullTag)
+        {
+            try
+            {
+                if (tagName == "b" || tagName == "bold")
+                {
+                    run.FontWeight = FontWeights.Bold;
+                }
+                else if (tagName == "i" || tagName == "italic")
+                {
+                    run.FontStyle = FontStyles.Italic;
+                }
+                else if (tagName == "c" || tagName == "color")
+                {
+                    string colorValue = "white";
+                    if (fullTag.Contains("="))
+                    {
+                        int eqPos = fullTag.IndexOf('=');
+                        colorValue = fullTag.Substring(eqPos + 1).Trim();
+                    }
+                    run.Foreground = GetColorBrush(colorValue);
+                }
+                // Тег important и extend просто игнорируем (они для логики, не для стиля)
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[Converter Style Error] {ex.Message}");
+            }
         }
 
         private Brush GetColorBrush(string colorValue)
         {
-            Debug.WriteLine($"[FormattedTextConverter] GetColorBrush для '{colorValue}'");
-
             try
             {
-                // Проверяем, является ли строка HEX-цветом
                 if (colorValue.StartsWith("#"))
-                {
-                    Debug.WriteLine($"[FormattedTextConverter] HEX-цвет: {colorValue}");
-                    var color = (Color)ColorConverter.ConvertFromString(colorValue);
-                    Debug.WriteLine($"[FormattedTextConverter] Преобразован в RGB: {color}");
-                    return new SolidColorBrush(color);
-                }
+                    return new SolidColorBrush((Color)ColorConverter.ConvertFromString(colorValue));
 
-                // Иначе используем предопределенные цвета
-                Debug.WriteLine($"[FormattedTextConverter] Именованный цвет: {colorValue}");
-                Brush result = colorValue.ToLower() switch
+                return colorValue switch
                 {
-                    "red" => new SolidColorBrush(Colors.Red),
-                    "green" => new SolidColorBrush(Colors.Green),
-                    "blue" => new SolidColorBrush(Colors.Blue),
-                    "yellow" => new SolidColorBrush(Colors.Yellow),
-                    "purple" => new SolidColorBrush(Colors.Purple),
-                    "orange" => new SolidColorBrush(Colors.Orange),
-                    "cyan" => new SolidColorBrush(Colors.Cyan),
-                    "magenta" => new SolidColorBrush(Colors.Magenta),
-                    "pink" => new SolidColorBrush(Colors.Pink),
-                    "brown" => new SolidColorBrush(Colors.Brown),
-                    "black" => new SolidColorBrush(Colors.Black),
-                    "white" => new SolidColorBrush(Colors.White),
-                    _ => new SolidColorBrush(Colors.White)
+                    "red" => Brushes.Red,
+                    "green" => Brushes.Green,
+                    "blue" => Brushes.Blue,
+                    "yellow" => Brushes.Yellow,
+                    _ => Brushes.White
                 };
-
-                Debug.WriteLine($"[FormattedTextConverter] Возвращаем кисть: {result}");
-                return result;
             }
-            catch (Exception ex)
-            {
-                Debug.WriteLine($"[FormattedTextConverter] ОШИБКА: {ex.Message}");
-                return new SolidColorBrush(Colors.White);
-            }
+            catch { return Brushes.White; }
         }
 
         public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
-        {
-            throw new NotImplementedException();
-        }
+            => throw new NotImplementedException();
     }
 }

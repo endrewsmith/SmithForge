@@ -48,6 +48,14 @@ namespace SmithForge.Main.Models
         public bool ShortsWindowVisible { get; set; } = false;
         public bool IsShortsLocked { get; set; } = false; // ← ДОБАВЛЕНО
 
+
+        public double ImportantOverlayTop { get; set; } = 200;
+        public double ImportantOverlayLeft { get; set; } = 200;
+        public double ImportantOverlayWidth { get; set; } = 450;
+        public double ImportantOverlayHeight { get; set; } = 600;
+        public bool ImportantOverlayVisible { get; set; } = false;
+
+
         public double KarmaRateTwitch { get; set; } = 1.0;
         public double KarmaRateYouTube { get; set; } = 1.0;
         public double KarmaRateGoodGame { get; set; } = 1.0;

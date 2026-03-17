@@ -24,6 +24,10 @@ public class CommonMessage
         get
         {
             int len = Message?.Length ?? 0;
+
+            // ОТЛАДКА
+            System.Diagnostics.Debug.WriteLine($"[DEBUG] Message: '{Message}', Length: {len}, Bytes: {System.Text.Encoding.UTF8.GetByteCount(Message ?? "")}");
+
             if (len <= 20) return MessageLength.Short;
             if (len <= 100) return MessageLength.Medium;
             return MessageLength.Long;

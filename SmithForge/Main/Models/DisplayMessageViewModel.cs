@@ -7,6 +7,7 @@ using System.Windows.Data;
 using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Shapes;
+using System.IO;
 
 namespace SmithForge.Main.Models
 {
@@ -170,6 +171,50 @@ namespace SmithForge.Main.Models
         public void UpdateMessageCount()
         {
             OnPropertyChanged(nameof(MessageCount));
+        }
+
+        public string AvatarPath
+        {
+            get
+            {
+                if (User == null) return null;
+
+                string basePath = System.IO.Path.Combine(
+                    AppDomain.CurrentDomain.BaseDirectory,
+                    "SF_Data", "Assets", "Avatars", "Default");
+
+                string fileName = User.AvatarFileName ?? "default";
+
+                // Убираем расширение если оно есть в имени файла
+                fileName = System.IO.Path.GetFileNameWithoutExtension(fileName);
+
+                // Проверяем форматы по порядку
+                string[] extensions = { ".jpg", ".jpeg", ".png", ".gif" };
+
+                foreach (string ext in extensions)
+                {
+                    string testPath = System.IO.Path.Combine(basePath, fileName + ext);
+                    if (System.IO.File.Exists(testPath))
+                    {
+                        System.Diagnostics.Debug.WriteLine($"[Avatar] Найден файл: {testPath}");
+                        return testPath;
+                    }
+                }
+
+                // Если ничего не найдено - пробуем заглушку в разных форматах
+                foreach (string ext in extensions)
+                {
+                    string defaultPath = System.IO.Path.Combine(basePath, "default" + ext);
+                    if (System.IO.File.Exists(defaultPath))
+                    {
+                        System.Diagnostics.Debug.WriteLine($"[Avatar] Использую заглушку: {defaultPath}");
+                        return defaultPath;
+                    }
+                }
+
+                System.Diagnostics.Debug.WriteLine($"[Avatar] ВНИМАНИЕ: Аватарка не найдена для {fileName}");
+                return null;
+            }
         }
     }
 }

@@ -114,5 +114,13 @@ namespace SmithForge.Main.Views
                 vm.ToggleShortsOverlayCommand.Execute(null);
             }
         }
+
+        private void ToggleImportantOverlay_Click(object sender, RoutedEventArgs e)
+        {
+            if (DataContext is SmithForge.ViewModels.MainViewModel vm)
+            {
+                vm.ToggleImportantOverlayCommand?.Execute(null);
+            }
+        }
     }
 }

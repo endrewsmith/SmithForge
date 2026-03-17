@@ -1,0 +1,60 @@
+﻿<Window x:Class="SmithForge.Features.ImportantOverlay.ImportantOverlayWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:local="clr-namespace:SmithForge.Features.ChatOverlay"
+        Title="Important Overlay" Height="600" Width="450"
+        WindowStyle="None" AllowsTransparency="True" Background="Transparent"
+        Topmost="True" ShowInTaskbar="False"
+        ResizeMode="CanResizeWithGrip"
+        MouseLeftButtonDown="Window_MouseLeftButtonDown">
+
+    <Window.Resources>
+        <BooleanToVisibilityConverter x:Key="BoolToVis"/>
+        <local:RankToColorConverter x:Key="RankToColorConverter"/>
+    </Window.Resources>
+
+    <Grid>
+        <!-- ЗАМЕНЕНО: Используем ItemsControl для стабильности (как в Shorts) -->
+        <ItemsControl x:Name="ImportantList" 
+                      ItemsSource="{Binding DisplayMessages}" 
+                      VerticalAlignment="Bottom"
+                      IsHitTestVisible="False"
+                      Margin="5">
+            <ItemsControl.ItemTemplate>
+                <DataTemplate>
+                    <!-- Скин подхватится автоматически из MessageSkin каждой вью-модели -->
+                    <ContentControl Content="{Binding}" 
+                                    ContentTemplate="{Binding MessageSkin}"/>
+                </DataTemplate>
+            </ItemsControl.ItemTemplate>
+        </ItemsControl>
+
+        <!-- Gripper для изменения размера (правый нижний угол) -->
+        <Border Width="20" Height="20" 
+                HorizontalAlignment="Right" 
+                VerticalAlignment="Bottom" 
+                Background="#555" 
+                Opacity="0.5"
+                MouseLeftButtonDown="ResizeGrip_MouseLeftButtonDown"
+                Visibility="{Binding IsSetupMode, Converter={StaticResource BoolToVis}}">
+            <TextBlock Text="⬊" Foreground="White" 
+                       HorizontalAlignment="Center" 
+                       VerticalAlignment="Center"
+                       FontSize="14"/>
+        </Border>
+
+        <!-- Область перетаскивания -->
+        <Border x:Name="DragArea" 
+                Background="#44000000" 
+                BorderBrush="Cyan" 
+                BorderThickness="2"
+                Visibility="{Binding IsSetupMode, Converter={StaticResource BoolToVis}}"
+                Cursor="SizeAll">
+            <TextBlock Text="[ ВАЖНЫЕ СООБЩЕНИЯ ]" 
+                       Foreground="Cyan" 
+                       HorizontalAlignment="Center" 
+                       VerticalAlignment="Center" 
+                       Opacity="0.5"/>
+        </Border>
+    </Grid>
+</Window>

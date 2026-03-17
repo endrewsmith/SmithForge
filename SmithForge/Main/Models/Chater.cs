@@ -63,7 +63,37 @@ namespace SmithForge.Main.Models
         public ConcurrentHashSet<string> Channels { get; } = new();
 
         // --- UI ХЕЛПЕРЫ (Computed Properties) ---
-        public string FullAvatarPath => Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Avatars", AvatarFileName);
+        public string FullAvatarPath
+        {
+            get
+            {
+                // 1. Сначала проверяем пользовательскую аватарку (загруженную вручную)
+                string userAvatarPath = Path.Combine(
+                    AppDomain.CurrentDomain.BaseDirectory,
+                    "SF_Data", "Assets", "Avatars", "User",
+                    AvatarFileName);
+
+                if (File.Exists(userAvatarPath))
+                    return userAvatarPath;
+
+                // 2. Затем проверяем аватарку из программы (по умолчанию)
+                string defaultAvatarPath = Path.Combine(
+                    AppDomain.CurrentDomain.BaseDirectory,
+                    "SF_Data", "Assets", "Avatars", "Default",
+                    AvatarFileName);
+
+                if (File.Exists(defaultAvatarPath))
+                    return defaultAvatarPath;
+
+                // 3. Если ничего нет - возвращаем заглушку из папки Default
+                string fallbackPath = Path.Combine(
+                    AppDomain.CurrentDomain.BaseDirectory,
+                    "SF_Data", "Assets", "Avatars", "Default",
+                    "default_avatar.png"); // или default.png
+
+                return File.Exists(fallbackPath) ? fallbackPath : string.Empty;
+            }
+        }
         public string AllPlatforms => string.Join(", ", Accounts.Select(a => a.DisplayName));
 
         // --- СВОЙСТВА АУРЫ ---

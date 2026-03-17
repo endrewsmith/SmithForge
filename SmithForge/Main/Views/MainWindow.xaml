@@ -39,6 +39,11 @@
                         <TextBlock Text="📊"/>
                     </MenuItem.Icon>
                 </MenuItem>
+                <MenuItem Header="Важные сообщения" Click="ToggleImportantOverlay_Click">
+                    <MenuItem.Icon>
+                        <TextBlock Text="❗"/>
+                    </MenuItem.Icon>
+                </MenuItem>
             </MenuItem>
             <MenuItem Header="Платформы">
                 <!-- СЕКЦИЯ TWITCH -->

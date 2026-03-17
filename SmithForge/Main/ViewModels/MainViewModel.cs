@@ -20,7 +20,7 @@ namespace SmithForge.ViewModels
     {
         [ObservableProperty]
         private bool _isOverlayHidden;
-
+        private readonly ImportantOverlayService _importantService = new();
         private readonly DashboardService _dashboardService = new();
         private readonly MessageProcessor _processor;
         private readonly ExternalChatService _chatService = new();
@@ -110,6 +110,19 @@ namespace SmithForge.ViewModels
             {
                 _shortsService.SetHidden(true);
             }
+
+            // В конструкторе после других сервисов:
+            _importantService.Initialize(
+                Settings.ImportantOverlayTop,
+                Settings.ImportantOverlayLeft,
+                _isOverlaySetupMode
+            );
+            _importantService.LoadPosition(Settings);
+
+            if (_isOverlayHidden)
+            {
+                _importantService.SetHidden(true);
+            }
         }
 
         private void LoadInitialData()
@@ -126,40 +139,62 @@ namespace SmithForge.ViewModels
         {
             string uiMessage = msg.Message;
 
-            if (msg.Message.Length >= Settings.MinMessageLength)
+            // 1. Обновляем статусную строку в главном окне
+            if (uiMessage.Length >= Settings.MinMessageLength)
             {
                 Application.Current.Dispatcher.Invoke(() => {
                     LastMessageText = $"[#{chater.KarmaKey}] {chater.EffectiveName}: {uiMessage}";
                 });
             }
 
-            Debug.WriteLine($"[MainViewModel] Получено сообщение от {chater.Login}:");
-            Debug.WriteLine($"   - Оригинальный номер из MessageProcessor: {msg.MessageNumber}");
-            Debug.WriteLine($"   - Текст: {uiMessage}");
-            Debug.WriteLine($"   - IsProcessedByCommand из MessageProcessor: {msg.IsProcessedByCommand}");
-            Debug.WriteLine($"   - DisplayTimeMs из MessageProcessor: {msg.DisplayTimeMs}мс");
+            if (string.IsNullOrWhiteSpace(uiMessage)) return;
 
-            var overlayMsg = new CommonMessage
+            // 2. Проверяем, была ли выполнена РЕАЛЬНАЯ команда "важно" (через список команд)
+            bool isImportantAction = commands != null && commands.Any(c =>
+                c.Name.Equals("important", StringComparison.OrdinalIgnoreCase) ||
+                c.Name.Equals("важно", StringComparison.OrdinalIgnoreCase));
+
+            // 3. Чистим текст от технических тегов <important>, чтобы они не мозолили глаза и не читались Саней
+            string cleanUiMessage = uiMessage.Replace("<important>", "").Replace("</important>", "").Trim();
+
+            if (isImportantAction)
+            {
+                // Создаем клон с ЧИСТЫМ текстом для важного окна
+                var importantMsg = CreateOverlayMsg(chater, msg, cleanUiMessage);
+
+                Debug.WriteLine($"[Important] Легальный вызов от {chater.Login}. Отправляем в очередь.");
+
+                // Пауза 200мс для стабильности отрисовки
+                Task.Run(async () =>
+                {
+                    await Task.Delay(200);
+                    _importantService.ShowImportantMessage(chater, importantMsg);
+                });
+            }
+            else
+            {
+                // ОБЫЧНЫЕ ОКНА: шлем чистый текст (без тегов <important>, если юзер их ввел сам)
+                // Но визуальные теги типа <b> сохранятся, если они там были
+                _overlayService.AddMessage(chater, CreateOverlayMsg(chater, msg, cleanUiMessage));
+                _shortsService.AddMessage(chater, CreateOverlayMsg(chater, msg, cleanUiMessage));
+                _dashboardService.AddMessage(chater, CreateOverlayMsg(chater, msg, cleanUiMessage));
+            }
+        }
+
+        // Вспомогательный метод для клонирования сообщений
+        private CommonMessage CreateOverlayMsg(Chater chater, CommonMessage original, string text)
+        {
+            return new CommonMessage
             {
                 User = chater,
                 Login = chater.Login,
-                Type = msg.Type.ToLower(),
-                Message = uiMessage,
+                Type = original.Type.ToLower(),
+                Message = text,
                 KarmaKeyDisplay = $"#{chater.KarmaKey}",
-                MessageNumber = msg.MessageNumber,
-                IsProcessedByCommand = msg.IsProcessedByCommand,
-                DisplayTimeMs = msg.DisplayTimeMs
+                MessageNumber = original.MessageNumber,
+                IsProcessedByCommand = original.IsProcessedByCommand,
+                DisplayTimeMs = original.DisplayTimeMs
             };
-
-            Debug.WriteLine($"[MainViewModel] overlayMsg.IsProcessedByCommand: {overlayMsg.IsProcessedByCommand}");
-            Debug.WriteLine($"[MainViewModel] overlayMsg.DisplayTimeMs: {overlayMsg.DisplayTimeMs}мс");
-
-            if (!string.IsNullOrWhiteSpace(uiMessage))
-            {
-                _overlayService.AddMessage(chater, overlayMsg);
-                _shortsService.AddMessage(chater, overlayMsg);
-                _dashboardService.AddMessage(chater, overlayMsg);
-            }
         }
 
         [RelayCommand]
@@ -291,11 +326,13 @@ namespace SmithForge.ViewModels
         {
             _overlayService.SetMode(newValue);
             _shortsService.SetMode(newValue);
+            _importantService.SetMode(newValue);
 
             if (!newValue)
             {
                 _overlayService.SavePosition(Settings);
                 _shortsService.SavePosition(Settings);
+                _importantService.SavePosition(Settings);
             }
         }
 
@@ -331,5 +368,16 @@ namespace SmithForge.ViewModels
         {
             _shortsService.SavePosition(Settings);
         }
+
+        [RelayCommand]
+        private void ToggleImportantOverlay()
+        {
+            if (_importantService.IsVisible)
+                _importantService.Hide();
+            else
+                _importantService.Show();
+        }
     }
+
+
 }
