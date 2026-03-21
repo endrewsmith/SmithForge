@@ -16,6 +16,7 @@
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
             <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
         <!-- МЕНЮ (Строка 0) -->
@@ -44,9 +45,13 @@
                         <TextBlock Text="❗"/>
                     </MenuItem.Icon>
                 </MenuItem>
+                <MenuItem Header="Стикеры" Click="ToggleStickersOverlay_Click">
+                    <MenuItem.Icon>
+                        <TextBlock Text="🎨"/>
+                    </MenuItem.Icon>
+                </MenuItem>
             </MenuItem>
             <MenuItem Header="Платформы">
-                <!-- СЕКЦИЯ TWITCH -->
                 <MenuItem Header="🟣 Twitch.tv" IsHitTestVisible="False" FontWeight="Bold" Foreground="#6441a5"/>
                 <MenuItem StaysOpenOnClick="True">
                     <MenuItem.Header>
@@ -61,8 +66,6 @@
                     </MenuItem.Header>
                 </MenuItem>
                 <Separator/>
-
-                <!-- СЕКЦИЯ YOUTUBE -->
                 <MenuItem Header="🔴 YouTube" IsHitTestVisible="False" FontWeight="Bold" Foreground="#FF0000"/>
                 <MenuItem StaysOpenOnClick="True">
                     <MenuItem.Header>
@@ -74,10 +77,7 @@
                         </StackPanel>
                     </MenuItem.Header>
                 </MenuItem>
-
                 <Separator/>
-
-                <!-- СЕКЦИЯ GOODGAME -->
                 <MenuItem Header="🔵 GoodGame.ru" IsHitTestVisible="False" FontWeight="Bold" Foreground="#007bff"/>
                 <MenuItem StaysOpenOnClick="True">
                     <MenuItem.Header>
@@ -89,7 +89,6 @@
                         </StackPanel>
                     </MenuItem.Header>
                 </MenuItem>
-
                 <Separator/>
                 <MenuItem Header="💾 Применить и сохранить" Command="{Binding SaveSettingsCommand}" FontWeight="Bold"/>
             </MenuItem>
@@ -107,19 +106,16 @@
                       VerticalAlignment="Center" 
                       Margin="20,0,0,0"
                       FontSize="14" FontWeight="Bold"/>
-            <!-- НОВЫЙ ЧЕКБОКС для скрытия окон за экран -->
             <CheckBox Content="Спрятать окна" 
-              IsChecked="{Binding IsOverlayHidden}" 
-              VerticalAlignment="Center" 
-              Margin="20,0,0,0"
-              FontSize="14" FontWeight="Bold"/>
+                      IsChecked="{Binding IsOverlayHidden}" 
+                      VerticalAlignment="Center" 
+                      Margin="20,0,0,0"
+                      FontSize="14" FontWeight="Bold"/>
         </StackPanel>
 
         <!-- ПОЛОСКА СТРИМА (Строка 2) -->
         <Border Grid.Row="2" Background="#FFFDE7" BorderBrush="#FFE082" BorderThickness="0,1" Padding="10,8">
             <StackPanel Orientation="Horizontal" VerticalAlignment="Bottom">
-
-                <!-- ГРУППА: НОМЕР -->
                 <StackPanel Margin="0,0,10,0">
                     <TextBlock Text="{Binding LastStreamNumber, StringFormat='Был номер: {0}', FallbackValue='Был номер: 0'}" 
                                FontSize="10" 
@@ -136,13 +132,9 @@
                                  CommandManager.PreviewExecuted="TextBox_PreviewExecuted"/>
                     </StackPanel>
                 </StackPanel>
-
-                <!-- КНОПКА СЛЕДУЮЩИЙ -->
                 <Button Content="СЛЕДУЮЩИЙ" Command="{Binding NextStreamCommand}" 
                         Background="LightGreen" Width="100" Height="24" Margin="10,0,20,0"
                         FontSize="11" FontWeight="SemiBold" VerticalAlignment="Bottom"/>
-
-                <!-- ГРУППА: НАЗВАНИЕ -->
                 <StackPanel>
                     <TextBlock Text="ТЕКУЩАЯ ТЕМА" FontSize="10" Foreground="#A1887F" FontWeight="Bold" Margin="5,0,0,2"/>
                     <TextBox Text="{Binding CurrentSession.Title, UpdateSourceTrigger=PropertyChanged}" 
@@ -159,7 +151,7 @@
             </StackPanel>
         </Border>
 
-        <!-- СПИСОК ПОЛЬЗОВАТЕЛЕЙ (Строка 4) - ИСПРАВЛЕНО -->
+        <!-- СПИСОК ПОЛЬЗОВАТЕЛЕЙ (Строка 4) -->
         <ListBox Grid.Row="4" ItemsSource="{Binding Users}" Margin="10"
                  VirtualizingStackPanel.IsVirtualizing="True"
                  VirtualizingStackPanel.VirtualizationMode="Recycling"
@@ -172,20 +164,14 @@
                             <ColumnDefinition Width="150"/>
                             <ColumnDefinition Width="*"/>
                         </Grid.ColumnDefinitions>
-
-                        <!-- Платформа (первый аккаунт) -->
                         <TextBlock Grid.Column="0" 
-           Text="{Binding Accounts[0].PlatformShort}" 
-           FontWeight="Bold" 
-           Foreground="{Binding Accounts[0].PlatformColor}" 
-           Opacity="0.7"/>
-
-                        <!-- Имя пользователя -->
+                                   Text="{Binding Accounts[0].PlatformShort}" 
+                                   FontWeight="Bold" 
+                                   Foreground="{Binding Accounts[0].PlatformColor}" 
+                                   Opacity="0.7"/>
                         <TextBlock Grid.Column="1" 
                                    Text="{Binding EffectiveName}" 
                                    FontWeight="SemiBold"/>
-
-                        <!-- Статистика -->
                         <StackPanel Grid.Column="2" Orientation="Horizontal">
                             <TextBlock Text="сообщений: " Foreground="Gray" FontSize="11"/>
                             <TextBlock Text="{Binding MessageCount}" FontWeight="Bold" Foreground="#444"/>
@@ -200,5 +186,157 @@
             <TextBlock Text="Юзеров в базе: "/>
             <TextBlock Text="{Binding Users.Count}"/>
         </StatusBar>
+
+        <!-- СЕКЦИЯ УПРАВЛЕНИЯ ОКНАМИ ЧАТОВ (Строка 6) -->
+        <Border Grid.Row="6" Background="#F0F0F5" BorderBrush="#DDD" BorderThickness="0,1" Padding="10" Margin="0,5,0,0">
+            <StackPanel>
+                <TextBlock Text="УПРАВЛЕНИЕ ОКНАМИ ЧАТОВ" FontSize="12" FontWeight="Bold" Foreground="#5C6BC0" Margin="0,0,0,8"/>
+
+                <!-- Главный чат -->
+                <Border Background="White" CornerRadius="4" Padding="8" Margin="0,0,0,5">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" Text="💬" FontSize="16" Margin="0,0,8,0" VerticalAlignment="Center"/>
+                        <TextBlock Grid.Column="1" Text="Главный чат" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                        <ComboBox Grid.Column="2" 
+                  ItemsSource="{Binding AvailableModes}"
+                  SelectedValue="{Binding MainChatMode}"
+                  SelectedValuePath="Mode"
+                  DisplayMemberPath="Name"
+                  Width="180" 
+                  Margin="0,0,10,0"
+                  VerticalAlignment="Center"
+                  ToolTip="Выберите режим отображения"/>
+                        <StackPanel Grid.Column="3" Orientation="Horizontal">
+                            <Button Content="👁️" Width="30" Height="30" Margin="0,0,5,0" 
+                    ToolTip="Показать/скрыть"
+                    Command="{Binding ToggleMainChatCommand}"/>
+                            <Button Content="⚙️" Width="30" Height="30" 
+                    ToolTip="Настройки"
+                    Command="{Binding ConfigureMainChatCommand}"/>
+                        </StackPanel>
+                    </Grid>
+                </Border>
+
+                <!-- Шорты -->
+                <Border Background="White" CornerRadius="4" Padding="8" Margin="0,0,0,5">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" Text="📱" FontSize="16" Margin="0,0,8,0" VerticalAlignment="Center"/>
+                        <TextBlock Grid.Column="1" Text="Шорты" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                        <ComboBox Grid.Column="2" 
+                  ItemsSource="{Binding AvailableModes}"
+                  SelectedValue="{Binding ShortsChatMode}"
+                  SelectedValuePath="Mode"
+                  DisplayMemberPath="Name"
+                  Width="180" 
+                  Margin="0,0,10,0"
+                  VerticalAlignment="Center"
+                  ToolTip="Выберите режим отображения"/>
+                        <StackPanel Grid.Column="3" Orientation="Horizontal">
+                            <Button Content="👁️" Width="30" Height="30" Margin="0,0,5,0" 
+                    ToolTip="Показать/скрыть"
+                    Command="{Binding ToggleShortsOverlayCommand}"/>
+                            <Button Content="⚙️" Width="30" Height="30" 
+                    ToolTip="Настройки"
+                    Command="{Binding ConfigureShortsCommand}"/>
+                        </StackPanel>
+                    </Grid>
+                </Border>
+
+                <!-- Важные сообщения -->
+                <Border Background="White" CornerRadius="4" Padding="8" Margin="0,0,0,5">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" Text="❗" FontSize="16" Margin="0,0,8,0" VerticalAlignment="Center"/>
+                        <TextBlock Grid.Column="1" Text="Важные сообщения" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                        <ComboBox Grid.Column="2" 
+                  ItemsSource="{Binding AvailableModes}"
+                  SelectedValue="{Binding ImportantChatMode}"
+                  SelectedValuePath="Mode"
+                  DisplayMemberPath="Name"
+                  Width="180" 
+                  Margin="0,0,10,0"
+                  VerticalAlignment="Center"
+                  ToolTip="Выберите режим отображения"/>
+                        <StackPanel Grid.Column="3" Orientation="Horizontal">
+                            <Button Content="👁️" Width="30" Height="30" Margin="0,0,5,0" 
+                    ToolTip="Показать/скрыть"
+                    Command="{Binding ToggleImportantOverlayCommand}"/>
+                            <Button Content="⚙️" Width="30" Height="30" 
+                    ToolTip="Настройки"
+                    Command="{Binding ConfigureImportantCommand}"/>
+                        </StackPanel>
+                    </Grid>
+                </Border>
+
+                <!-- Стикеры -->
+                <Border Background="White" CornerRadius="4" Padding="8" Margin="0,0,0,5">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" Text="🎨" FontSize="16" Margin="0,0,8,0" VerticalAlignment="Center"/>
+                        <TextBlock Grid.Column="1" Text="Стикеры" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                        <ComboBox Grid.Column="2" 
+                  ItemsSource="{Binding AvailableModes}"
+                  SelectedValue="{Binding StickersChatMode}"
+                  SelectedValuePath="Mode"
+                  DisplayMemberPath="Name"
+                  Width="180" 
+                  Margin="0,0,10,0"
+                  VerticalAlignment="Center"
+                  ToolTip="Выберите режим отображения"/>
+                        <StackPanel Grid.Column="3" Orientation="Horizontal">
+                            <Button Content="👁️" Width="30" Height="30" Margin="0,0,5,0" 
+                    ToolTip="Показать/скрыть"
+                    Command="{Binding ToggleStickersOverlayCommand}"/>
+                            <Button Content="⚙️" Width="30" Height="30" 
+                    ToolTip="Настройки"
+                    Command="{Binding ConfigureStickersCommand}"/>
+                        </StackPanel>
+                    </Grid>
+                </Border>
+
+                <!-- Дашборд -->
+                <Border Background="White" CornerRadius="4" Padding="8" Margin="0,0,0,5">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" Text="📊" FontSize="16" Margin="0,0,8,0" VerticalAlignment="Center"/>
+                        <TextBlock Grid.Column="1" Text="Дашборд" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                        <StackPanel Grid.Column="2" Orientation="Horizontal">
+                            <Button Content="👁️" Width="30" Height="30" Margin="0,0,5,0" 
+                                    ToolTip="Показать/скрыть"
+                                    Command="{Binding ToggleDashboardCommand}"/>
+                            <Button Content="⚙️" Width="30" Height="30" 
+                                    ToolTip="Настройки"
+                                    Command="{Binding ConfigureDashboardCommand}"/>
+                        </StackPanel>
+                    </Grid>
+                </Border>
+            </StackPanel>
+        </Border>
     </Grid>
 </Window>

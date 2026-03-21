@@ -1,304 +1,145 @@
 ﻿using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
 using SmithForge.Main.Models;
+using SmithForge.Main.Models.ChatModes;
 using SmithForge.Main.Services;
 using System.Collections.ObjectModel;
 using System.Windows;
-using System.Windows.Media;
-using System.Windows.Media.Animation;
 using System.Text.RegularExpressions;
+using System.Windows.Threading;
 using System.Linq;
 
 namespace SmithForge.Features.ChatOverlay
 {
     public partial class ChatOverlayViewModel : ObservableObject
     {
-        [ObservableProperty]
-        private bool _isSetupMode;
+        [ObservableProperty] private bool _isSetupMode;
+        [ObservableProperty] private bool _isEnabled = true;
+        [ObservableProperty] private ChatDisplayMode _currentDisplayMode = ChatDisplayMode.AppearAndFade;
 
         public ObservableCollection<DisplayMessageViewModel> DisplayMessages { get; } = new();
 
+        private ChatOverlayWindow? _window;
+        private IChatDisplayMode _currentMode;
+
         public ChatOverlayViewModel()
         {
+            SetMode(ChatDisplayMode.AppearAndFade);
             ChaterStorage.OnChaterUpdated += OnChaterUpdated;
+        }
+
+        public void SetWindow(ChatOverlayWindow window)
+        {
+            _window = window;
+        }
+
+        public void SetMode(ChatDisplayMode mode)
+        {
+            _currentDisplayMode = mode;
+            _currentMode = ChatDisplayModeFactory.GetMode(mode);
         }
 
         public void AddMessage(Chater user, CommonMessage msg)
         {
-            Application.Current.Dispatcher.Invoke(() =>
+            if (!IsEnabled) return;
+
+            Application.Current.Dispatcher.BeginInvoke(new Action(() =>
             {
                 try
                 {
-                    var msgVm = new DisplayMessageViewModel(user, msg);
-
-                    // Обработка скрытых команд (лайки, ники и т.д.)
-                    bool isReaction = msg.Message.Contains("<like") || msg.Message.Contains("<dislike");
-                    bool isNickChange = msg.Message.Contains("<nick");
-
-                    if (isReaction || isNickChange)
+                    // Пропускаем системные сообщения с тегами
+                    if (msg.Message.Contains("<like") ||
+                        msg.Message.Contains("<dislike") ||
+                        msg.Message.Contains("<nick"))
                     {
-                        if (isReaction) ProcessReactionTags(msgVm);
-                        if (isNickChange) ProcessNickTag(msgVm);
                         return;
                     }
 
-                    string cleanText = Regex.Replace(msg.Message, @"<[^>]*>", "").Trim();
-                    if (string.IsNullOrEmpty(cleanText)) return;
+                    // !!! ВАЖНО: НЕ ОЧИЩАЕМ ТЕКСТ ОТ ТЕГОВ !!!
+                    // Сохраняем оригинальный текст с тегами для форматирования
+                    var msgVm = new DisplayMessageViewModel(user, msg);
 
-                    // 1. Добавляем в коллекцию
+                    // Проверяем что текст не пустой (оригинальный с тегами)
+                    if (string.IsNullOrEmpty(msgVm.MessageText)) return;
+
+                    // Применяем настройки режима к сообщению
+                    _currentMode.Apply(msgVm);
+
+                    // Проверяем, нужно ли пропустить анимацию (если чат уже полон)
+                    bool shouldSkipAnimation = _currentMode.ShouldSkipScaleAnimation(DisplayMessages.Count > 10);
+
+                    // Подготавливаем сообщение к отображению
+                    _currentMode.PrepareMessage(msgVm, shouldSkipAnimation);
+
+                    // Добавляем сообщение
                     DisplayMessages.Add(msgVm);
 
-                    // 2. Запускаем анимацию появления через микро-паузу
-                    Task.Delay(50).ContinueWith(_ =>
+                    // Ограничиваем количество сообщений
+                    if (DisplayMessages.Count > 50)
                     {
-                        Application.Current.Dispatcher.Invoke(() => AnimateAppear(msgVm));
-                    });
-
-                    // Лимит сообщений (например, 8)
-                    if (DisplayMessages.Count > 30)
-                    {
-                        AnimateAndRemove(DisplayMessages[0]);
+                        while (DisplayMessages.Count > 40)
+                        {
+                            DisplayMessages.RemoveAt(0);
+                        }
                     }
 
-                    // Таймер удаления
-                    Task.Delay(msgVm.DisplayTimeMs).ContinueWith(t =>
+                    // Обрабатываем автоматический скролл
+                    if (_currentMode.ShouldAutoScroll && _window != null)
                     {
-                        if (t.IsCanceled || t.IsFaulted) return;
-                        Application.Current.Dispatcher.Invoke(() =>
-                        {
-                            if (DisplayMessages.Contains(msgVm)) AnimateAndRemove(msgVm);
-                        });
-                    });
+                        _window.ScrollToBottom();
+                    }
+
+                    // Если сообщение должно исчезнуть через время
+                    int displayTime = _currentMode.GetDisplayTimeMs(msg);
+                    if (displayTime > 0)
+                    {
+                        ScheduleMessageRemoval(msgVm, displayTime);
+                    }
                 }
-                catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"[Add] {ex.Message}"); }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine($"[ChatOverlay AddMessage Error] {ex.Message}");
+                }
+            }), DispatcherPriority.Background);
+        }
+
+        private void ScheduleMessageRemoval(DisplayMessageViewModel msgVm, int delayMs)
+        {
+            Task.Delay(delayMs).ContinueWith(_ =>
+            {
+                Application.Current.Dispatcher.BeginInvoke(new Action(() =>
+                {
+                    if (DisplayMessages.Contains(msgVm))
+                    {
+                        DisplayMessages.Remove(msgVm);
+                    }
+                }));
             });
-        }
-
-        private void AnimateAppear(DisplayMessageViewModel msgVm)
-        {
-            // Используем Dispatcher с приоритетом Render, чтобы успеть ДО отрисовки прыжка
-            Application.Current.Dispatcher.BeginInvoke(new Action(async () =>
-            {
-                // 1. Ждем появления элемента
-                var fe = FindFrameworkElement(msgVm) as FrameworkElement;
-                if (fe == null) return;
-
-                // 2. Мгновенно скрываем его высоту, чтобы StackPanel не раздвинулась
-                double height = fe.ActualHeight;
-                if (height <= 0)
-                {
-                    fe.UpdateLayout(); // Принудительно замеряем, если еще 0
-                    height = fe.ActualHeight;
-                }
-
-                // Прячем элемент в "минус", чтобы он не толкал соседа сверху
-                fe.Margin = new Thickness(0, 0, 0, -height);
-                fe.Opacity = 0;
-                fe.RenderTransform = new TranslateTransform(0, height);
-
-                // 3. Запускаем анимацию "вырастания"
-                var sb = new Storyboard();
-
-                // Раздвигаем Margin (поднимает всё, что выше, ПЛАВНО)
-                var marginAnim = new ThicknessAnimation(fe.Margin, new Thickness(0), TimeSpan.FromMilliseconds(500))
-                { EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut } };
-                Storyboard.SetTarget(marginAnim, fe);
-                Storyboard.SetTargetProperty(marginAnim, new PropertyPath("Margin"));
-
-                // Проявление
-                var opacityAnim = new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(300));
-                Storyboard.SetTarget(opacityAnim, fe);
-                Storyboard.SetTargetProperty(opacityAnim, new PropertyPath("Opacity"));
-
-                // Движение самого сообщения
-                var translateAnim = new DoubleAnimation(height, 0, TimeSpan.FromMilliseconds(500))
-                { EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseOut } };
-                Storyboard.SetTarget(translateAnim, fe);
-                Storyboard.SetTargetProperty(translateAnim, new PropertyPath("(UIElement.RenderTransform).(TranslateTransform.Y)"));
-
-                sb.Children.Add(marginAnim);
-                sb.Children.Add(opacityAnim);
-                sb.Children.Add(translateAnim);
-
-                sb.Begin();
-            }), System.Windows.Threading.DispatcherPriority.Render);
-        }
-
-        private void ProcessReactionTags(DisplayMessageViewModel msgVm)
-        {
-            try
-            {
-                if (string.IsNullOrEmpty(msgVm.MessageText)) return;
-
-                // ОБРАБОТКА ЛАЙКА
-                var likeMatch = Regex.Match(msgVm.MessageText, @"<like msg='(\d+)' user='([^']+)' />");
-                if (likeMatch.Success && int.TryParse(likeMatch.Groups[1].Value, out int targetLikeNum))
-                {
-                    string userId = likeMatch.Groups[2].Value;
-                    var targetMsg = DisplayMessages.FirstOrDefault(m => m.MessageNumber == targetLikeNum);
-
-                    if (targetMsg != null)
-                    {
-                        if (targetMsg.User?.Id == userId)
-                        {
-                            System.Diagnostics.Debug.WriteLine($"[REACT] Запрещено: нельзя лайкать свое сообщение #{targetLikeNum}");
-                            msgVm.ShouldChargeReaction = false;
-                        }
-                        else
-                        {
-                            targetMsg.Likes++;
-                            msgVm.ShouldChargeReaction = true;
-                            System.Diagnostics.Debug.WriteLine($"[REACT] Лайк на #{targetLikeNum} засчитан");
-                        }
-                    }
-                    else { msgVm.ShouldChargeReaction = false; }
-
-                    msgVm.MessageText = Regex.Replace(msgVm.MessageText, @"<like msg='\d+' user='[^']+' />", "").Trim();
-                }
-
-                // ОБРАБОТКА ДИЗЛАЙКА
-                var dislikeMatch = Regex.Match(msgVm.MessageText, @"<dislike msg='(\d+)' user='([^']+)' />");
-                if (dislikeMatch.Success && int.TryParse(dislikeMatch.Groups[1].Value, out int targetDisNum))
-                {
-                    string userId = dislikeMatch.Groups[2].Value;
-                    var targetMsg = DisplayMessages.FirstOrDefault(m => m.MessageNumber == targetDisNum);
-
-                    if (targetMsg != null)
-                    {
-                        if (targetMsg.User?.Id == userId)
-                        {
-                            System.Diagnostics.Debug.WriteLine($"[REACT] Запрещено: нельзя дизлайкать свое сообщение #{targetDisNum}");
-                            msgVm.ShouldChargeReaction = false;
-                        }
-                        else
-                        {
-                            targetMsg.Dislikes++;
-                            msgVm.ShouldChargeReaction = true;
-                            System.Diagnostics.Debug.WriteLine($"[REACT] Дизлайк на #{targetDisNum} засчитан");
-                        }
-                    }
-                    else { msgVm.ShouldChargeReaction = false; }
-
-                    msgVm.MessageText = Regex.Replace(msgVm.MessageText, @"<dislike msg='\d+' user='[^']+' />", "").Trim();
-                }
-            }
-            catch (Exception ex)
-            {
-                System.Diagnostics.Debug.WriteLine($"[ProcessReactionTags] Ошибка: {ex.Message}");
-            }
-        }
-
-        private void ProcessNickTag(DisplayMessageViewModel msgVm)
-        {
-            try
-            {
-                var nickMatch = Regex.Match(msgVm.MessageText, @"<nick old='([^']*)' new='([^']*)'></nick>");
-                if (nickMatch.Success)
-                {
-                    string oldName = nickMatch.Groups[1].Value;
-                    string newName = nickMatch.Groups[2].Value;
-                    System.Diagnostics.Debug.WriteLine($"[NICK] {oldName} → {newName}");
-                }
-            }
-            catch (Exception ex)
-            {
-                System.Diagnostics.Debug.WriteLine($"[ProcessNickTag] Ошибка: {ex.Message}");
-            }
-        }
-
-        private void AnimateAndRemove(DisplayMessageViewModel msgVm)
-        {
-            try
-            {
-                // Находим контейнер сообщения (тот самый Grid из ItemTemplate)
-                var fe = FindFrameworkElement(msgVm) as FrameworkElement;
-                if (fe == null)
-                {
-                    DisplayMessages.Remove(msgVm);
-                    return;
-                }
-
-                // 1. Создаем анимацию уменьшения высоты до 0
-                var heightAnimation = new DoubleAnimation
-                {
-                    From = fe.ActualHeight,
-                    To = 0,
-                    Duration = TimeSpan.FromMilliseconds(300),
-                    EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseIn }
-                };
-
-                // 2. Анимация прозрачности
-                var opacityAnimation = new DoubleAnimation
-                {
-                    To = 0,
-                    Duration = TimeSpan.FromMilliseconds(250)
-                };
-
-                Storyboard.SetTarget(heightAnimation, fe);
-                Storyboard.SetTargetProperty(heightAnimation, new PropertyPath("Height"));
-
-                Storyboard.SetTarget(opacityAnimation, fe);
-                Storyboard.SetTargetProperty(opacityAnimation, new PropertyPath("Opacity"));
-
-                var storyboard = new Storyboard();
-                storyboard.Children.Add(heightAnimation);
-                storyboard.Children.Add(opacityAnimation);
-
-                storyboard.Completed += (s, e) =>
-                {
-                    // Теперь, когда высота стала 0, удаление из коллекции пройдет незаметно
-                    DisplayMessages.Remove(msgVm);
-                };
-
-                storyboard.Begin();
-            }
-            catch (Exception ex)
-            {
-                System.Diagnostics.Debug.WriteLine($"[AnimateAndRemove] Ошибка: {ex.Message}");
-                DisplayMessages.Remove(msgVm);
-            }
-        }
-
-        private FrameworkElement? FindFrameworkElement(DisplayMessageViewModel msgVm)
-        {
-            try
-            {
-                foreach (Window window in Application.Current.Windows)
-                {
-                    if (window is ChatOverlayWindow overlayWindow)
-                    {
-                        var itemsControl = overlayWindow.FindName("MessagesList") as System.Windows.Controls.ItemsControl;
-                        if (itemsControl != null)
-                        {
-                            var container = itemsControl.ItemContainerGenerator.ContainerFromItem(msgVm);
-                            return container as FrameworkElement;
-                        }
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                System.Diagnostics.Debug.WriteLine($"[FindFrameworkElement] Ошибка: {ex.Message}");
-            }
-            return null;
         }
 
         private void OnChaterUpdated(Chater updatedChater)
         {
             Application.Current.Dispatcher.Invoke(() =>
             {
-                try
+                foreach (var msg in DisplayMessages.Where(m => m.User?.Id == updatedChater.Id))
                 {
-                    foreach (var msg in DisplayMessages.Where(m => m.User?.Id == updatedChater.Id))
-                    {
-                        msg.User = updatedChater;
-                        msg.UpdateMessageCount();
-                    }
-                }
-                catch (Exception ex)
-                {
-                    System.Diagnostics.Debug.WriteLine($"[OnChaterUpdated] Ошибка: {ex.Message}");
+                    msg.User = updatedChater;
+                    msg.UpdateMessageCount();
                 }
             });
+        }
+
+        public void ClearMessages()
+        {
+            Application.Current.Dispatcher.BeginInvoke(new Action(() =>
+            {
+                DisplayMessages.Clear();
+            }));
+        }
+
+        public void ToggleEnabled()
+        {
+            IsEnabled = !IsEnabled;
         }
     }
 }

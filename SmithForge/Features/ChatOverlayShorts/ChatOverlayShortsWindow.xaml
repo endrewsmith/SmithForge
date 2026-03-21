@@ -2,6 +2,7 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:local="clr-namespace:SmithForge.Features.ChatOverlay"
+        xmlns:services="clr-namespace:SmithForge.Main.Services;assembly=SmithForge"
         Title="Shorts Overlay" Height="600" Width="450"
         WindowStyle="None" AllowsTransparency="True" Background="Transparent"
         Topmost="False" ShowInTaskbar="False"
@@ -9,7 +10,6 @@
 
     <Window.Resources>
         <BooleanToVisibilityConverter x:Key="BoolToVis"/>
-        <local:RankToColorConverter x:Key="RankToColorConverter"/>
     </Window.Resources>
 
     <Grid>
@@ -26,34 +26,16 @@
 
             <ItemsControl.ItemTemplate>
                 <DataTemplate>
-                    <!-- Та же анимация, что и в основном оверлее - с ScaleTransform -->
-                    <Grid x:Name="MsgContainer" Opacity="0">
+                    <!-- Добавляем контейнер с анимацией, но оставляем MessageSkin -->
+                    <Grid x:Name="MsgContainer" 
+              Opacity="{Binding Opacity, Mode=OneWay}">
                         <Grid.LayoutTransform>
-                            <ScaleTransform x:Name="LayoutScale" ScaleY="0"/>
+                            <ScaleTransform ScaleY="{Binding ScaleY, Mode=OneWay}"/>
                         </Grid.LayoutTransform>
 
-                        <ContentControl Content="{Binding}" ContentTemplate="{Binding MessageSkin}"/>
-
-                        <Grid.Triggers>
-                            <EventTrigger RoutedEvent="Loaded">
-                                <BeginStoryboard>
-                                    <Storyboard>
-                                        <!-- Плавно увеличиваем масштаб по вертикали -->
-                                        <DoubleAnimation Storyboard.TargetName="LayoutScale"
-                                                         Storyboard.TargetProperty="ScaleY"
-                                                         From="0" To="1" Duration="0:0:0.4">
-                                            <DoubleAnimation.EasingFunction>
-                                                <CubicEase EasingMode="EaseOut"/>
-                                            </DoubleAnimation.EasingFunction>
-                                        </DoubleAnimation>
-
-                                        <!-- Плавное проявление -->
-                                        <DoubleAnimation Storyboard.TargetProperty="Opacity"
-                                                         From="0" To="1" Duration="0:0:0.3"/>
-                                    </Storyboard>
-                                </BeginStoryboard>
-                            </EventTrigger>
-                        </Grid.Triggers>
+                        <!-- Ваша существующая универсальная разметка -->
+                        <ContentControl Content="{Binding}" 
+                            ContentTemplate="{Binding MessageSkin}"/>
                     </Grid>
                 </DataTemplate>
             </ItemsControl.ItemTemplate>

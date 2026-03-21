@@ -1,7 +1,8 @@
 ﻿using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using SmithForge.Features.ChatOverlayShorts;
+using SmithForge.Features.StickersOverlay;
 using SmithForge.Main.Models;
+using SmithForge.Main.Models.ChatModes;
 using SmithForge.Main.Services;
 using SmithForge.Main.Services.ChatCommands;
 using SmithForge.Main.Services.SmithForge.Main.Services;
@@ -13,16 +14,28 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
+using SmithForge.Features.ImportantOverlay;
+using SmithForge.Features.ChatOverlay;
+using SmithForge.Features.ChatOverlayShorts;
 
 namespace SmithForge.ViewModels
 {
     internal partial class MainViewModel : ObservableObject
     {
-        [ObservableProperty]
-        private bool _isOverlayHidden;
-        private readonly ImportantOverlayService _importantService = new();
+        // Режимы отображения для чатов
+        [ObservableProperty] private ChatDisplayMode _mainChatMode = ChatDisplayMode.AppearAndFade;
+        [ObservableProperty] private ChatDisplayMode _shortsChatMode = ChatDisplayMode.AppearAndFade;
+        [ObservableProperty] private ChatDisplayMode _importantChatMode = ChatDisplayMode.AppearAndFade;
+        [ObservableProperty] private ChatDisplayMode _stickersChatMode = ChatDisplayMode.AppearAndFade;
+
+        public List<SmithForge.Main.Models.ChatDisplayModeInfo> AvailableModes { get; } = ChatDisplayModeFactory.GetAvailableModes();
+
         private readonly DashboardService _dashboardService = new();
         private readonly MessageProcessor _processor;
+        private readonly ChatOverlayService _overlayService;
+        private readonly ChatOverlayShortsService _shortsService;
+        private readonly ImportantOverlayService _importantService;
+        private readonly StickersOverlayService _stickersService;
         private readonly ExternalChatService _chatService = new();
         private CancellationTokenSource? _pollingcts;
 
@@ -32,24 +45,86 @@ namespace SmithForge.ViewModels
         private bool _isProcessRunning;
 
         [ObservableProperty] private bool _isOverlaySetupMode = true;
+        [ObservableProperty] private bool _isOverlayHidden = false;
         [ObservableProperty] private string _lastMessageText = "Ожидание сообщений...";
         [ObservableProperty] private AppSettings _settings;
         [ObservableProperty] private StreamSession _currentSession;
         [ObservableProperty] private string _programPath;
         [ObservableProperty] private int _lastStreamNumber;
+        [ObservableProperty] private bool _isStickersVisible = true;
 
         public ObservableCollection<Chater> Users { get; } = new();
-
-        private readonly ChatOverlayService _overlayService = new();
-        private readonly ChatOverlayShortsService _shortsService = new();
 
         public MainViewModel()
         {
             FolderManager.EnsureDirectoriesExist();
             Settings = ConfigService.Load();
             _isOverlaySetupMode = Settings.IsOverlaySetupMode;
-            _isOverlayHidden = Settings.IsOverlayHidden; // ← Загружаем состояние скрытия
+            _isOverlayHidden = Settings.IsOverlayHidden;
+            _isStickersVisible = Settings.IsStickersVisible;
             DatabaseService.Initialize();
+
+            // Загружаем режимы из настроек
+            _mainChatMode = Settings.MainChatMode;
+            _shortsChatMode = Settings.ShortsChatMode;
+            _importantChatMode = Settings.ImportantChatMode;
+            _stickersChatMode = Settings.StickersChatMode;
+
+            StickerManager.LoadPacks();
+
+            // Инициализация сервисов
+            _overlayService = new ChatOverlayService();
+            _overlayService.Initialize(Settings.OverlayTop, Settings.OverlayLeft);
+            _overlayService.SetSetupMode(IsOverlaySetupMode);
+            _overlayService.SetDisplayMode(MainChatMode);
+            _overlayService.LoadPosition(Settings);
+
+            _shortsService = new ChatOverlayShortsService();
+            _shortsService.Initialize(
+                Settings.ShortsWindowTop,
+                Settings.ShortsWindowLeft,
+                Settings.ShortsWindowWidth,
+                Settings.ShortsWindowHeight,
+                IsOverlaySetupMode);
+            _shortsService.SetSetupMode(IsOverlaySetupMode);
+            _shortsService.SetDisplayMode(ShortsChatMode);
+            _shortsService.LoadPosition(Settings);
+
+            _importantService = new ImportantOverlayService();
+            _importantService.Initialize(
+                Settings.ImportantOverlayTop,
+                Settings.ImportantOverlayLeft,
+                Settings.ImportantOverlayWidth,
+                Settings.ImportantOverlayHeight,
+                IsOverlaySetupMode);
+            _importantService.SetSetupMode(IsOverlaySetupMode);
+            _importantService.SetDisplayMode(ImportantChatMode);
+            _importantService.LoadPosition(Settings);
+
+            _stickersService = new StickersOverlayService();
+            _stickersService.Initialize(
+                Settings.StickersWindowTop,
+                Settings.StickersWindowLeft,
+                Settings.StickersWindowWidth,
+                Settings.StickersWindowHeight,
+                IsOverlaySetupMode);
+            _stickersService.SetSetupMode(IsOverlaySetupMode);
+            _stickersService.SetDisplayMode(StickersChatMode);
+            _stickersService.LoadPosition(Settings);
+
+            // Применяем скрытие окон
+            if (_isOverlayHidden)
+            {
+                _overlayService.SetHidden(true);
+                _shortsService.SetHidden(true);
+                _importantService.SetHidden(true);
+                _stickersService.SetHidden(true);
+            }
+
+            if (_isStickersVisible)
+            {
+                _stickersService.Show();
+            }
 
             _processor = new MessageProcessor(Settings);
             _processor.OnProcessed += OnMessageProcessed;
@@ -82,47 +157,6 @@ namespace SmithForge.ViewModels
             _chatService.ProcessExited += (s, e) => OnProcessExited();
 
             _dashboardService.Initialize();
-
-            // Основной оверлей
-            _overlayService.Initialize(
-                Settings.OverlayTop,
-                Settings.OverlayLeft,
-                _isOverlaySetupMode
-            );
-            _overlayService.LoadPosition(Settings);
-
-            // Применяем состояние скрытия после загрузки позиции
-            if (_isOverlayHidden)
-            {
-                _overlayService.SetHidden(true);
-            }
-
-            // Оверлей для шортов
-            _shortsService.Initialize(
-                Settings.ShortsWindowTop,
-                Settings.ShortsWindowLeft,
-                _isOverlaySetupMode
-            );
-            _shortsService.LoadPosition(Settings);
-
-            // Применяем состояние скрытия для шортов
-            if (_isOverlayHidden)
-            {
-                _shortsService.SetHidden(true);
-            }
-
-            // В конструкторе после других сервисов:
-            _importantService.Initialize(
-                Settings.ImportantOverlayTop,
-                Settings.ImportantOverlayLeft,
-                _isOverlaySetupMode
-            );
-            _importantService.LoadPosition(Settings);
-
-            if (_isOverlayHidden)
-            {
-                _importantService.SetHidden(true);
-            }
         }
 
         private void LoadInitialData()
@@ -139,68 +173,76 @@ namespace SmithForge.ViewModels
         {
             string uiMessage = msg.Message;
 
-            // 1. Обновляем статусную строку в главном окне
-            if (uiMessage.Length >= Settings.MinMessageLength)
+            if (msg.Message.Length >= Settings.MinMessageLength)
             {
                 Application.Current.Dispatcher.Invoke(() => {
                     LastMessageText = $"[#{chater.KarmaKey}] {chater.EffectiveName}: {uiMessage}";
                 });
             }
 
-            if (string.IsNullOrWhiteSpace(uiMessage)) return;
+            Debug.WriteLine($"[MainViewModel] Получено сообщение от {chater.Login}:");
+            Debug.WriteLine($"   - Оригинальный номер: {msg.MessageNumber}");
+            Debug.WriteLine($"   - Текст: {uiMessage}");
+            Debug.WriteLine($"   - IsProcessedByCommand: {msg.IsProcessedByCommand}");
 
-            // 2. Проверяем, была ли выполнена РЕАЛЬНАЯ команда "важно" (через список команд)
+            // Проверяем команды
+            bool isStickerAction = commands != null && commands.Any(c =>
+                c.Name.Equals("st", StringComparison.OrdinalIgnoreCase) ||
+                c.Name.Equals("стикер", StringComparison.OrdinalIgnoreCase) ||
+                c.Name.Equals("sticker", StringComparison.OrdinalIgnoreCase));
+
             bool isImportantAction = commands != null && commands.Any(c =>
                 c.Name.Equals("important", StringComparison.OrdinalIgnoreCase) ||
                 c.Name.Equals("важно", StringComparison.OrdinalIgnoreCase));
 
-            // 3. Чистим текст от технических тегов <important>, чтобы они не мозолили глаза и не читались Саней
-            string cleanUiMessage = uiMessage.Replace("<important>", "").Replace("</important>", "").Trim();
-
+            // Очищаем текст от тегов
+            string cleanUiMessage = uiMessage;
             if (isImportantAction)
             {
-                // Создаем клон с ЧИСТЫМ текстом для важного окна
-                var importantMsg = CreateOverlayMsg(chater, msg, cleanUiMessage);
-
-                Debug.WriteLine($"[Important] Легальный вызов от {chater.Login}. Отправляем в очередь.");
-
-                // Пауза 200мс для стабильности отрисовки
-                Task.Run(async () =>
-                {
-                    await Task.Delay(200);
-                    _importantService.ShowImportantMessage(chater, importantMsg);
-                });
+                cleanUiMessage = uiMessage.Replace("<important>", "").Replace("</important>", "").Trim();
             }
-            else
-            {
-                // ОБЫЧНЫЕ ОКНА: шлем чистый текст (без тегов <important>, если юзер их ввел сам)
-                // Но визуальные теги типа <b> сохранятся, если они там были
-                _overlayService.AddMessage(chater, CreateOverlayMsg(chater, msg, cleanUiMessage));
-                _shortsService.AddMessage(chater, CreateOverlayMsg(chater, msg, cleanUiMessage));
-                _dashboardService.AddMessage(chater, CreateOverlayMsg(chater, msg, cleanUiMessage));
-            }
-        }
 
-        // Вспомогательный метод для клонирования сообщений
-        private CommonMessage CreateOverlayMsg(Chater chater, CommonMessage original, string text)
-        {
-            return new CommonMessage
+            var overlayMsg = new CommonMessage
             {
                 User = chater,
                 Login = chater.Login,
-                Type = original.Type.ToLower(),
-                Message = text,
+                Type = msg.Type.ToLower(),
+                Message = cleanUiMessage,
                 KarmaKeyDisplay = $"#{chater.KarmaKey}",
-                MessageNumber = original.MessageNumber,
-                IsProcessedByCommand = original.IsProcessedByCommand,
-                DisplayTimeMs = original.DisplayTimeMs
+                MessageNumber = msg.MessageNumber,
+                IsProcessedByCommand = msg.IsProcessedByCommand,
+                DisplayTimeMs = msg.DisplayTimeMs
             };
-        }
 
-        [RelayCommand]
-        private void ToggleShortsOverlay()
-        {
-            _shortsService.Toggle();
+            // Отправляем в дашборд всегда
+            _dashboardService.AddMessage(chater, overlayMsg);
+
+            // Обработка в зависимости от типа сообщения
+            if (isImportantAction)
+            {
+                Debug.WriteLine($"[Important] Важное сообщение от {chater.Login}");
+                Task.Run(async () =>
+                {
+                    await Task.Delay(200);
+                    _importantService.ShowImportantMessage(chater, overlayMsg);
+                });
+            }
+            else if (isStickerAction)
+            {
+                Debug.WriteLine($"[Stickers] Стикер от {chater.Login}");
+                Task.Run(async () =>
+                {
+                    await Task.Delay(200);
+                    _stickersService.ShowSticker(chater, overlayMsg);
+                });
+                _overlayService.AddMessage(chater, overlayMsg);
+                _shortsService.AddMessage(chater, overlayMsg);
+            }
+            else
+            {
+                _overlayService.AddMessage(chater, overlayMsg);
+                _shortsService.AddMessage(chater, overlayMsg);
+            }
         }
 
         private void EnsureSessionByNumber(int number)
@@ -322,17 +364,56 @@ namespace SmithForge.ViewModels
             LastMessageText = "✅ Настройки сохранены";
         }
 
+        // Обработчики изменения режимов
+        partial void OnMainChatModeChanged(ChatDisplayMode value)
+        {
+            Settings.MainChatMode = value;
+            _overlayService.SetDisplayMode(value);
+            ConfigService.Save(Settings);
+            Debug.WriteLine($"[MainVM] Главный чат режим: {value}");
+        }
+
+        partial void OnShortsChatModeChanged(ChatDisplayMode value)
+        {
+            Settings.ShortsChatMode = value;
+            _shortsService.SetDisplayMode(value);
+            ConfigService.Save(Settings);
+            Debug.WriteLine($"[MainVM] Шорты режим: {value}");
+        }
+
+        partial void OnImportantChatModeChanged(ChatDisplayMode value)
+        {
+            Settings.ImportantChatMode = value;
+            _importantService.SetDisplayMode(value);
+            ConfigService.Save(Settings);
+            Debug.WriteLine($"[MainVM] Важные сообщения режим: {value}");
+        }
+
+        partial void OnStickersChatModeChanged(ChatDisplayMode value)
+        {
+            Settings.StickersChatMode = value;
+            _stickersService.SetDisplayMode(value);
+            ConfigService.Save(Settings);
+            Debug.WriteLine($"[MainVM] Стикеры режим: {value}");
+        }
+
         partial void OnIsOverlaySetupModeChanged(bool oldValue, bool newValue)
         {
-            _overlayService.SetMode(newValue);
-            _shortsService.SetMode(newValue);
-            _importantService.SetMode(newValue);
+            Debug.WriteLine($"[MainVM] Режим настройки: {oldValue} -> {newValue}");
+
+            _overlayService.SetSetupMode(newValue);
+            _shortsService.SetSetupMode(newValue);
+            _importantService.SetSetupMode(newValue);
+            _stickersService.SetSetupMode(newValue);
 
             if (!newValue)
             {
                 _overlayService.SavePosition(Settings);
                 _shortsService.SavePosition(Settings);
                 _importantService.SavePosition(Settings);
+                _stickersService.SavePosition(Settings);
+                ConfigService.Save(Settings);
+                LastMessageText = "✅ Позиции окон сохранены";
             }
         }
 
@@ -340,10 +421,28 @@ namespace SmithForge.ViewModels
         {
             _overlayService.SetHidden(newValue);
             _shortsService.SetHidden(newValue);
-            ConfigService.Save(Settings); // сразу сохраняем настройки
+            _importantService.SetHidden(newValue);
+            _stickersService.SetHidden(newValue);
+            Settings.IsOverlayHidden = newValue;
+            ConfigService.Save(Settings);
+        }
+
+        partial void OnIsStickersVisibleChanged(bool oldValue, bool newValue)
+        {
+            if (newValue)
+                _stickersService.Show();
+            else
+                _stickersService.Hide();
+
+            Settings.IsStickersVisible = newValue;
+            ConfigService.Save(Settings);
         }
 
         public void SaveOverlayPosition() => _overlayService.SavePosition(Settings);
+        public void SaveShortsPosition() => _shortsService.SavePosition(Settings);
+        public void SaveImportantPosition() => _importantService.SavePosition(Settings);
+        public void SaveStickersPosition() => _stickersService.SavePosition(Settings);
+
         private void OnProcessExited() => Application.Current.Dispatcher.Invoke(() => { IsProcessRunning = false; });
         private bool CanStart() => !IsProcessRunning;
         private bool CanStop() => IsProcessRunning;
@@ -364,9 +463,10 @@ namespace SmithForge.ViewModels
                 _dashboardService.Show();
         }
 
-        public void SaveShortsPosition()
+        [RelayCommand]
+        private void ToggleShortsOverlay()
         {
-            _shortsService.SavePosition(Settings);
+            _shortsService.Toggle();
         }
 
         [RelayCommand]
@@ -377,7 +477,11 @@ namespace SmithForge.ViewModels
             else
                 _importantService.Show();
         }
+
+        [RelayCommand]
+        private void ToggleStickersOverlay()
+        {
+            IsStickersVisible = !IsStickersVisible;
+        }
     }
-
-
 }

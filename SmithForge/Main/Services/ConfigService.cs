@@ -1,36 +1,118 @@
-﻿using SmithForge.Main.Models;
-using SmithForge.Main.Services.SmithForge.Main.Services;
-using System;
+﻿using System;
 using System.IO;
-using System.Xml.Serialization;
+using System.Text.Json;
+using System.Diagnostics;
+using SmithForge.Main.Models;
 
 namespace SmithForge.Main.Services
 {
     public static class ConfigService
     {
-        // Теперь путь берется динамически из нашего менеджера папок
-        private static string FilePath => FolderManager.GetConfigPath();
+        private static readonly string _configPath;
+        private static readonly JsonSerializerOptions _jsonOptions;
 
-        private static readonly XmlSerializer Serializer = new XmlSerializer(typeof(AppSettings));
-
-        /// <summary> Записывает настройки в SF_Data/Config/settings.xml </summary>
-        public static void Save(AppSettings settings)
+        static ConfigService()
         {
-            // Убираем дубликаты перед сохранением
-            settings.CommandPrefixes = settings.CommandPrefixes.Distinct().ToList();
-            // Используем FilePath вместо FileName
-            using var writer = new StreamWriter(FilePath);
-            Serializer.Serialize(writer, settings);
+            try
+            {
+                Debug.WriteLine("[ConfigService] Инициализация...");
+
+                string appData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+                string appFolder = Path.Combine(appData, "SmithForge");
+
+                if (!Directory.Exists(appFolder))
+                {
+                    Directory.CreateDirectory(appFolder);
+                    Debug.WriteLine($"[ConfigService] Создана папка: {appFolder}");
+                }
+
+                _configPath = Path.Combine(appFolder, "settings.json");
+                Debug.WriteLine($"[ConfigService] Путь к настройкам: {_configPath}");
+
+                // ПРАВИЛЬНЫЕ НАСТРОЙКИ ДЛЯ СЕРИАЛИЗАЦИИ
+                _jsonOptions = new JsonSerializerOptions
+                {
+                    WriteIndented = true,
+                    PropertyNameCaseInsensitive = true,
+                    IncludeFields = true,  // Добавлено
+                    IgnoreReadOnlyProperties = false
+                };
+
+                Debug.WriteLine("[ConfigService] Инициализация завершена");
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[ConfigService] ОШИБКА инициализации: {ex.Message}");
+                throw;
+            }
         }
 
-        /// <summary> Читает настройки. Если файла нет — создает новые. </summary>
         public static AppSettings Load()
         {
-            // Проверяем наличие файла по полному пути
-            if (!File.Exists(FilePath)) return new AppSettings();
+            try
+            {
+                Debug.WriteLine($"[ConfigService] Загрузка настроек из {_configPath}");
 
-            using var reader = new StreamReader(FilePath);
-            return (AppSettings)Serializer.Deserialize(reader) ?? new AppSettings();
+                if (File.Exists(_configPath))
+                {
+                    string json = File.ReadAllText(_configPath);
+                    Debug.WriteLine($"[ConfigService] Файл найден, размер: {json.Length} байт");
+
+                    var settings = JsonSerializer.Deserialize<AppSettings>(json, _jsonOptions);
+
+                    if (settings != null)
+                    {
+                        settings.CommandShortcuts ??= new Dictionary<string, string>();
+                        Debug.WriteLine($"[ConfigService] Настройки загружены, сокращений: {settings.CommandShortcuts.Count}");
+                        return settings;
+                    }
+                }
+
+                Debug.WriteLine("[ConfigService] Файл не найден, создаем настройки по умолчанию");
+                return CreateDefaultSettings();
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[ConfigService] Ошибка загрузки: {ex.Message}");
+                return CreateDefaultSettings();
+            }
+        }
+
+        private static AppSettings CreateDefaultSettings()
+        {
+            Debug.WriteLine("[ConfigService] Создание настроек по умолчанию");
+
+            var settings = new AppSettings
+            {
+                CommandShortcuts = new Dictionary<string, string>
+                {
+                    { "ввв", "!!важно" },
+                    { "вж", "!!важно" },
+                    { "ст", "!!st" },
+                    { "ж", "!!жирный" },
+                    { "к", "!!курсив" },
+                    { "ц", "!!цвет" }
+                }
+            };
+
+            return settings;
+        }
+
+        public static void Save(AppSettings settings)
+        {
+            try
+            {
+                Debug.WriteLine($"[ConfigService] Сохранение настроек в {_configPath}");
+
+                string json = JsonSerializer.Serialize(settings, _jsonOptions);
+                File.WriteAllText(_configPath, json);
+
+                Debug.WriteLine($"[ConfigService] Настройки сохранены, размер: {json.Length} байт");
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[ConfigService] Ошибка сохранения: {ex.Message}");
+            }
         }
     }
 }

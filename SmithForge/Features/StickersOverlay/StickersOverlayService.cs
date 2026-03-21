@@ -1,15 +1,15 @@
 ﻿using SmithForge.Main.Models;
 using SmithForge.Main.Models.ChatModes;
-using SmithForge.Features.ChatOverlayShorts;
+using SmithForge.Features.StickersOverlay;
 using System;
 using System.Windows;
 
-namespace SmithForge.Features.ChatOverlayShorts
+namespace SmithForge.Main.Services
 {
-    public class ChatOverlayShortsService
+    public class StickersOverlayService
     {
-        private ChatOverlayShortsWindow? _window;
-        private ChatOverlayShortsViewModel? _viewModel;
+        private StickersOverlayWindow? _window;
+        private StickersOverlayViewModel? _viewModel;
         private bool _isInitialized = false;
         private ChatDisplayMode _currentMode = ChatDisplayMode.AppearAndFade;
 
@@ -18,7 +18,7 @@ namespace SmithForge.Features.ChatOverlayShorts
         private double _savedTop;
         private double _savedLeft;
 
-        public ChatOverlayShortsService()
+        public StickersOverlayService()
         {
             CreateOverlay();
         }
@@ -27,8 +27,8 @@ namespace SmithForge.Features.ChatOverlayShorts
         {
             if (_window == null)
             {
-                _viewModel = new ChatOverlayShortsViewModel();
-                _window = new ChatOverlayShortsWindow
+                _viewModel = new StickersOverlayViewModel();
+                _window = new StickersOverlayWindow
                 {
                     DataContext = _viewModel,
                     Visibility = Visibility.Collapsed
@@ -39,7 +39,7 @@ namespace SmithForge.Features.ChatOverlayShorts
 
                 _isInitialized = true;
 
-                System.Diagnostics.Debug.WriteLine("[ChatOverlayShortsService] Окно создано");
+                System.Diagnostics.Debug.WriteLine("[StickersOverlayService] Окно создано");
             }
         }
 
@@ -54,7 +54,7 @@ namespace SmithForge.Features.ChatOverlayShorts
 
             SetSetupMode(isSetupMode);
 
-            System.Diagnostics.Debug.WriteLine($"[ChatOverlayShortsService] Инициализирован, режим настройки: {isSetupMode}");
+            System.Diagnostics.Debug.WriteLine($"[StickersOverlayService] Инициализирован, режим настройки: {isSetupMode}");
         }
 
         public void SetSetupMode(bool isSetupMode)
@@ -64,7 +64,7 @@ namespace SmithForge.Features.ChatOverlayShorts
             _viewModel.IsSetupMode = isSetupMode;
             _window.SetClickThrough(!isSetupMode);
 
-            System.Diagnostics.Debug.WriteLine($"[ChatOverlayShortsService] Режим настройки: {isSetupMode}");
+            System.Diagnostics.Debug.WriteLine($"[StickersOverlayService] Режим настройки: {isSetupMode}");
         }
 
         public void SetDisplayMode(ChatDisplayMode mode)
@@ -74,7 +74,7 @@ namespace SmithForge.Features.ChatOverlayShorts
             {
                 _viewModel.SetMode(mode);
             }
-            System.Diagnostics.Debug.WriteLine($"[ChatOverlayShortsService] Установлен режим отображения: {mode}");
+            System.Diagnostics.Debug.WriteLine($"[StickersOverlayService] Установлен режим отображения: {mode}");
         }
 
         public void SetHidden(bool isHidden)
@@ -90,26 +90,26 @@ namespace SmithForge.Features.ChatOverlayShorts
                 _window.Left = 1 - _window.Width;
 
                 _isHidden = true;
-                System.Diagnostics.Debug.WriteLine("[ChatOverlayShortsService] Окно спрятано за экран");
+                System.Diagnostics.Debug.WriteLine("[StickersOverlayService] Окно спрятано за экран");
             }
             else if (!isHidden && _isHidden)
             {
                 _window.Top = _savedTop;
                 _window.Left = _savedLeft;
                 _isHidden = false;
-                System.Diagnostics.Debug.WriteLine("[ChatOverlayShortsService] Окно возвращено на позицию");
+                System.Diagnostics.Debug.WriteLine("[StickersOverlayService] Окно возвращено на позицию");
             }
         }
 
-        public void AddMessage(Chater user, CommonMessage msg)
+        public void ShowSticker(Chater user, CommonMessage msg)
         {
             if (!_isInitialized || _viewModel == null)
             {
-                System.Diagnostics.Debug.WriteLine("[ChatOverlayShortsService] Невозможно добавить сообщение: сервис не инициализирован");
+                System.Diagnostics.Debug.WriteLine("[StickersOverlayService] Невозможно показать стикер: сервис не инициализирован");
                 return;
             }
 
-            _viewModel.AddMessage(user, msg);
+            _viewModel.ShowSticker(user, msg);
         }
 
         public void Show()
@@ -117,14 +117,14 @@ namespace SmithForge.Features.ChatOverlayShorts
             if (_window == null) return;
             _window.Visibility = Visibility.Visible;
             _window.Topmost = true;
-            System.Diagnostics.Debug.WriteLine("[ChatOverlayShortsService] Окно показано");
+            System.Diagnostics.Debug.WriteLine("[StickersOverlayService] Окно показано");
         }
 
         public void Hide()
         {
             if (_window == null) return;
             _window.Visibility = Visibility.Collapsed;
-            System.Diagnostics.Debug.WriteLine("[ChatOverlayShortsService] Окно скрыто");
+            System.Diagnostics.Debug.WriteLine("[StickersOverlayService] Окно скрыто");
         }
 
         public void Toggle()
@@ -143,33 +143,33 @@ namespace SmithForge.Features.ChatOverlayShorts
         {
             if (_window == null) return;
 
-            settings.ShortsWindowTop = _isHidden ? _savedTop : _window.Top;
-            settings.ShortsWindowLeft = _isHidden ? _savedLeft : _window.Left;
-            settings.ShortsWindowWidth = _window.Width;
-            settings.ShortsWindowHeight = _window.Height;
-            settings.ShortsWindowVisible = _window.Visibility == Visibility.Visible;
-            settings.ShortsChatMode = _currentMode;
+            settings.StickersWindowTop = _isHidden ? _savedTop : _window.Top;
+            settings.StickersWindowLeft = _isHidden ? _savedLeft : _window.Left;
+            settings.StickersWindowWidth = _window.Width;
+            settings.StickersWindowHeight = _window.Height;
+            settings.StickersWindowVisible = _window.Visibility == Visibility.Visible;
+            settings.StickersChatMode = _currentMode;
 
-            System.Diagnostics.Debug.WriteLine($"[ChatOverlayShortsService] Позиция сохранена");
+            System.Diagnostics.Debug.WriteLine($"[StickersOverlayService] Позиция сохранена, режим: {_currentMode}");
         }
 
         public void LoadPosition(AppSettings settings)
         {
             if (_window == null) return;
 
-            _window.Top = settings.ShortsWindowTop;
-            _window.Left = settings.ShortsWindowLeft;
-            _window.Width = settings.ShortsWindowWidth;
-            _window.Height = settings.ShortsWindowHeight;
+            _window.Top = settings.StickersWindowTop;
+            _window.Left = settings.StickersWindowLeft;
+            _window.Width = settings.StickersWindowWidth;
+            _window.Height = settings.StickersWindowHeight;
 
-            SetDisplayMode(settings.ShortsChatMode);
+            SetDisplayMode(settings.StickersChatMode);
 
-            if (settings.ShortsWindowVisible)
+            if (settings.StickersWindowVisible)
             {
                 _window.Visibility = Visibility.Visible;
             }
 
-            System.Diagnostics.Debug.WriteLine($"[ChatOverlayShortsService] Позиция загружена");
+            System.Diagnostics.Debug.WriteLine($"[StickersOverlayService] Позиция загружена, режим: {_currentMode}");
         }
     }
 }

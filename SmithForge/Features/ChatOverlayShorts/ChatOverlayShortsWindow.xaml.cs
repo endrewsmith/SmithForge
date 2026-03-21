@@ -5,7 +5,7 @@ using System.Windows.Input;
 
 namespace SmithForge.Features.ChatOverlayShorts
 {
-    public partial class ChatOverlayShortsWindow : Window
+    public partial class ChatOverlayShortsWindow : Window  // ← имя класса должно быть ChatOverlayShortsWindow
     {
         [DllImport("user32.dll")]
         private static extern bool ReleaseCapture();
@@ -32,18 +32,15 @@ namespace SmithForge.Features.ChatOverlayShorts
         {
             if (isClickThrough)
             {
-                this.Background = System.Windows.Media.Brushes.Transparent;
                 this.IsHitTestVisible = false;
                 DragArea.Visibility = Visibility.Collapsed;
             }
             else
             {
-                this.Background = System.Windows.Media.Brushes.Transparent;
                 this.IsHitTestVisible = true;
                 DragArea.Visibility = Visibility.Visible;
             }
         }
-
         private void Window_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
         {
             if (!(DataContext is ChatOverlayShortsViewModel vm) || !vm.IsSetupMode)
@@ -57,7 +54,6 @@ namespace SmithForge.Features.ChatOverlayShorts
             bool top = pos.Y <= tolerance;
             bool bottom = pos.Y >= this.Height - tolerance;
 
-            // Если на краю - меняем размер
             if (left || right || top || bottom)
             {
                 if (top && left)
@@ -79,7 +75,6 @@ namespace SmithForge.Features.ChatOverlayShorts
             }
             else
             {
-                // Если в центре - перетаскиваем
                 this.DragMove();
             }
         }
@@ -134,5 +129,7 @@ namespace SmithForge.Features.ChatOverlayShorts
             SendMessage(new System.Windows.Interop.WindowInteropHelper(this).Handle,
                 WM_NCLBUTTONDOWN, hitTest, 0);
         }
+
+
     }
 }

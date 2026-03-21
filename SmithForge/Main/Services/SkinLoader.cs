@@ -141,6 +141,63 @@ namespace SmithForge.Main.Services
             return null;
         }
 
+        public static DataTemplate GetStickerTemplate()
+        {
+            try
+            {
+                string stickerPath = Path.Combine(
+                    AppDomain.CurrentDomain.BaseDirectory,
+                    "SF_Data", "Assets", "Skins", "Stickers", "sticker_template.xaml");
+
+                // Прямая загрузка без поиска рангов
+                return LoadDirectTemplate(stickerPath) ?? GetHardcodedTemplate();
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[SkinLoader] Ошибка загрузки шаблона стикера: {ex.Message}");
+                return GetHardcodedTemplate();
+            }
+        }
+
+        private static DataTemplate? LoadDirectTemplate(string path)
+        {
+            try
+            {
+                if (!File.Exists(path))
+                {
+                    System.Diagnostics.Debug.WriteLine($"[SkinLoader] Файл не существует: {path}");
+                    return null;
+                }
+
+                using (var stream = File.OpenRead(path))
+                {
+                    var pc = new ParserContext();
+                    pc.XmlnsDictionary.Add("", "http://schemas.microsoft.com/winfx/2006/xaml/presentation");
+                    pc.XmlnsDictionary.Add("x", "http://schemas.microsoft.com/winfx/2006/xaml");
+                    pc.XmlnsDictionary.Add("gif", "clr-namespace:XamlAnimatedGif;assembly=XamlAnimatedGif");
+
+                    var content = XamlReader.Load(stream, pc);
+
+                    if (content is ResourceDictionary dict && dict.Contains("ChatMessageTemplate"))
+                    {
+                        var template = dict["ChatMessageTemplate"] as DataTemplate;
+                        template?.Seal();
+                        return template;
+                    }
+                    else if (content is DataTemplate direct)
+                    {
+                        direct.Seal();
+                        return direct;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[SkinLoader] Ошибка загрузки шаблона стикера: {ex.Message}");
+            }
+            return null;
+        }
+
         private static DataTemplate GetHardcodedTemplate()
         {
             if (_fallbackTemplate != null) return _fallbackTemplate;

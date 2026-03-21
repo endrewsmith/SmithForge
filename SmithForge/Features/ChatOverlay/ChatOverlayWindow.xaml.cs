@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Runtime.InteropServices;
 using System.Windows;
+using System.Windows.Controls;
 using System.Windows.Input;
 
 namespace SmithForge.Features.ChatOverlay
@@ -23,8 +24,6 @@ namespace SmithForge.Features.ChatOverlay
         private const int HTBOTTOMLEFT = 0x10;
         private const int HTBOTTOMRIGHT = 0x11;
 
-        private bool _isDragging = false;
-
         public ChatOverlayWindow()
         {
             InitializeComponent();
@@ -46,6 +45,18 @@ namespace SmithForge.Features.ChatOverlay
             }
         }
 
+        // Скролл не нужен, но оставляем метод для совместимости
+        public void ScrollToBottom()
+        {
+            // Ничего не делаем - скролла нет
+        }
+
+        private void Window_SizeChanged(object sender, SizeChangedEventArgs e)
+        {
+            // При изменении размера окна сообщения могут перестроиться
+            // Ничего дополнительно делать не нужно
+        }
+
         private void Window_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
         {
             if (!(DataContext is ChatOverlayViewModel vm) || !vm.IsSetupMode)
@@ -59,7 +70,6 @@ namespace SmithForge.Features.ChatOverlay
             bool top = pos.Y <= tolerance;
             bool bottom = pos.Y >= this.Height - tolerance;
 
-            // Если на краю - меняем размер
             if (left || right || top || bottom)
             {
                 if (top && left)
@@ -81,7 +91,6 @@ namespace SmithForge.Features.ChatOverlay
             }
             else
             {
-                // Если в центре - перетаскиваем
                 this.DragMove();
             }
         }

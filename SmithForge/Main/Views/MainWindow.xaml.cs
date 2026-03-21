@@ -122,5 +122,15 @@ namespace SmithForge.Main.Views
                 vm.ToggleImportantOverlayCommand?.Execute(null);
             }
         }
+
+        private void ToggleStickersOverlay_Click(object sender, RoutedEventArgs e)
+        {
+            if (DataContext is SmithForge.ViewModels.MainViewModel vm)
+            {
+                vm.ToggleStickersOverlayCommand.Execute(null);
+            }
+        }
+
+
     }
 }

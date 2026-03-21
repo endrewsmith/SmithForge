@@ -1,206 +1,193 @@
-﻿using SmithForge.Main.Models;
-using SmithForge.Features.ImportantOverlay;
+﻿using SmithForge.Features.ImportantOverlay;
+using SmithForge.Main.Models;
+using SmithForge.Main.Services;
 using System;
 using System.Collections.Generic;
-using System.Windows;
+using System.Linq;
 using System.Threading.Tasks;
+using System.Windows;
 
-namespace SmithForge.Main.Services
+namespace SmithForge.Features.ImportantOverlay
 {
     public class ImportantOverlayService
     {
         private ImportantOverlayWindow? _window;
         private ImportantOverlayViewModel? _viewModel;
         private bool _isInitialized = false;
+        private ChatDisplayMode _currentMode = ChatDisplayMode.AppearAndFade;
+        public bool IsVisible => _window != null && _window.Visibility == Visibility.Visible;
 
         private Queue<(Chater user, CommonMessage msg)> _messageQueue = new();
-        private bool _isShowingMessage = false;
+        private bool _isShowingQueue = false;
 
         private bool _isHidden = false;
         private double _savedTop;
         private double _savedLeft;
-        private double _savedWidth;
-        private double _savedHeight;
 
-        public void Initialize(double top, double left, bool isSetupMode)
+        public void Initialize(double top, double left, double width, double height, bool isSetupMode)
         {
+            if (_isInitialized) return;
+
+            System.Diagnostics.Debug.WriteLine($"[ImportantService] ===== ИНИЦИАЛИЗАЦИЯ =====");
+            System.Diagnostics.Debug.WriteLine($"[ImportantService] Получено из settings: top={top}, left={left}, width={width}, height={height}");
+
             _viewModel = new ImportantOverlayViewModel();
             _window = new ImportantOverlayWindow
             {
                 DataContext = _viewModel,
                 Top = top,
                 Left = left,
-                // Убираем принудительный Collapsed
+                Width = width > 0 ? width : 450,
+                Height = height > 0 ? height : 600,
+                Visibility = Visibility.Visible
             };
 
-            _window.Show(); // Показываем сразу
-            SetMode(isSetupMode);
+            System.Diagnostics.Debug.WriteLine($"[ImportantService] Окно создано: {_window.Width}x{_window.Height}");
+
+            SetSetupMode(isSetupMode);
+            SetDisplayMode(_currentMode);
             _isInitialized = true;
         }
 
-        public void LoadPosition(AppSettings settings)
-        {
-            if (_window == null) return;
-            _window.Top = settings.ImportantOverlayTop;
-            _window.Left = settings.ImportantOverlayLeft;
-
-            // Теперь окно слушается настроек видимости, как и остальные
-            _window.Visibility = settings.ImportantOverlayVisible ? Visibility.Visible : Visibility.Collapsed;
-        }
-
-        public void SetMode(bool isSetupMode)
+        public void SetSetupMode(bool isSetupMode)
         {
             if (_window == null || _viewModel == null) return;
-
             _viewModel.IsSetupMode = isSetupMode;
             _window.SetClickThrough(!isSetupMode);
-
             System.Diagnostics.Debug.WriteLine($"[ImportantService] Режим настройки: {isSetupMode}");
+        }
+
+        public void SetDisplayMode(ChatDisplayMode mode)
+        {
+            _currentMode = mode;
+            if (_viewModel != null)
+            {
+                _viewModel.SetMode(mode);
+            }
+            System.Diagnostics.Debug.WriteLine($"[ImportantService] Установлен режим отображения: {mode}");
         }
 
         public void SetHidden(bool isHidden)
         {
             if (_window == null) return;
-
             if (isHidden && !_isHidden)
             {
                 _savedTop = _window.Top;
                 _savedLeft = _window.Left;
-                _savedWidth = _window.Width;
-                _savedHeight = _window.Height;
-
-                _window.Top = 0;
-                _window.Left = 0;
-                _window.Width = 10;
-                _window.Height = 10;
-                _window.Opacity = 0.01;
-
+                _window.Top = -2000;
+                _window.Left = -2000;
                 _isHidden = true;
-                System.Diagnostics.Debug.WriteLine("[ImportantService] Окно спрятано");
+                System.Diagnostics.Debug.WriteLine("[ImportantService] Окно спрятано за экран");
             }
             else if (!isHidden && _isHidden)
             {
-                _window.Width = _savedWidth;
-                _window.Height = _savedHeight;
-                _window.Opacity = 1.0;
                 _window.Top = _savedTop;
                 _window.Left = _savedLeft;
-
                 _isHidden = false;
-                System.Diagnostics.Debug.WriteLine("[ImportantService] Окно показано");
+                System.Diagnostics.Debug.WriteLine("[ImportantService] Окно возвращено на позицию");
             }
         }
 
         public void ShowImportantMessage(Chater user, CommonMessage msg)
         {
-            if (!_isInitialized || _viewModel == null) return;
-
             lock (_messageQueue)
             {
                 _messageQueue.Enqueue((user, msg));
-                System.Diagnostics.Debug.WriteLine($"[ImportantService] Сообщение добавлено в очередь. В очереди: {_messageQueue.Count}");
+                System.Diagnostics.Debug.WriteLine($"[ImportantService] Добавлено в очередь: {msg.Message}");
             }
-
-            // Запускаем обработку очереди если она не запущена
-            if (!_isShowingMessage)
-            {
-                _isShowingMessage = true;
-                Task.Run(() => ProcessQueue());
-            }
+            if (!_isShowingQueue) Task.Run(() => ProcessQueue());
         }
 
-        private async void ProcessQueue()
+        private async Task ProcessQueue()
         {
+            _isShowingQueue = true;
             while (true)
             {
-                (Chater user, CommonMessage msg) currentMessage = (null, null);
-                bool hasMessage = false;
-
+                (Chater user, CommonMessage msg) item;
                 lock (_messageQueue)
                 {
-                    if (_messageQueue.Count == 0)
-                    {
-                        _isShowingMessage = false;
-                        hasMessage = false;
-                    }
-                    else
-                    {
-                        currentMessage = _messageQueue.Dequeue();
-                        hasMessage = true;
-                    }
+                    if (_messageQueue.Count == 0) break;
+                    item = _messageQueue.Dequeue();
                 }
 
-                if (!hasMessage) return; // Просто выходим, окно НЕ трогаем
+                // 1. Показываем текст (используем ShowMessage, а не ShowImportantMessage)
+                await Application.Current.Dispatcher.InvokeAsync(() => _viewModel?.ShowMessage(item.user, item.msg));
 
-                await ShowMessageAsync(currentMessage.user, currentMessage.msg);
-            }
-        }
+                // 2. Озвучиваем
+                await VoiceService.SayAsync(item.msg.Message);
 
-        private async Task ShowMessageAsync(Chater user, CommonMessage msg)
-        {
-            try
-            {
-                // 1. Показываем в окне
-                await Application.Current.Dispatcher.InvokeAsync(() =>
-                {
-                    _viewModel?.ShowImportantMessage(user, msg);
-                });
+                // 3. Ждем, пока сообщение висит на экране
+                await Task.Delay(4000);
 
-                // 2. Озвучиваем и ЖДЕМ завершения речи (Task)
-                // Мы вызываем VoiceService.SayAsync, который вернет задачу
-                await VoiceService.SayAsync(msg.Message);
+                // 4. Очищаем сообщение
+                await Application.Current.Dispatcher.InvokeAsync(() => _viewModel?.ClearMessages());
 
-                // 3. Дополнительная пауза, чтобы зритель успел дочитать после озвучки
-                await Task.Delay(2000);
-
-                // 4. Очищаем окно перед следующим сообщением
-                await Application.Current.Dispatcher.InvokeAsync(() =>
-                {
-                    _viewModel?.ClearMessage();
-                });
-
-                // Короткая пауза между алертами
                 await Task.Delay(500);
             }
-            catch (Exception ex)
-            {
-                System.Diagnostics.Debug.WriteLine($"[ImportantService] Ошибка: {ex.Message}");
-            }
+            _isShowingQueue = false;
         }
-
-
-        public bool IsVisible => _window?.Visibility == Visibility.Visible;
 
         public void SavePosition(AppSettings settings)
         {
-            if (_window == null) return;
+            if (_window == null)
+            {
+                System.Diagnostics.Debug.WriteLine($"[ImportantService] ОШИБКА: _window = null");
+                return;
+            }
+
+            System.Diagnostics.Debug.WriteLine($"[ImportantService] ===== СОХРАНЕНИЕ ПОЗИЦИИ =====");
+            System.Diagnostics.Debug.WriteLine($"[ImportantService] Текущая позиция: Top={_window.Top}, Left={_window.Left}");
+            System.Diagnostics.Debug.WriteLine($"[ImportantService] Текущие размеры: Width={_window.Width}, Height={_window.Height}");
 
             settings.ImportantOverlayTop = _isHidden ? _savedTop : _window.Top;
             settings.ImportantOverlayLeft = _isHidden ? _savedLeft : _window.Left;
             settings.ImportantOverlayWidth = _window.Width;
             settings.ImportantOverlayHeight = _window.Height;
-            settings.ImportantOverlayVisible = _window.Visibility == Visibility.Visible;
+            settings.ImportantChatMode = _currentMode;
 
-            System.Diagnostics.Debug.WriteLine($"[ImportantService] Позиция сохранена");
+            System.Diagnostics.Debug.WriteLine($"[ImportantService] СОХРАНЕНО в settings: {settings.ImportantOverlayWidth}x{settings.ImportantOverlayHeight}");
+        }
+
+        public void LoadPosition(AppSettings settings)
+        {
+            if (_window == null) return;
+
+            System.Diagnostics.Debug.WriteLine($"[ImportantService] ===== ЗАГРУЗКА ПОЗИЦИИ =====");
+            System.Diagnostics.Debug.WriteLine($"[ImportantService] До загрузки: {_window.Width}x{_window.Height}");
+            System.Diagnostics.Debug.WriteLine($"[ImportantService] Из settings: width={settings.ImportantOverlayWidth}, height={settings.ImportantOverlayHeight}");
+
+            _window.Top = settings.ImportantOverlayTop;
+            _window.Left = settings.ImportantOverlayLeft;
+            _window.Width = settings.ImportantOverlayWidth;
+            _window.Height = settings.ImportantOverlayHeight;
+
+            SetDisplayMode(settings.ImportantChatMode);
+
+            System.Diagnostics.Debug.WriteLine($"[ImportantService] После загрузки: {_window.Width}x{_window.Height}");
         }
 
         public void Show()
         {
             if (_window == null) return;
-
             _window.Visibility = Visibility.Visible;
             _window.Topmost = true;
-
             System.Diagnostics.Debug.WriteLine("[ImportantService] Окно показано");
         }
 
         public void Hide()
         {
             if (_window == null) return;
-
             _window.Visibility = Visibility.Collapsed;
-
             System.Diagnostics.Debug.WriteLine("[ImportantService] Окно скрыто");
+        }
+
+        public void Toggle()
+        {
+            if (_window == null) return;
+            if (_window.Visibility == Visibility.Visible)
+                Hide();
+            else
+                Show();
         }
     }
 }

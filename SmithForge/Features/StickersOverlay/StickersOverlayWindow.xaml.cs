@@ -4,11 +4,11 @@ using System.Windows.Input;
 using System.Runtime.InteropServices;
 using System.Windows.Interop;
 
-namespace SmithForge.Features.ImportantOverlay
+namespace SmithForge.Features.StickersOverlay
 {
-    public partial class ImportantOverlayWindow : Window
+    public partial class StickersOverlayWindow : Window
     {
-        // Импорт WinAPI для изменения размера окна "на лету"
+        // --- WinAPI для изменения размера ---
         [DllImport("user32.dll")]
         private static extern bool ReleaseCapture();
 
@@ -16,8 +16,6 @@ namespace SmithForge.Features.ImportantOverlay
         private static extern int SendMessage(IntPtr hWnd, int Msg, int wParam, int lParam);
 
         private const int WM_NCLBUTTONDOWN = 0xA1;
-
-        // Константы направлений изменения размера
         private const int HTLEFT = 0xA;
         private const int HTRIGHT = 0xB;
         private const int HTTOP = 0xC;
@@ -27,32 +25,35 @@ namespace SmithForge.Features.ImportantOverlay
         private const int HTBOTTOMLEFT = 0x10;
         private const int HTBOTTOMRIGHT = 0x11;
 
-        public ImportantOverlayWindow()
+        public StickersOverlayWindow()
         {
             InitializeComponent();
+
+            // Добавляем обработчики для отслеживания изменений размера и позиции
             this.SizeChanged += OnSizeChanged;
             this.LocationChanged += OnLocationChanged;
         }
 
         private void OnLocationChanged(object sender, EventArgs e)
         {
-            if (DataContext is ImportantOverlayViewModel vm &&
+            if (DataContext is StickersOverlayViewModel vm &&
                 Application.Current.MainWindow?.DataContext is SmithForge.ViewModels.MainViewModel mainVm)
             {
-                mainVm.SaveImportantPosition();
-                System.Diagnostics.Debug.WriteLine($"[ImportantWindow] Позиция изменена: {this.Left}, {this.Top}");
+                mainVm.SaveStickersPosition();
+                System.Diagnostics.Debug.WriteLine($"[StickersWindow] Позиция изменена: {this.Left}, {this.Top}");
             }
         }
+
         private void OnSizeChanged(object sender, SizeChangedEventArgs e)
         {
-            // При изменении размера сразу сохраняем в настройки
-            if (DataContext is ImportantOverlayViewModel vm &&
+            if (DataContext is StickersOverlayViewModel vm &&
                 Application.Current.MainWindow?.DataContext is SmithForge.ViewModels.MainViewModel mainVm)
             {
-                mainVm.SaveImportantPosition();
-                System.Diagnostics.Debug.WriteLine($"[ImportantWindow] Размер изменен: {e.NewSize.Width}x{e.NewSize.Height}");
+                mainVm.SaveStickersPosition();
+                System.Diagnostics.Debug.WriteLine($"[StickersWindow] Размер изменен: {e.NewSize.Width}x{e.NewSize.Height}");
             }
         }
+
         public void SetClickThrough(bool isClickThrough)
         {
             if (isClickThrough)
@@ -72,20 +73,19 @@ namespace SmithForge.Features.ImportantOverlay
         private void Window_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
         {
             // Работает только если включен режим настройки
-            if (!(DataContext is ImportantOverlayViewModel vm) || !vm.IsSetupMode)
+            if (!(DataContext is StickersOverlayViewModel vm) || !vm.IsSetupMode)
                 return;
 
             if (e.ButtonState == MouseButtonState.Pressed)
             {
                 Point pos = e.GetPosition(this);
-                double t = 10; // Зона захвата края в пикселях
+                double t = 10; // Зона захвата края
 
                 bool left = pos.X <= t;
                 bool right = pos.X >= this.ActualWidth - t;
                 bool top = pos.Y <= t;
                 bool bottom = pos.Y >= this.ActualHeight - t;
 
-                // Если мышка на краю - запускаем системный ресайз
                 if (left || right || top || bottom)
                 {
                     if (top && left) ResizeWindow("TopLeft");
@@ -99,7 +99,6 @@ namespace SmithForge.Features.ImportantOverlay
                 }
                 else
                 {
-                    // Если в центре - просто перетаскиваем окно
                     this.DragMove();
                 }
             }
@@ -107,7 +106,7 @@ namespace SmithForge.Features.ImportantOverlay
 
         private void ResizeWindow(string direction)
         {
-            ReleaseCapture();
+            ReleaseCapture();  // Строка 91
             int hitTest = direction switch
             {
                 "Left" => HTLEFT,
@@ -124,7 +123,7 @@ namespace SmithForge.Features.ImportantOverlay
             SendMessage(new WindowInteropHelper(this).Handle, WM_NCLBUTTONDOWN, hitTest, 0);
         }
 
-        // Синхронизируем физический размер окна со свойствами WPF для сохранения в конфиг
+        // Синхронизация для сохранения размеров
         protected override void OnRenderSizeChanged(SizeChangedInfo sizeInfo)
         {
             base.OnRenderSizeChanged(sizeInfo);

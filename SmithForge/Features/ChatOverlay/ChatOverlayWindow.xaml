@@ -9,12 +9,12 @@
 
     <Window.Resources>
         <BooleanToVisibilityConverter x:Key="BoolToVis"/>
-        <!-- Добавляем префикс local: чтобы студия увидела твой класс -->
-        <local:RankToColorConverter x:Key="RankToColorConverter"/>
+        <!-- Удалите эти две строки -->
+        <!-- <local:RankToColorConverter x:Key="RankToColorConverter"/> -->
+        <!-- <services:FormattedTextConverter x:Key="FormattedTextConverter"/> -->
     </Window.Resources>
 
     <Grid>
-        <!-- Сообщения -->
         <ItemsControl x:Name="MessagesList" 
                       ItemsSource="{Binding DisplayMessages}" 
                       VerticalAlignment="Bottom"
@@ -26,44 +26,34 @@
             </ItemsControl.ItemsPanel>
 
             <ItemsControl.ItemTemplate>
-    <DataTemplate>
-        <!-- На старте ScaleY="0" — для StackPanel этого сообщения НЕ СУЩЕСТВУЕТ (0px) -->
-        <Grid x:Name="MsgContainer" Opacity="0">
-            <Grid.LayoutTransform>
-                <ScaleTransform x:Name="LayoutScale" ScaleY="0"/>
-            </Grid.LayoutTransform>
-            
-            <ContentControl Content="{Binding}" ContentTemplate="{Binding MessageSkin}"/>
-
-            <Grid.Triggers>
-                <EventTrigger RoutedEvent="Loaded">
-                    <BeginStoryboard>
-                        <Storyboard>
-                            <!-- Плавно увеличиваем масштаб по вертикали -->
-                            <DoubleAnimation Storyboard.TargetName="LayoutScale"
-                                             Storyboard.TargetProperty="ScaleY"
-                                             From="0" To="1" Duration="0:0:0.4">
-                                <DoubleAnimation.EasingFunction>
-                                    <CubicEase EasingMode="EaseOut"/>
-                                </DoubleAnimation.EasingFunction>
-                            </DoubleAnimation>
-                            
-                            <!-- Плавное проявление -->
-                            <DoubleAnimation Storyboard.TargetProperty="Opacity"
-                                             From="0" To="1" Duration="0:0:0.3"/>
-                        </Storyboard>
-                    </BeginStoryboard>
-                </EventTrigger>
-            </Grid.Triggers>
-        </Grid>
-    </DataTemplate>
-</ItemsControl.ItemTemplate>
-
-
+                <DataTemplate>
+                    <!-- Добавили настройки текста здесь -->
+                    <ContentControl Content="{Binding}" 
+                        ContentTemplate="{Binding MessageSkin}"
+                        TextOptions.TextFormattingMode="Display"
+                        TextOptions.TextRenderingMode="ClearType"
+                        RenderOptions.EdgeMode="Aliased">
+                        <ContentControl.Resources>
+                            <Storyboard x:Key="FadeInStoryboard">
+                                <!-- Чтобы анимация не "держала" рендеринг после завершения, 
+                         можно добавить FillBehavior="Stop", но тогда Opacity 
+                         прыгнет в дефолт. Лучше просто убедиться, что 
+                         TextFormattingMode="Display" активен. -->
+                                <DoubleAnimation Storyboard.TargetProperty="Opacity" 
+                                     From="0" To="1" Duration="0:0:0.4"/>
+                            </Storyboard>
+                        </ContentControl.Resources>
+                        <ContentControl.Triggers>
+                            <EventTrigger RoutedEvent="Loaded">
+                                <BeginStoryboard Storyboard="{StaticResource FadeInStoryboard}"/>
+                            </EventTrigger>
+                        </ContentControl.Triggers>
+                    </ContentControl>
+                </DataTemplate>
+            </ItemsControl.ItemTemplate>
 
         </ItemsControl>
 
-        <!-- Область перетаскивания -->
         <Border x:Name="DragArea" 
                 Background="#44000000" 
                 BorderBrush="Cyan" 

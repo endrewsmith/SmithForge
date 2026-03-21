@@ -7,7 +7,38 @@ namespace SmithForge.Main.Services.ChatCommands
     public class ImportantCommand : BaseCommand
     {
         public override string Name => "важно";
-        public override IEnumerable<string> Aliases => new[] { "important", "важное", "imp" };
+
+        // Все возможные варианты команды
+        public override IEnumerable<string> Aliases => new[]
+        { 
+            // Основные варианты
+            "important",
+            "важное",
+            "imp",
+            
+            // Короткие русские варианты
+            "ввв",      // ввв - три буквы
+            "вж",       // вж - две буквы
+            "важ",      // важ - первые три буквы
+            
+            // Короткие английские
+            "im",
+            "impt",
+            
+            // Транслит
+            "vav",      // важно -> vav
+            "vvv",      // ввв -> vvv
+            "vazhno",
+            "vajno",
+            
+            // Русская транслитерация английских
+            "имп",      // imp -> имп
+            
+            // Самые короткие
+            "и",        // первая буква
+            "в"         // первая буква важно
+        };
+
         public override string Description => "Пометить сообщение как важное (показывается в отдельном окне)";
         public override int Cost => 5;
         public override int MinRank => 0;

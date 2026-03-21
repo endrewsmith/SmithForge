@@ -1,17 +1,19 @@
 ﻿using SmithForge.Main.Models;
+using SmithForge.Main.Models.ChatModes;
 using SmithForge.Features.ChatOverlay;
 using System;
 using System.Windows;
 
-namespace SmithForge.Main.Services
+namespace SmithForge.Features.ChatOverlay
 {
     public class ChatOverlayService
     {
         private ChatOverlayWindow? _overlayWindow;
         private ChatOverlayViewModel? _viewModel;
         private bool _isInitialized = false;
+        private ChatDisplayMode _currentMode = ChatDisplayMode.AppearAndFade;
 
-        // Новые поля для скрытия за экран
+        // Поля для скрытия за экран
         private bool _isHidden = false;
         private double _savedTop;
         private double _savedLeft;
@@ -32,26 +34,29 @@ namespace SmithForge.Main.Services
                     Visibility = Visibility.Collapsed
                 };
 
+                // ВАЖНО: передаем окно в ViewModel
+                _viewModel.SetWindow(_overlayWindow);
+
                 _overlayWindow.Show();
                 _overlayWindow.Hide();
 
                 _isInitialized = true;
+
+                System.Diagnostics.Debug.WriteLine("[ChatOverlayService] Окно создано");
             }
         }
 
-        public void Initialize(double top, double left, bool isSetupMode)
+        public void Initialize(double top, double left)
         {
             if (!_isInitialized || _overlayWindow == null) return;
 
             _overlayWindow.Top = top;
             _overlayWindow.Left = left;
 
-            SetMode(isSetupMode);
-
-            System.Diagnostics.Debug.WriteLine($"[ChatOverlayService] Инициализирован, режим настройки: {isSetupMode}");
+            System.Diagnostics.Debug.WriteLine($"[ChatOverlayService] Инициализирован, позиция: {top}, {left}");
         }
 
-        public void SetMode(bool isSetupMode)
+        public void SetSetupMode(bool isSetupMode)
         {
             if (_overlayWindow == null || _viewModel == null) return;
 
@@ -61,39 +66,35 @@ namespace SmithForge.Main.Services
             System.Diagnostics.Debug.WriteLine($"[ChatOverlayService] Режим настройки: {isSetupMode}");
         }
 
-        // НОВЫЙ МЕТОД для скрытия за экран
+        public void SetDisplayMode(ChatDisplayMode mode)
+        {
+            _currentMode = mode;
+            if (_viewModel != null)
+            {
+                _viewModel.SetMode(mode);
+            }
+            System.Diagnostics.Debug.WriteLine($"[ChatOverlayService] Установлен режим отображения: {mode}");
+        }
+
         public void SetHidden(bool isHidden)
         {
             if (_overlayWindow == null) return;
 
             if (isHidden && !_isHidden)
             {
-                // Сохраняем текущую позицию
                 _savedTop = _overlayWindow.Top;
                 _savedLeft = _overlayWindow.Left;
 
-                // Оставляем окно на месте, но делаем его полностью прозрачным
-                //_overlayWindow.Opacity = 0.01; // Почти прозрачно, но окно существует
-                //_overlayWindow.Topmost = false; // Убираем поверх всех
-                                                // Выносим за экран (окно остается видимым для OBS)
-                _overlayWindow.Top = 1 - _overlayWindow.Height; 
-                _overlayWindow.Left = 1 - _overlayWindow.Width;  
-
-                // ВАЖНО: окно должно оставаться Visible
-                //_overlayWindow.Visibility = Visibility.Visible;
+                _overlayWindow.Top = 1 - _overlayWindow.Height;
+                _overlayWindow.Left = 1 - _overlayWindow.Width;
 
                 _isHidden = true;
                 System.Diagnostics.Debug.WriteLine("[ChatOverlayService] Окно спрятано за экран");
             }
             else if (!isHidden && _isHidden)
             {
-                // Возвращаем видимость
-                //_overlayWindow.Opacity = 1.0;
-                //_overlayWindow.Topmost = true;
-                // Возвращаем на сохраненную позицию
                 _overlayWindow.Top = _savedTop;
                 _overlayWindow.Left = _savedLeft;
-                //_overlayWindow.Visibility = Visibility.Visible;
                 _isHidden = false;
                 System.Diagnostics.Debug.WriteLine("[ChatOverlayService] Окно возвращено на позицию");
             }
@@ -101,7 +102,12 @@ namespace SmithForge.Main.Services
 
         public void AddMessage(Chater user, CommonMessage msg)
         {
-            if (!_isInitialized || _viewModel == null) return;
+            if (!_isInitialized || _viewModel == null)
+            {
+                System.Diagnostics.Debug.WriteLine("[ChatOverlayService] Невозможно добавить сообщение: сервис не инициализирован");
+                return;
+            }
+
             _viewModel.AddMessage(user, msg);
         }
 
@@ -136,14 +142,14 @@ namespace SmithForge.Main.Services
         {
             if (_overlayWindow == null) return;
 
-            // Сохраняем реальную позицию (не спрятанную)
             settings.OverlayTop = _isHidden ? _savedTop : _overlayWindow.Top;
             settings.OverlayLeft = _isHidden ? _savedLeft : _overlayWindow.Left;
             settings.OverlayWidth = _overlayWindow.Width;
             settings.OverlayHeight = _overlayWindow.Height;
             settings.OverlayVisible = _overlayWindow.Visibility == Visibility.Visible;
+            settings.MainChatMode = _currentMode;
 
-            System.Diagnostics.Debug.WriteLine($"[ChatOverlayService] Позиция сохранена");
+            System.Diagnostics.Debug.WriteLine($"[ChatOverlayService] Позиция сохранена, режим: {_currentMode}");
         }
 
         public void LoadPosition(AppSettings settings)
@@ -155,12 +161,14 @@ namespace SmithForge.Main.Services
             _overlayWindow.Width = settings.OverlayWidth;
             _overlayWindow.Height = settings.OverlayHeight;
 
+            SetDisplayMode(settings.MainChatMode);
+
             if (settings.OverlayVisible)
             {
                 _overlayWindow.Visibility = Visibility.Visible;
             }
 
-            System.Diagnostics.Debug.WriteLine($"[ChatOverlayService] Позиция загружена");
+            System.Diagnostics.Debug.WriteLine($"[ChatOverlayService] Позиция загружена, режим: {_currentMode}");
         }
     }
 }
