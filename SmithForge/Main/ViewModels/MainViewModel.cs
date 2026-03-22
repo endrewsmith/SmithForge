@@ -22,6 +22,9 @@ namespace SmithForge.ViewModels
 {
     internal partial class MainViewModel : ObservableObject
     {
+
+        [ObservableProperty]
+        private int _stickerDisplayTime = 5000;
         // Режимы отображения для чатов
         [ObservableProperty] private ChatDisplayMode _mainChatMode = ChatDisplayMode.AppearAndFade;
         [ObservableProperty] private ChatDisplayMode _shortsChatMode = ChatDisplayMode.AppearAndFade;
@@ -157,8 +160,14 @@ namespace SmithForge.ViewModels
             _chatService.ProcessExited += (s, e) => OnProcessExited();
 
             _dashboardService.Initialize();
+            _stickerDisplayTime = Settings.StickerDisplayTimeMs;
         }
-
+        partial void OnStickerDisplayTimeChanged(int value)
+        {
+            Settings.StickerDisplayTimeMs = value;
+            _stickersService.SetDisplayTime(value);
+            ConfigService.Save(Settings);
+        }
         private void LoadInitialData()
         {
             var history = DatabaseService.LoadAll();
@@ -235,8 +244,6 @@ namespace SmithForge.ViewModels
                     await Task.Delay(200);
                     _stickersService.ShowSticker(chater, overlayMsg);
                 });
-                _overlayService.AddMessage(chater, overlayMsg);
-                _shortsService.AddMessage(chater, overlayMsg);
             }
             else
             {

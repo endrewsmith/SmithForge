@@ -50,7 +50,8 @@ namespace SmithForge.Features.ChatOverlay
                     // Пропускаем системные сообщения с тегами
                     if (msg.Message.Contains("<like") ||
                         msg.Message.Contains("<dislike") ||
-                        msg.Message.Contains("<nick"))
+                        msg.Message.Contains("<nick") ||
+                        msg.Message.Contains("<sticker"))
                     {
                         return;
                     }

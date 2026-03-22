@@ -193,7 +193,10 @@ namespace SmithForge.Features.ChatOverlayShorts
             {
                 var msgVm = new DisplayMessageViewModel(user, msg);
 
-                if (msg.Message.Contains("<like") || msg.Message.Contains("<dislike") || msg.Message.Contains("<nick"))
+                if (msg.Message.Contains("<like") ||
+    msg.Message.Contains("<dislike") ||
+    msg.Message.Contains("<nick") ||
+    msg.Message.Contains("<sticker"))
                 {
                     if (msg.Message.Contains("<like") || msg.Message.Contains("<dislike"))
                         ProcessReactionTags(msgVm);

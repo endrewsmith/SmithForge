@@ -9,6 +9,7 @@ namespace SmithForge.Main.Models
 {
     public partial class AppSettings : ObservableObject
     {
+        public int StickerDisplayTimeMs { get; set; } = 5000;
 
         private static readonly List<int> DefaultRankThresholds = new List<int> { 10, 50, 100, 200, 500, 1000 };
         private static readonly string ConfigPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "SF_Data", "settings.json");

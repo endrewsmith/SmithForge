@@ -171,5 +171,13 @@ namespace SmithForge.Main.Services
 
             System.Diagnostics.Debug.WriteLine($"[StickersOverlayService] Позиция загружена, режим: {_currentMode}");
         }
+
+        public void SetDisplayTime(int milliseconds)
+        {
+            if (_viewModel != null)
+            {
+                _viewModel.SetDisplayTime(milliseconds);
+            }
+        }
     }
 }

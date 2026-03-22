@@ -3,7 +3,6 @@ using SmithForge.Main.Models;
 using SmithForge.Main.Services;
 using System.Collections.ObjectModel;
 using System.Windows;
-using System.Windows.Threading;
 using System.Text.RegularExpressions;
 using System;
 
@@ -11,50 +10,37 @@ namespace SmithForge.Features.StickersOverlay
 {
     public partial class StickersOverlayViewModel : ObservableObject
     {
+        [ObservableProperty]
+        private int _stickerDisplayTimeMs = 5000;
         [ObservableProperty] private bool _isSetupMode;
         [ObservableProperty] private bool _isEnabled = true;
-        [ObservableProperty] private bool _isAutoDisplay = true;
-
-        [ObservableProperty] private double _messageDisplayDelay = 800;
-        [ObservableProperty] private int _maxQueueSize = 20;
-        [ObservableProperty] private int _queueSize;
 
         [ObservableProperty] private ChatDisplayMode _currentMode = ChatDisplayMode.AppearAndFade;
 
         public ObservableCollection<DisplayMessageViewModel> DisplayMessages { get; } = new();
 
-        private readonly Queue<DisplayMessageViewModel> _messageQueue = new();
-        private Timer? _displayTimer;
-        private bool _isProcessing = false;
+        // ОЧЕРЕДЬ СТИКЕРОВ
+        private readonly Queue<DisplayMessageViewModel> _stickerQueue = new();
+        private bool _isShowingSticker = false;
         private readonly object _queueLock = new object();
 
         public StickersOverlayViewModel()
         {
             ChaterStorage.OnChaterUpdated += OnChaterUpdated;
-            StartDisplayTimer();
         }
-
-        #region Управление режимом
-
-        /// <summary>
-        /// Установить режим отображения
-        /// </summary>
+        public void SetDisplayTime(int milliseconds)
+        {
+            StickerDisplayTimeMs = milliseconds;
+        }
         public void SetMode(ChatDisplayMode mode)
         {
             _currentMode = mode;
-
-            // Применяем настройки режима к существующим сообщениям
             foreach (var msg in DisplayMessages)
             {
                 ApplyModeSettings(msg);
             }
-
-            System.Diagnostics.Debug.WriteLine($"[StickersOverlayViewModel] Установлен режим: {mode}");
         }
 
-        /// <summary>
-        /// Применить настройки режима к сообщению
-        /// </summary>
         private void ApplyModeSettings(DisplayMessageViewModel msgVm)
         {
             switch (_currentMode)
@@ -63,30 +49,11 @@ namespace SmithForge.Features.StickersOverlay
                     msgVm.ShowAvatar = false;
                     msgVm.ShowRank = false;
                     break;
-                case ChatDisplayMode.AppearAndFade:
-                case ChatDisplayMode.AppearOnly:
-                case ChatDisplayMode.Slideshow:
-                    msgVm.ShowAvatar = true;
-                    msgVm.ShowRank = true;
-                    break;
                 default:
                     msgVm.ShowAvatar = true;
                     msgVm.ShowRank = true;
                     break;
             }
-        }
-
-        #endregion
-
-        public void StartDisplayTimer()
-        {
-            _displayTimer?.Dispose();
-            _displayTimer = new Timer(ProcessQueue, null, 0, (int)MessageDisplayDelay);
-        }
-
-        public void StopDisplayTimer()
-        {
-            _displayTimer?.Change(Timeout.Infinite, Timeout.Infinite);
         }
 
         public void ShowSticker(Chater user, CommonMessage msg)
@@ -97,107 +64,141 @@ namespace SmithForge.Features.StickersOverlay
             {
                 try
                 {
-                    var msgVm = new DisplayMessageViewModel(user, msg);
+                    // Извлекаем путь к стикеру из тега
+                    var stickerMatch = Regex.Match(msg.Message, @"<sticker pack='(\d+)' id='(\d+)' path='([^']+)'");
+                    string stickerPath = null;
+                    string textContent = "";
 
-                    // Очищаем текст от тегов
-                    string cleanText = Regex.Replace(msg.Message, @"<[^>]*>", "").Trim();
-                    if (string.IsNullOrEmpty(cleanText)) return;
+                    if (stickerMatch.Success)
+                    {
+                        stickerPath = stickerMatch.Groups[3].Value;
+                        // Удаляем тег стикера, но сохраняем остальной текст
+                        textContent = Regex.Replace(msg.Message, @"<sticker[^>]*/>", "").Trim();
+                    }
+                    else
+                    {
+                        // Если нет тега стикера, просто очищаем все теги
+                        textContent = Regex.Replace(msg.Message, @"<[^>]*>", "").Trim();
+                    }
 
-                    msgVm.MessageText = cleanText;
+                    // Если нет стикера — выходим (стикер обязателен)
+                    if (string.IsNullOrEmpty(stickerPath)) return;
 
-                    // Применяем настройки режима
+                    // Создаем ViewModel для стикера
+                    var msgVm = new DisplayMessageViewModel(user, msg, stickerPath);
+                    msgVm.MessageText = textContent;  // <-- ВАЖНО: заполняем текст!
+
+                    System.Diagnostics.Debug.WriteLine($"[Stickers] Стикер: path={stickerPath}, текст='{textContent}'");
+
                     ApplyModeSettings(msgVm);
 
                     lock (_queueLock)
                     {
-                        if (_messageQueue.Count >= MaxQueueSize)
-                        {
-                            _messageQueue.Dequeue();
-                        }
-                        _messageQueue.Enqueue(msgVm);
-                        QueueSize = _messageQueue.Count;
-                        System.Diagnostics.Debug.WriteLine($"[StickersOverlay] Добавлен стикер в очередь: {cleanText}");
+                        _stickerQueue.Enqueue(msgVm);
+                        System.Diagnostics.Debug.WriteLine($"[StickersQueue] Добавлен стикер, текст: '{textContent}', очередь: {_stickerQueue.Count}");
+                    }
+
+                    if (!_isShowingSticker)
+                    {
+                        ProcessQueue();
                     }
                 }
                 catch (Exception ex)
                 {
-                    System.Diagnostics.Debug.WriteLine($"[StickersOverlay AddSticker Error] {ex.Message}");
+                    System.Diagnostics.Debug.WriteLine($"[StickersOverlay ShowSticker Error] {ex.Message}");
                 }
             });
         }
-
-        private void ProcessQueue(object? state)
+        private async void ProcessQueue()
         {
-            if (_isProcessing || !IsAutoDisplay || !IsEnabled) return;
-            _isProcessing = true;
+            if (_isShowingSticker) return;
 
-            // Проверяем, существует ли приложение
-            if (Application.Current == null || Application.Current.Dispatcher == null)
+            lock (_queueLock)
             {
-                _isProcessing = false;
-                return;
+                if (_stickerQueue.Count == 0) return;
+                _isShowingSticker = true;
             }
+
+            while (true)
+            {
+                DisplayMessageViewModel? nextSticker = null;
+
+                lock (_queueLock)
+                {
+                    if (_stickerQueue.Count > 0)
+                    {
+                        nextSticker = _stickerQueue.Dequeue();
+                        System.Diagnostics.Debug.WriteLine($"[StickersQueue] Показываем стикер, осталось: {_stickerQueue.Count}");
+                    }
+                }
+
+                if (nextSticker == null) break;
+
+                // Показываем стикер
+                await ShowStickerInternal(nextSticker);
+
+                // Ждем, пока стикер висит на экране
+                await Task.Delay(StickerDisplayTimeMs);
+
+                // Убираем стикер
+                await HideStickerInternal(nextSticker);
+
+                // Небольшая задержка между стикерами
+                await Task.Delay(300);
+            }
+
+            lock (_queueLock)
+            {
+                _isShowingSticker = false;
+            }
+        }
+
+        private Task ShowStickerInternal(DisplayMessageViewModel stickerVm)
+        {
+            var tcs = new TaskCompletionSource<bool>();
 
             Application.Current.Dispatcher.Invoke(() =>
             {
                 try
                 {
-                    DisplayMessageViewModel? nextMessage = null;
-                    lock (_queueLock)
-                    {
-                        if (_messageQueue.Count > 0)
-                        {
-                            nextMessage = _messageQueue.Dequeue();
-                            QueueSize = _messageQueue.Count;
-                        }
-                    }
-                    if (nextMessage != null)
-                    {
-                        DisplaySticker(nextMessage);
-                    }
+                    // Очищаем предыдущие стикеры
+                    DisplayMessages.Clear();
+                    // Добавляем новый
+                    DisplayMessages.Add(stickerVm);
+                    tcs.SetResult(true);
                 }
                 catch (Exception ex)
                 {
-                    System.Diagnostics.Debug.WriteLine($"[StickersOverlay ProcessQueue Error] {ex.Message}");
-                }
-                finally
-                {
-                    _isProcessing = false;
+                    System.Diagnostics.Debug.WriteLine($"[ShowStickerInternal Error] {ex.Message}");
+                    tcs.SetException(ex);
                 }
             });
+
+            return tcs.Task;
         }
-        private void DisplaySticker(DisplayMessageViewModel msgVm)
+
+        private Task HideStickerInternal(DisplayMessageViewModel stickerVm)
         {
+            var tcs = new TaskCompletionSource<bool>();
+
             Application.Current.Dispatcher.Invoke(() =>
             {
-                DisplayMessages.Add(msgVm);
-
-                // Таймер удаления для режимов с исчезновением
-                if (_currentMode == ChatDisplayMode.AppearAndFade ||
-                    _currentMode == ChatDisplayMode.ScrollAndFade ||
-                    _currentMode == ChatDisplayMode.Compact)
+                try
                 {
-                    Task.Delay(msgVm.DisplayTimeMs).ContinueWith(_ =>
+                    if (DisplayMessages.Contains(stickerVm))
                     {
-                        Application.Current.Dispatcher.Invoke(() =>
-                        {
-                            if (DisplayMessages.Contains(msgVm))
-                            {
-                                DisplayMessages.Remove(msgVm);
-                            }
-                        });
-                    });
-                }
-                else if (_currentMode == ChatDisplayMode.Slideshow)
-                {
-                    // Для слайд-шоу показываем только последний стикер
-                    var tempList = DisplayMessages.ToList();
-                    foreach (var oldMsg in tempList.Where(m => m != msgVm))
-                    {
-                        DisplayMessages.Remove(oldMsg);
+                        DisplayMessages.Remove(stickerVm);
                     }
+                    tcs.SetResult(true);
+                }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine($"[HideStickerInternal Error] {ex.Message}");
+                    tcs.SetException(ex);
                 }
             });
+
+            return tcs.Task;
         }
 
         private void OnChaterUpdated(Chater updatedChater)
@@ -217,14 +218,15 @@ namespace SmithForge.Features.StickersOverlay
             Application.Current.Dispatcher.Invoke(() =>
             {
                 DisplayMessages.Clear();
-                lock (_queueLock) _messageQueue.Clear();
-                QueueSize = 0;
+                lock (_queueLock)
+                {
+                    _stickerQueue.Clear();
+                }
             });
         }
 
         public void Dispose()
         {
-            _displayTimer?.Dispose();
             ChaterStorage.OnChaterUpdated -= OnChaterUpdated;
         }
     }
