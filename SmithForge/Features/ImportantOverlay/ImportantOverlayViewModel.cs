@@ -41,33 +41,21 @@ namespace SmithForge.Features.ImportantOverlay
 
         #region Управление режимом
 
-        /// <summary>
-        /// Установить режим отображения чата
-        /// </summary>
         public void SetMode(ChatDisplayMode mode)
         {
             _currentMode = mode;
-
-            // Применяем настройки режима к существующим сообщениям
             foreach (var msg in DisplayMessages)
             {
                 ApplyModeSettings(msg);
             }
-
             System.Diagnostics.Debug.WriteLine($"[ImportantOverlayViewModel] Установлен режим: {mode}");
         }
 
-        /// <summary>
-        /// Получить текущий режим
-        /// </summary>
         public ChatDisplayMode GetCurrentMode()
         {
             return _currentMode;
         }
 
-        /// <summary>
-        /// Применить настройки режима к сообщению
-        /// </summary>
         private void ApplyModeSettings(DisplayMessageViewModel msgVm)
         {
             switch (_currentMode)
@@ -92,9 +80,6 @@ namespace SmithForge.Features.ImportantOverlay
                     msgVm.ShowRank = true;
                     msgVm.AnimationDuration = 400;
                     break;
-                case ChatDisplayMode.SmoothScroll:
-                case ChatDisplayMode.Instant:
-                case ChatDisplayMode.ScrollAndFade:
                 default:
                     msgVm.ShowAvatar = true;
                     msgVm.ShowRank = true;
@@ -137,13 +122,11 @@ namespace SmithForge.Features.ImportantOverlay
                 {
                     var msgVm = new DisplayMessageViewModel(user, msg);
 
-                    // Очищаем текст от тегов
                     string cleanText = Regex.Replace(msg.Message, @"<[^>]*>", "").Trim();
                     if (string.IsNullOrEmpty(cleanText)) return;
 
                     msgVm.MessageText = cleanText;
 
-                    // Устанавливаем время отображения согласно режиму
                     if (_currentMode == ChatDisplayMode.AppearAndFade ||
                         _currentMode == ChatDisplayMode.ScrollAndFade ||
                         _currentMode == ChatDisplayMode.Compact)
@@ -152,10 +135,9 @@ namespace SmithForge.Features.ImportantOverlay
                     }
                     else
                     {
-                        msgVm.DisplayTimeMs = 0; // Бесконечное отображение
+                        msgVm.DisplayTimeMs = 0;
                     }
 
-                    // Применяем настройки режима
                     ApplyModeSettings(msgVm);
 
                     lock (_queueLock)
@@ -186,7 +168,7 @@ namespace SmithForge.Features.ImportantOverlay
             if (_isProcessing || !IsAutoDisplay || !IsEnabled) return;
             _isProcessing = true;
 
-            Application.Current.Dispatcher.Invoke(() =>
+            Application.Current.Dispatcher.Invoke(async () =>
             {
                 try
                 {
@@ -202,7 +184,18 @@ namespace SmithForge.Features.ImportantOverlay
                     }
                     if (nextMessage != null)
                     {
-                        DisplayMessage(nextMessage);
+                        // 1. ПОКАЗЫВАЕМ СООБЩЕНИЕ
+                        await ShowMessageInternal(nextMessage);
+
+                        // 2. ВОСПРОИЗВОДИМ ЗВУК
+                        await VoiceService.PlayImportantSoundAsync();
+                        // 2. ЖДЕМ 500 МС ДЛЯ АНИМАЦИИ ПОЯВЛЕНИЯ
+                        await Task.Delay(500);
+                        // 3. ОЗВУЧИВАЕМ ТЕКСТ
+                        await VoiceService.SayAsync(nextMessage.MessageText);
+
+                        // 4. УДАЛЯЕМ СООБЩЕНИЕ ПОСЛЕ ОЗВУЧКИ
+                        await HideMessageInternal(nextMessage);
                     }
                 }
                 catch (Exception ex)
@@ -214,6 +207,58 @@ namespace SmithForge.Features.ImportantOverlay
                     _isProcessing = false;
                 }
             });
+        }
+
+        private Task ShowMessageInternal(DisplayMessageViewModel msgVm)
+        {
+            var tcs = new TaskCompletionSource<bool>();
+
+            Application.Current.Dispatcher.Invoke(() =>
+            {
+                try
+                {
+                    if (_currentMode == ChatDisplayMode.Slideshow)
+                    {
+                        DisplayMessages.Clear();
+                    }
+
+                    DisplayMessages.Add(msgVm);
+                    tcs.SetResult(true);
+                    System.Diagnostics.Debug.WriteLine($"[ImportantOverlay] Сообщение показано: {msgVm.MessageText}");
+                }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine($"[ImportantOverlay ShowMessage Error] {ex.Message}");
+                    tcs.SetException(ex);
+                }
+            });
+
+            return tcs.Task;
+        }
+
+        private Task HideMessageInternal(DisplayMessageViewModel msgVm)
+        {
+            var tcs = new TaskCompletionSource<bool>();
+
+            Application.Current.Dispatcher.Invoke(() =>
+            {
+                try
+                {
+                    if (DisplayMessages.Contains(msgVm))
+                    {
+                        DisplayMessages.Remove(msgVm);
+                        System.Diagnostics.Debug.WriteLine($"[ImportantOverlay] Сообщение удалено: {msgVm.MessageText}");
+                    }
+                    tcs.SetResult(true);
+                }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine($"[ImportantOverlay HideMessage Error] {ex.Message}");
+                    tcs.SetException(ex);
+                }
+            });
+
+            return tcs.Task;
         }
 
         public void DisplayNextMessage()
@@ -232,7 +277,12 @@ namespace SmithForge.Features.ImportantOverlay
                     }
                 }
                 if (nextMessage != null)
-                    DisplayMessage(nextMessage);
+                {
+                    ShowMessageInternal(nextMessage);
+                    VoiceService.PlayImportantSound();
+                    VoiceService.SayAsync(nextMessage.MessageText);
+                    Task.Delay(3000).ContinueWith(_ => HideMessageInternal(nextMessage));
+                }
             });
         }
 
@@ -253,69 +303,14 @@ namespace SmithForge.Features.ImportantOverlay
 
                 foreach (var msg in messages)
                 {
-                    DisplayMessage(msg);
-                    await Task.Delay(50);
+                    await ShowMessageInternal(msg);
+                    VoiceService.PlayImportantSound();
+                    await VoiceService.SayAsync(msg.MessageText);
+                    await HideMessageInternal(msg);
+                    await Task.Delay(300);
                 }
 
                 IsAutoDisplay = wasAutoDisplay;
-            });
-        }
-
-        #endregion
-
-        #region Отображение сообщения
-
-        private void DisplayMessage(DisplayMessageViewModel msgVm)
-        {
-            Application.Current.Dispatcher.Invoke(() =>
-            {
-                try
-                {
-                    System.Diagnostics.Debug.WriteLine($"[ImportantOverlay Display] Выводим: {msgVm.MessageText}");
-
-                    // Для слайд-шоу очищаем все предыдущие сообщения
-                    if (_currentMode == ChatDisplayMode.Slideshow)
-                    {
-                        DisplayMessages.Clear();
-                    }
-
-                    DisplayMessages.Add(msgVm);
-
-                    // Таймер удаления для режимов с исчезновением
-                    if (_currentMode == ChatDisplayMode.AppearAndFade ||
-                        _currentMode == ChatDisplayMode.ScrollAndFade ||
-                        _currentMode == ChatDisplayMode.Compact)
-                    {
-                        if (msgVm.DisplayTimeMs > 0)
-                        {
-                            Task.Delay(msgVm.DisplayTimeMs).ContinueWith(_ =>
-                            {
-                                Application.Current.Dispatcher.Invoke(() =>
-                                {
-                                    if (DisplayMessages.Contains(msgVm))
-                                    {
-                                        DisplayMessages.Remove(msgVm);
-                                        System.Diagnostics.Debug.WriteLine($"[ImportantOverlay] Сообщение удалено: {msgVm.MessageText}");
-                                    }
-                                });
-                            });
-                        }
-                    }
-
-                    // Лимит сообщений для режимов без удаления
-                    if (_currentMode != ChatDisplayMode.AppearAndFade &&
-                        _currentMode != ChatDisplayMode.ScrollAndFade &&
-                        _currentMode != ChatDisplayMode.Compact &&
-                        DisplayMessages.Count > 30)
-                    {
-                        var oldestMsg = DisplayMessages[0];
-                        DisplayMessages.Remove(oldestMsg);
-                    }
-                }
-                catch (Exception ex)
-                {
-                    System.Diagnostics.Debug.WriteLine($"[ImportantOverlay Display Error] {ex.Message}");
-                }
             });
         }
 

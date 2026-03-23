@@ -110,19 +110,21 @@ namespace SmithForge.Features.ImportantOverlay
                     item = _messageQueue.Dequeue();
                 }
 
-                // 1. Показываем текст (используем ShowMessage, а не ShowImportantMessage)
+                // 1. Показываем текст в ViewModel (здесь только показ, без озвучки)
                 await Application.Current.Dispatcher.InvokeAsync(() => _viewModel?.ShowMessage(item.user, item.msg));
 
-                // 2. Озвучиваем
-                await VoiceService.SayAsync(item.msg.Message);
+                // 2. НЕ ОЗВУЧИВАЕМ ЗДЕСЬ! Озвучка будет в ViewModel
+                // await VoiceService.SayAsync(item.msg.Message);  // <-- УБРАТЬ ЭТУ СТРОКУ!
 
-                // 3. Ждем, пока сообщение висит на экране
-                await Task.Delay(4000);
-
-                // 4. Очищаем сообщение
-                await Application.Current.Dispatcher.InvokeAsync(() => _viewModel?.ClearMessages());
-
+                // 3. Ждем, пока сообщение обработается в ViewModel
+                // Время ожидания теперь управляется в ViewModel, поэтому здесь просто ждем
                 await Task.Delay(500);
+
+                // 4. Очищаем сообщение (ViewModel сам удалит после озвучки, это на всякий случай)
+                // await Application.Current.Dispatcher.InvokeAsync(() => _viewModel?.ClearMessages());
+
+                // Небольшая пауза между сообщениями
+                await Task.Delay(300);
             }
             _isShowingQueue = false;
         }

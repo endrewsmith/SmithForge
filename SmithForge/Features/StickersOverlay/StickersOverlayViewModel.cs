@@ -133,6 +133,8 @@ namespace SmithForge.Features.StickersOverlay
                 }
 
                 if (nextSticker == null) break;
+                // ВОСПРОИЗВЕСТИ ЗВУК СТИКЕРА
+                VoiceService.PlayStickerSound();
 
                 // Показываем стикер
                 await ShowStickerInternal(nextSticker);
