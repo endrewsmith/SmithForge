@@ -22,17 +22,32 @@ namespace SmithForge.Main.Services
         {
             _settings = settings ?? throw new ArgumentNullException(nameof(settings));
             _commandMap = new Dictionary<string, IChatCommand>(StringComparer.OrdinalIgnoreCase);
-
-            // ДОБАВЛЯЕМ: загружаем сокращения из настроек
-            _shortcuts = new Dictionary<string, string>(
-                settings.CommandShortcuts ?? new Dictionary<string, string>(),
-                StringComparer.OrdinalIgnoreCase
-            );
-
-            Debug.WriteLine($"[MessageProcessor] Загружено {_shortcuts.Count} сокращений команд");
-            foreach (var shortcut in _shortcuts)
+            // ИСПРАВЛЕНО: загружаем сокращения из настроек
+            if (settings.CommandShortcuts != null && settings.CommandShortcuts.Any())
             {
-                Debug.WriteLine($"[MessageProcessor]   '{shortcut.Key}' -> '{shortcut.Value}'");
+                _shortcuts = settings.GetCommandShortcutsAsDictionary();
+                Debug.WriteLine($"[MessageProcessor] Загружено {_shortcuts.Count} сокращений команд");
+
+                // Выводим все сокращения для проверки
+                foreach (var shortcut in _shortcuts)
+                {
+                    Debug.WriteLine($"[MessageProcessor]   '{shortcut.Key}' -> '{shortcut.Value}'");
+                }
+            }
+            else
+            {
+                _shortcuts = new Dictionary<string, string>();
+                Debug.WriteLine("[MessageProcessor] Нет сокращений команд в настройках");
+
+                // Для отладки: выводим содержимое settings.CommandShortcuts
+                if (settings.CommandShortcuts == null)
+                {
+                    Debug.WriteLine("[MessageProcessor] settings.CommandShortcuts == null");
+                }
+                else if (!settings.CommandShortcuts.Any())
+                {
+                    Debug.WriteLine($"[MessageProcessor] settings.CommandShortcuts пуст, Count = {settings.CommandShortcuts.Count}");
+                }
             }
 
             var commandsList = new List<IChatCommand>
@@ -45,7 +60,7 @@ namespace SmithForge.Main.Services
                 new LikeCommand(),
                 new DislikeCommand(),
                 new NickCommand(),      // ДОБАВЛЯЕМ
-                new ImportantCommand(), // ДОБАВЛЯЕМ
+new VoiceCommand(),
                 new StickerCommand(),   // ДОБАВЛЯЕМ
             };
 
@@ -80,17 +95,24 @@ namespace SmithForge.Main.Services
             for (int i = 0; i < words.Length; i++)
             {
                 string word = words[i].ToLower();
+                Debug.WriteLine($"[Shortcuts] Проверяем слово: '{word}'");
+
                 if (_shortcuts.TryGetValue(word, out string? replacement))
                 {
                     words[i] = replacement;
                     changed = true;
-                    Debug.WriteLine($"[Shortcuts] Заменено '{word}' на '{replacement}'");
+                    Debug.WriteLine($"[Shortcuts] ЗАМЕНА! '{word}' -> '{replacement}'");
+                }
+                else
+                {
+                    Debug.WriteLine($"[Shortcuts] Слово '{word}' не найдено в словаре");
                 }
             }
 
-            return changed ? string.Join(" ", words) : message;
+            string result = changed ? string.Join(" ", words) : message;
+            Debug.WriteLine($"[Shortcuts] Результат: '{result}'");
+            return result;
         }
-
         public void Process(CommonMessage msg)
         {
             Debug.WriteLine($"[MessageProcessor] === НАЧАЛО ОБРАБОТКИ ===");

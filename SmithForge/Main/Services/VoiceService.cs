@@ -13,11 +13,13 @@ namespace SmithForge.Main.Services
         private static MediaPlayer? _mediaPlayer;
         private static TaskCompletionSource<bool>? _soundCompletionSource;
 
+        // Текущий выбранный голос
+        private static string? _currentVoiceName;
+
         public static Task SayAsync(string text)
         {
             if (string.IsNullOrWhiteSpace(text)) return Task.CompletedTask;
 
-            // Чистим текст от тегов <important> и прочих
             string cleanText = Regex.Replace(text, @"<[^>]*>", "").Trim();
             if (string.IsNullOrEmpty(cleanText)) return Task.CompletedTask;
 
@@ -29,20 +31,22 @@ namespace SmithForge.Main.Services
                     {
                         synth.SetOutputToDefaultAudioDevice();
 
-                        // Ищем голос Александра
-                        var voice = synth.GetInstalledVoices()
-                            .FirstOrDefault(v => v.Enabled && v.VoiceInfo.Name.Contains("Aleksandr"));
-
-                        if (voice != null)
+                        if (!string.IsNullOrEmpty(_currentVoiceName))
                         {
-                            synth.SelectVoice(voice.VoiceInfo.Name);
+                            try
+                            {
+                                synth.SelectVoice(_currentVoiceName);
+                            }
+                            catch
+                            {
+                                var voice = synth.GetInstalledVoices().FirstOrDefault(v => v.Enabled);
+                                if (voice != null)
+                                    synth.SelectVoice(voice.VoiceInfo.Name);
+                            }
                         }
 
-                        // Настройки (можно подкрутить)
-                        synth.Rate = 1;   // Скорость (-10 до 10)
-                        synth.Volume = 100; // Громкость
-
-                        // Speak блокирует поток до конца речи, что нам и нужно для очереди
+                        synth.Rate = 1;
+                        synth.Volume = 100;
                         synth.Speak(cleanText);
                     }
                 }
@@ -53,10 +57,46 @@ namespace SmithForge.Main.Services
             });
         }
 
-        /// <summary>
-        /// Воспроизвести звуковой файл из папки SF_Data/Assets/Sounds/ (без ожидания)
-        /// </summary>
-        /// <param name="fileName">Имя файла (например, "sticker_pop.mp3")</param>
+        public static List<string> GetAvailableVoiceNames()
+        {
+            try
+            {
+                using (var synth = new SpeechSynthesizer())
+                {
+                    return synth.GetInstalledVoices()
+                        .Where(v => v.Enabled)
+                        .Select(v => v.VoiceInfo.Name)
+                        .ToList();
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[VoiceService] Ошибка: {ex.Message}");
+                return new List<string>();
+            }
+        }
+
+        public static bool SelectVoice(string voiceName)
+        {
+            if (string.IsNullOrWhiteSpace(voiceName)) return false;
+
+            var voices = GetAvailableVoiceNames();
+            var match = voices.FirstOrDefault(v =>
+                v.Equals(voiceName, StringComparison.OrdinalIgnoreCase) ||
+                v.Contains(voiceName, StringComparison.OrdinalIgnoreCase));
+
+            if (match != null)
+            {
+                _currentVoiceName = match;
+                System.Diagnostics.Debug.WriteLine($"[VoiceService] Выбран голос: {_currentVoiceName}");
+                return true;
+            }
+
+            return false;
+        }
+
+        public static string? GetCurrentVoiceName() => _currentVoiceName;
+
         public static void PlaySound(string fileName)
         {
             try
@@ -71,7 +111,6 @@ namespace SmithForge.Main.Services
                     _mediaPlayer = new MediaPlayer();
                     _mediaPlayer.Open(new Uri(soundPath, UriKind.Absolute));
                     _mediaPlayer.Play();
-
                     System.Diagnostics.Debug.WriteLine($"[VoiceService] Воспроизведен звук: {fileName}");
                 }
                 else
@@ -81,14 +120,10 @@ namespace SmithForge.Main.Services
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"[VoiceService] Ошибка воспроизведения: {ex.Message}");
+                System.Diagnostics.Debug.WriteLine($"[VoiceService] Ошибка: {ex.Message}");
             }
         }
 
-        /// <summary>
-        /// Воспроизвести звуковой файл с ожиданием окончания
-        /// </summary>
-        /// <param name="fileName">Имя файла (например, "important.mp3")</param>
         public static Task PlaySoundAsync(string fileName)
         {
             _soundCompletionSource = new TaskCompletionSource<bool>();
@@ -103,22 +138,14 @@ namespace SmithForge.Main.Services
                 {
                     _mediaPlayer?.Close();
                     _mediaPlayer = new MediaPlayer();
-                    _mediaPlayer.MediaEnded += (s, e) =>
-                    {
-                        _soundCompletionSource?.TrySetResult(true);
-                    };
-                    _mediaPlayer.MediaFailed += (s, e) =>
-                    {
-                        _soundCompletionSource?.TrySetResult(false);
-                    };
+                    _mediaPlayer.MediaEnded += (s, e) => _soundCompletionSource?.TrySetResult(true);
+                    _mediaPlayer.MediaFailed += (s, e) => _soundCompletionSource?.TrySetResult(false);
                     _mediaPlayer.Open(new Uri(soundPath, UriKind.Absolute));
                     _mediaPlayer.Play();
-
                     System.Diagnostics.Debug.WriteLine($"[VoiceService] Воспроизведен звук (async): {fileName}");
                 }
                 else
                 {
-                    System.Diagnostics.Debug.WriteLine($"[VoiceService] Файл не найден: {soundPath}");
                     _soundCompletionSource?.TrySetResult(false);
                 }
             }
@@ -131,41 +158,28 @@ namespace SmithForge.Main.Services
             return _soundCompletionSource.Task;
         }
 
-        /// <summary>
-        /// Звук для стикера (без ожидания)
-        /// </summary>
+        // ========== МЕТОДЫ ДЛЯ СТИКЕРОВ И ВАЖНЫХ СООБЩЕНИЙ ==========
+
         public static void PlayStickerSound()
         {
             PlaySound("sticker_pop.mp3");
         }
 
-        /// <summary>
-        /// Звук для важного сообщения (без ожидания)
-        /// </summary>
         public static void PlayImportantSound()
         {
             PlaySound("important.mp3");
         }
 
-        /// <summary>
-        /// Звук для важного сообщения с ожиданием окончания
-        /// </summary>
-        public static Task PlayImportantSoundAsync()
-        {
-            return PlaySoundAsync("important.mp3");
-        }
-
-        /// <summary>
-        /// Звук для стикера с ожиданием окончания
-        /// </summary>
         public static Task PlayStickerSoundAsync()
         {
             return PlaySoundAsync("sticker_pop.mp3");
         }
 
-        /// <summary>
-        /// Короткий системный бип (для теста, не требует файлов)
-        /// </summary>
+        public static Task PlayImportantSoundAsync()
+        {
+            return PlaySoundAsync("important.mp3");
+        }
+
         public static void PlayBeep()
         {
             Task.Run(() => Console.Beep(1000, 150));
