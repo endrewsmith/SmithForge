@@ -114,6 +114,7 @@ namespace SmithForge.Features.ImportantOverlay
 
         public void ShowMessage(Chater user, CommonMessage msg)
         {
+            System.Diagnostics.Debug.WriteLine($"[ImportantOverlayViewModel] ShowMessage вызван: {user.EffectiveName}: {msg.Message}");
             if (!IsEnabled) return;
 
             Application.Current.Dispatcher.Invoke(() =>
@@ -371,5 +372,63 @@ namespace SmithForge.Features.ImportantOverlay
         }
 
         #endregion
+        /// <summary>
+        /// Воспроизвести следующее сообщение из очереди (для ручного режима)
+        /// </summary>
+        public async Task PlayNextFromQueueAsync()
+        {
+            if (_isProcessing)
+            {
+                System.Diagnostics.Debug.WriteLine("[ImportantOverlay] Уже воспроизводится, подождите");
+                return;
+            }
+
+            _isProcessing = true;
+
+            try
+            {
+                DisplayMessageViewModel? nextMessage = null;
+                lock (_queueLock)
+                {
+                    if (_messageQueue.Count > 0)
+                    {
+                        nextMessage = _messageQueue.Dequeue();
+                        QueueSize = _messageQueue.Count;
+                        System.Diagnostics.Debug.WriteLine($"[ImportantOverlay] Ручное воспроизведение: {nextMessage?.MessageText}, осталось: {QueueSize}");
+                    }
+                }
+
+                if (nextMessage != null)
+                {
+                    // Показываем сообщение
+                    await ShowMessageInternal(nextMessage);
+
+                    // Ждем для анимации
+                    await Task.Delay(500);
+
+                    // Воспроизводим звук и голос
+                    await VoiceService.PlayImportantSoundAsync();
+                    await VoiceService.SayAsync(nextMessage.MessageText);
+
+                    // Ждем пока сообщение будет видно
+                    await Task.Delay(nextMessage.DisplayTimeMs > 0 ? nextMessage.DisplayTimeMs : 3000);
+
+                    // Скрываем сообщение
+                    await HideMessageInternal(nextMessage);
+                }
+                else
+                {
+                    System.Diagnostics.Debug.WriteLine("[ImportantOverlay] Очередь пуста");
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[ImportantOverlay PlayNext Error] {ex.Message}");
+            }
+            finally
+            {
+                _isProcessing = false;
+            }
+        }
     }
 }

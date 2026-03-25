@@ -91,6 +91,15 @@ namespace SmithForge.Main.Models
         public string DefaultMaleVoice { get; set; } = string.Empty;
         public string DefaultFemaleVoice { get; set; } = string.Empty;
 
+        public int ImportantSoundVolume { get; set; } = 100;
+        public int VoiceVolume { get; set; } = 100;
+
+        // Режим воспроизведения важных сообщений (Auto/Manual)
+        public ImportantPlaybackMode ImportantPlaybackMode { get; set; } = ImportantPlaybackMode.Auto;
+
+        // Горячая клавиша для воспроизведения (по умолчанию F8)
+        public string ImportantPlaybackHotkey { get; set; } = "F8";
+
         // Пороги рангов - с автоматической очисткой при get и set
         [XmlIgnore] // Игнорируем для XML, так как используем отдельное поле
         public List<int> RankThresholds

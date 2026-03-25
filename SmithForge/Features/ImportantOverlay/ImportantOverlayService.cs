@@ -1,11 +1,15 @@
 ﻿using SmithForge.Features.ImportantOverlay;
 using SmithForge.Main.Models;
 using SmithForge.Main.Services;
+using SmithForge.ViewModels;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
+using System.Runtime;
 using System.Threading.Tasks;
 using System.Windows;
+using static Dapper.SqlMapper;
 
 namespace SmithForge.Features.ImportantOverlay
 {
@@ -23,6 +27,13 @@ namespace SmithForge.Features.ImportantOverlay
         private bool _isHidden = false;
         private double _savedTop;
         private double _savedLeft;
+
+        private readonly AppSettings _settings;
+
+        public ImportantOverlayService(AppSettings settings)
+        {
+            _settings = settings;
+        }
 
         public void Initialize(double top, double left, double width, double height, bool isSetupMode)
         {
@@ -88,16 +99,67 @@ namespace SmithForge.Features.ImportantOverlay
             }
         }
 
-        public void ShowImportantMessage(Chater user, CommonMessage msg)
+        public void ShowImportantMessage(Chater chater, CommonMessage message)
         {
-            lock (_messageQueue)
-            {
-                _messageQueue.Enqueue((user, msg));
-                System.Diagnostics.Debug.WriteLine($"[ImportantService] Добавлено в очередь: {msg.Message}");
-            }
-            if (!_isShowingQueue) Task.Run(() => ProcessQueue());
-        }
+            string importantText = $"Важное сообщение от {chater.EffectiveName}: {message.Message}";
 
+            // Получаем актуальные настройки
+            var settings = ConfigService.Load();
+
+            System.Diagnostics.Debug.WriteLine($"[ImportantOverlay] Текущий режим: {settings.ImportantPlaybackMode}");
+            System.Diagnostics.Debug.WriteLine($"[ImportantOverlay] Auto = {ImportantPlaybackMode.Auto}, Manual = {ImportantPlaybackMode.Manual}");
+
+            // Проверяем режим воспроизведения
+            if (settings.ImportantPlaybackMode == ImportantPlaybackMode.Auto)
+            {
+                System.Diagnostics.Debug.WriteLine("[ImportantOverlay] РЕЖИМ: АВТОМАТИЧЕСКИЙ");
+                _ = Task.Run(async () =>
+                {
+                    await VoiceService.PlayImportantSoundAsync();
+                    await VoiceService.SayAsync(importantText);
+                });
+            }
+            else
+            {
+                System.Diagnostics.Debug.WriteLine("[ImportantOverlay] РЕЖИМ: РУЧНОЙ");
+
+                // Добавляем в очередь (это потокобезопасно)
+                ImportantQueueService.Enqueue(importantText);
+
+                // Обновляем счетчик в UI потоке
+                Application.Current.Dispatcher.Invoke(() =>
+                {
+                    var mainViewModel = Application.Current.MainWindow?.DataContext as MainViewModel;
+                    mainViewModel?.UpdateImportantQueueCount(ImportantQueueService.QueueCount);
+                });
+            }
+
+            // Отображаем сообщение в оверлее - обязательно в UI потоке
+            Application.Current.Dispatcher.Invoke(() =>
+            {
+                _viewModel?.ShowMessage(chater, message);
+            });
+        }
+        private void AddMessageToOverlay(Chater chater, CommonMessage message)
+        {
+            // Используйте существующий метод для отображения сообщения
+            // Например, если у вас есть метод ShowMessage или AddMessage:
+
+            Application.Current.Dispatcher.Invoke(() =>
+            {
+                // Вариант 1: Если есть ObservableCollection
+                // Messages.Add(message);
+
+                // Вариант 2: Если есть метод для добавления сообщения
+                // AddMessage(message);
+
+                // Вариант 3: Вызвать событие
+                // MessageReceived?.Invoke(chater, message);
+
+                // Если ничего из этого не подходит, просто покажите сообщение через Debug
+                System.Diagnostics.Debug.WriteLine($"[ImportantOverlay] Показ сообщения: {chater.EffectiveName}: {message.Message}");
+            });
+        }
         private async Task ProcessQueue()
         {
             _isShowingQueue = true;
@@ -110,25 +172,17 @@ namespace SmithForge.Features.ImportantOverlay
                     item = _messageQueue.Dequeue();
                 }
 
-                // 1. Показываем текст в ViewModel (здесь только показ, без озвучки)
+                // Показываем текст в ViewModel
                 await Application.Current.Dispatcher.InvokeAsync(() => _viewModel?.ShowMessage(item.user, item.msg));
 
-                // 2. НЕ ОЗВУЧИВАЕМ ЗДЕСЬ! Озвучка будет в ViewModel
-                // await VoiceService.SayAsync(item.msg.Message);  // <-- УБРАТЬ ЭТУ СТРОКУ!
-
-                // 3. Ждем, пока сообщение обработается в ViewModel
-                // Время ожидания теперь управляется в ViewModel, поэтому здесь просто ждем
-                await Task.Delay(500);
-
-                // 4. Очищаем сообщение (ViewModel сам удалит после озвучки, это на всякий случай)
-                // await Application.Current.Dispatcher.InvokeAsync(() => _viewModel?.ClearMessages());
+                // Ждем время отображения (управляется в ViewModel)
+                // Не очищаем сообщение здесь - это делает ViewModel после таймера
 
                 // Небольшая пауза между сообщениями
                 await Task.Delay(300);
             }
             _isShowingQueue = false;
         }
-
         public void SavePosition(AppSettings settings)
         {
             if (_window == null)

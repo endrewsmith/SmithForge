@@ -4,9 +4,18 @@
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:local="clr-namespace:SmithForge.Main.Views"
+        xmlns:converters="clr-namespace:SmithForge.Main.Converters"
         mc:Ignorable="d"
         Title="SmithForge" Height="500" Width="800"
         WindowStartupLocation="CenterScreen">
+
+    <Window.Resources>
+        <converters:EnumToBooleanConverter x:Key="EnumToBooleanConverter"/>
+        <converters:EnumToVisibilityConverter x:Key="EnumToVisibilityConverter"/>
+        <converters:PlaybackModeToColorConverter x:Key="PlaybackModeToColorConverter"/>
+    </Window.Resources>
+
+
 
     <Grid Margin="0">
         <Grid.RowDefinitions>
@@ -259,22 +268,132 @@
                     <Grid>
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="Auto"/>
-                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="Auto"/>
                             <ColumnDefinition Width="Auto"/>
                             <ColumnDefinition Width="Auto"/>
                         </Grid.ColumnDefinitions>
-                        <TextBlock Grid.Column="0" Text="❗" FontSize="16" Margin="0,0,8,0" VerticalAlignment="Center"/>
-                        <TextBlock Grid.Column="1" Text="Важные сообщения" FontWeight="SemiBold" VerticalAlignment="Center"/>
-                        <ComboBox Grid.Column="2" 
+
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+
+                        <!-- Строка 0: Иконка и название -->
+                        <TextBlock Grid.Row="0" Grid.Column="0" Text="❗" FontSize="16" Margin="0,0,8,0" VerticalAlignment="Center"/>
+                        <TextBlock Grid.Row="0" Grid.Column="1" Text="Важные сообщения" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,20,0"/>
+
+                        <!-- Строка 0: Переключатель режима -->
+                        <StackPanel Grid.Row="0" Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,15,0">
+                            <RadioButton Content="🤖 авто" 
+                         IsChecked="{Binding ImportantPlaybackMode, Converter={StaticResource EnumToBooleanConverter}, ConverterParameter=Auto}"
+                         Margin="0,0,5,0"
+                         Padding="10,5"
+                         Background="{Binding ImportantPlaybackMode, Converter={StaticResource PlaybackModeToColorConverter}, ConverterParameter=Auto}"
+                         Foreground="White"
+                         BorderThickness="1"
+                         BorderBrush="#888">
+                                <RadioButton.Resources>
+                                    <Style TargetType="RadioButton">
+                                        <Setter Property="Background" Value="#555"/>
+                                        <Setter Property="Template">
+                                            <Setter.Value>
+                                                <ControlTemplate TargetType="RadioButton">
+                                                    <Border Background="{TemplateBinding Background}"
+                                            BorderBrush="{TemplateBinding BorderBrush}"
+                                            BorderThickness="{TemplateBinding BorderThickness}"
+                                            CornerRadius="4"
+                                            Padding="{TemplateBinding Padding}">
+                                                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                                    </Border>
+                                                </ControlTemplate>
+                                            </Setter.Value>
+                                        </Setter>
+                                    </Style>
+                                </RadioButton.Resources>
+                            </RadioButton>
+
+                            <RadioButton Content="🎮 ручн" 
+                         IsChecked="{Binding ImportantPlaybackMode, Converter={StaticResource EnumToBooleanConverter}, ConverterParameter=Manual}"
+                         Margin="0,0,5,0"
+                         Padding="10,5"
+                         Background="{Binding ImportantPlaybackMode, Converter={StaticResource PlaybackModeToColorConverter}, ConverterParameter=Manual}"
+                         Foreground="White"
+                         BorderThickness="1"
+                         BorderBrush="#888">
+                                <RadioButton.Resources>
+                                    <Style TargetType="RadioButton">
+                                        <Setter Property="Background" Value="#555"/>
+                                        <Setter Property="Template">
+                                            <Setter.Value>
+                                                <ControlTemplate TargetType="RadioButton">
+                                                    <Border Background="{TemplateBinding Background}"
+                                            BorderBrush="{TemplateBinding BorderBrush}"
+                                            BorderThickness="{TemplateBinding BorderThickness}"
+                                            CornerRadius="4"
+                                            Padding="{TemplateBinding Padding}">
+                                                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                                    </Border>
+                                                </ControlTemplate>
+                                            </Setter.Value>
+                                        </Setter>
+                                    </Style>
+                                </RadioButton.Resources>
+                            </RadioButton>
+
+                            <Border Background="#FFE0E0" CornerRadius="4" Padding="5,2" Margin="5,0,0,0"
+                    Visibility="{Binding ImportantPlaybackMode, Converter={StaticResource EnumToVisibilityConverter}, ConverterParameter=Manual}">
+                                <TextBlock Text="{Binding ImportantQueueCount, StringFormat='📋 {0}'}" 
+                           FontSize="11" FontWeight="Bold"/>
+                            </Border>
+                        </StackPanel>
+
+                        <!-- Строка 0: Громкость звука -->
+                        <StackPanel Grid.Row="0" Grid.Column="3" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,15,0">
+                            <TextBlock Text="🔊 звук:" FontSize="11" VerticalAlignment="Center" Margin="0,0,5,0"/>
+                            <Slider Width="80" Minimum="0" Maximum="100" 
+                    Value="{Binding ImportantSoundVolume, UpdateSourceTrigger=PropertyChanged}"
+                    VerticalAlignment="Center"/>
+                            <TextBlock Text="{Binding ImportantSoundVolume, StringFormat={}{0}%}" 
+                       FontSize="10" Margin="5,0,0,0" Width="35"/>
+                        </StackPanel>
+
+                        <!-- Строка 0: Громкость голоса -->
+                        <StackPanel Grid.Row="0" Grid.Column="4" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,15,0">
+                            <TextBlock Text="🎤 голос:" FontSize="11" VerticalAlignment="Center" Margin="0,0,5,0"/>
+                            <Slider Width="80" Minimum="0" Maximum="100" 
+                    Value="{Binding VoiceVolume, UpdateSourceTrigger=PropertyChanged}"
+                    VerticalAlignment="Center"/>
+                            <TextBlock Text="{Binding VoiceVolume, StringFormat={}{0}%}" 
+                       FontSize="10" Margin="5,0,0,0" Width="35"/>
+                        </StackPanel>
+
+                        <!-- Строка 0: Горячая клавиша -->
+                        <StackPanel Grid.Row="0" Grid.Column="5" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,10,0"
+                    Visibility="{Binding ImportantPlaybackMode, Converter={StaticResource EnumToVisibilityConverter}, ConverterParameter=Manual}">
+                            <TextBlock Text="⌨️" FontSize="14" VerticalAlignment="Center" Margin="0,0,5,0"/>
+                            <ComboBox Width="70" Height="24" 
+                      ItemsSource="{Binding AvailableHotkeys}"
+                      SelectedItem="{Binding ImportantPlaybackHotkey}"
+                      IsEditable="True"
+                      ToolTip="Выберите горячую клавишу для воспроизведения"/>
+                        </StackPanel>
+
+                        <!-- Строка 1: Режим отображения и кнопки -->
+                        <ComboBox Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="3"
                   ItemsSource="{Binding AvailableModes}"
                   SelectedValue="{Binding ImportantChatMode}"
                   SelectedValuePath="Mode"
                   DisplayMemberPath="Name"
-                  Width="180" 
-                  Margin="0,0,10,0"
-                  VerticalAlignment="Center"
-                  ToolTip="Выберите режим отображения"/>
-                        <StackPanel Grid.Column="3" Orientation="Horizontal">
+                  Width="150" 
+                  Margin="0,5,0,0"
+                  VerticalAlignment="Center"/>
+
+                        <StackPanel Grid.Row="1" Grid.Column="4" Grid.ColumnSpan="2" 
+                    Orientation="Horizontal" 
+                    HorizontalAlignment="Right" 
+                    Margin="0,5,0,0">
                             <Button Content="👁️" Width="30" Height="30" Margin="0,0,5,0" 
                     ToolTip="Показать/скрыть"
                     Command="{Binding ToggleImportantOverlayCommand}"/>

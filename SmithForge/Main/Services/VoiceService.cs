@@ -10,11 +10,13 @@ namespace SmithForge.Main.Services
 {
     public static class VoiceService
     {
+        private static int _importantSoundVolume = 100;
+        private static int _voiceVolume = 100;
         private static MediaPlayer? _mediaPlayer;
         private static TaskCompletionSource<bool>? _soundCompletionSource;
-
-        // Текущий выбранный голос
         private static string? _currentVoiceName;
+
+        // ========== ОСНОВНЫЕ МЕТОДЫ ==========
 
         public static Task SayAsync(string text)
         {
@@ -30,6 +32,7 @@ namespace SmithForge.Main.Services
                     using (SpeechSynthesizer synth = new SpeechSynthesizer())
                     {
                         synth.SetOutputToDefaultAudioDevice();
+                        synth.Volume = _voiceVolume;
 
                         if (!string.IsNullOrEmpty(_currentVoiceName))
                         {
@@ -46,8 +49,8 @@ namespace SmithForge.Main.Services
                         }
 
                         synth.Rate = 1;
-                        synth.Volume = 100;
                         synth.Speak(cleanText);
+                        System.Diagnostics.Debug.WriteLine($"[VoiceService] Голос воспроизведен (громкость: {_voiceVolume}%)");
                     }
                 }
                 catch (Exception ex)
@@ -63,10 +66,36 @@ namespace SmithForge.Main.Services
             {
                 using (var synth = new SpeechSynthesizer())
                 {
-                    return synth.GetInstalledVoices()
+                    var voices = synth.GetInstalledVoices()
                         .Where(v => v.Enabled)
-                        .Select(v => v.VoiceInfo.Name)
+                        .Select(v => v.VoiceInfo)
                         .ToList();
+
+                    var russianVoices = voices
+                        .Where(v => v.Culture.TwoLetterISOLanguageName == "ru")
+                        .Select(v => v.Name)
+                        .ToList();
+
+                    if (russianVoices.Any())
+                    {
+                        System.Diagnostics.Debug.WriteLine($"[VoiceService] Найдено русских голосов: {russianVoices.Count}");
+                        return russianVoices;
+                    }
+
+                    var fallbackVoices = voices
+                        .Where(v => v.Name.Contains("Irina", StringComparison.OrdinalIgnoreCase) ||
+                                   v.Name.Contains("Pavel", StringComparison.OrdinalIgnoreCase))
+                        .Select(v => v.Name)
+                        .ToList();
+
+                    if (fallbackVoices.Any())
+                    {
+                        System.Diagnostics.Debug.WriteLine($"[VoiceService] Найдено русскоязычных голосов: {fallbackVoices.Count}");
+                        return fallbackVoices;
+                    }
+
+                    System.Diagnostics.Debug.WriteLine("[VoiceService] Русские голоса не найдены");
+                    return voices.Select(v => v.Name).ToList();
                 }
             }
             catch (Exception ex)
@@ -96,6 +125,8 @@ namespace SmithForge.Main.Services
         }
 
         public static string? GetCurrentVoiceName() => _currentVoiceName;
+
+        // ========== МЕТОДЫ ДЛЯ ЗВУКОВ ==========
 
         public static void PlaySound(string fileName)
         {
@@ -177,12 +208,59 @@ namespace SmithForge.Main.Services
 
         public static Task PlayImportantSoundAsync()
         {
-            return PlaySoundAsync("important.mp3");
+            _soundCompletionSource = new TaskCompletionSource<bool>();
+
+            try
+            {
+                string soundPath = Path.Combine(
+                    AppDomain.CurrentDomain.BaseDirectory,
+                    "SF_Data", "Assets", "Sounds", "important.mp3");
+
+                if (File.Exists(soundPath))
+                {
+                    _mediaPlayer?.Close();
+                    _mediaPlayer = new MediaPlayer();
+                    _mediaPlayer.Volume = _importantSoundVolume / 100.0;
+                    _mediaPlayer.MediaEnded += (s, e) => _soundCompletionSource?.TrySetResult(true);
+                    _mediaPlayer.MediaFailed += (s, e) => _soundCompletionSource?.TrySetResult(false);
+                    _mediaPlayer.Open(new Uri(soundPath, UriKind.Absolute));
+                    _mediaPlayer.Play();
+                    System.Diagnostics.Debug.WriteLine($"[VoiceService] Воспроизведен важный звук (громкость: {_importantSoundVolume}%)");
+                }
+                else
+                {
+                    _soundCompletionSource?.TrySetResult(false);
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[VoiceService] Ошибка: {ex.Message}");
+                _soundCompletionSource?.TrySetResult(false);
+            }
+
+            return _soundCompletionSource.Task;
         }
 
         public static void PlayBeep()
         {
             Task.Run(() => Console.Beep(1000, 150));
         }
+
+        // ========== МЕТОДЫ УПРАВЛЕНИЯ ГРОМКОСТЬЮ ==========
+
+        public static void SetImportantSoundVolume(int volume)
+        {
+            _importantSoundVolume = Math.Clamp(volume, 0, 100);
+            System.Diagnostics.Debug.WriteLine($"[VoiceService] Громкость звука важных сообщений: {_importantSoundVolume}%");
+        }
+
+        public static void SetVoiceVolume(int volume)
+        {
+            _voiceVolume = Math.Clamp(volume, 0, 100);
+            System.Diagnostics.Debug.WriteLine($"[VoiceService] Громкость голоса: {_voiceVolume}%");
+        }
+
+        public static int GetImportantSoundVolume() => _importantSoundVolume;
+        public static int GetVoiceVolume() => _voiceVolume;
     }
 }

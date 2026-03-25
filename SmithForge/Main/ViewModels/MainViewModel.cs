@@ -22,7 +22,21 @@ namespace SmithForge.ViewModels
 {
     internal partial class MainViewModel : ObservableObject
     {
+        // В начало класса, после других [ObservableProperty]
+        [ObservableProperty]
+        private ImportantPlaybackMode _importantPlaybackMode = ImportantPlaybackMode.Auto;
 
+        [ObservableProperty]
+        private string _importantPlaybackHotkey = "F8";
+
+        [ObservableProperty]
+        private int _importantQueueCount = 0; // Количество сообщений в очереди
+        // Громкость для важных сообщений
+        [ObservableProperty]
+        private int _importantSoundVolume = 100;
+
+        [ObservableProperty]
+        private int _voiceVolume = 100;
         [ObservableProperty]
         private int _stickerDisplayTime = 5000;
         // Режимы отображения для чатов
@@ -93,7 +107,7 @@ namespace SmithForge.ViewModels
             _shortsService.SetDisplayMode(ShortsChatMode);
             _shortsService.LoadPosition(Settings);
 
-            _importantService = new ImportantOverlayService();
+            _importantService = new ImportantOverlayService(Settings);
             _importantService.Initialize(
                 Settings.ImportantOverlayTop,
                 Settings.ImportantOverlayLeft,
@@ -161,12 +175,77 @@ namespace SmithForge.ViewModels
 
             _dashboardService.Initialize();
             _stickerDisplayTime = Settings.StickerDisplayTimeMs;
+
+            // Загружаем настройки громкости
+            _importantSoundVolume = Settings.ImportantSoundVolume;
+            _voiceVolume = Settings.VoiceVolume;
+
+
+            _importantPlaybackMode = Settings.ImportantPlaybackMode;
+            _importantPlaybackHotkey = Settings.ImportantPlaybackHotkey;
+        }
+
+        partial void OnImportantPlaybackModeChanged(ImportantPlaybackMode value)
+        {
+            Settings.ImportantPlaybackMode = value;
+            ConfigService.Save(Settings);
+
+            if (value == ImportantPlaybackMode.Auto)
+            {
+                // При переключении на авто - очищаем очередь
+                ImportantQueueService.ClearQueue();
+                ImportantQueueCount = 0;
+            }
+
+            Debug.WriteLine($"[MainVM] Режим воспроизведения важных сообщений: {value}");
+        }
+
+        partial void OnImportantPlaybackHotkeyChanged(string value)
+        {
+            Settings.ImportantPlaybackHotkey = value;
+            ConfigService.Save(Settings);
+            Debug.WriteLine($"[MainVM] Горячая клавиша: {value}");
+        }
+
+        // Обновление счетчика очереди
+        public void UpdateImportantQueueCount(int count)
+        {
+            Application.Current.Dispatcher.Invoke(() =>
+            {
+                ImportantQueueCount = count;
+            });
+        }
+
+        [RelayCommand]
+        private void PlayNextImportant()
+        {
+            if (ImportantPlaybackMode == ImportantPlaybackMode.Manual)
+            {
+                ImportantQueueService.PlayNext();
+                UpdateImportantQueueCount(ImportantQueueService.QueueCount);
+            }
         }
         partial void OnStickerDisplayTimeChanged(int value)
         {
             Settings.StickerDisplayTimeMs = value;
             _stickersService.SetDisplayTime(value);
             ConfigService.Save(Settings);
+        }
+
+        partial void OnImportantSoundVolumeChanged(int value)
+        {
+            Settings.ImportantSoundVolume = value;
+            ConfigService.Save(Settings);
+            VoiceService.SetImportantSoundVolume(value);
+            Debug.WriteLine($"[MainVM] Громкость звука важных сообщений: {value}%");
+        }
+
+        partial void OnVoiceVolumeChanged(int value)
+        {
+            Settings.VoiceVolume = value;
+            ConfigService.Save(Settings);
+            VoiceService.SetVoiceVolume(value);
+            Debug.WriteLine($"[MainVM] Громкость голоса: {value}%");
         }
         private void LoadInitialData()
         {

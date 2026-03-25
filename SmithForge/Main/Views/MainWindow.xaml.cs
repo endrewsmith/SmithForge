@@ -1,9 +1,11 @@
 ﻿using SmithForge.Features.ChaterManager;
+using SmithForge.Main.Models;
 using SmithForge.Main.Services;
+using SmithForge.ViewModels;
+using System.Text.RegularExpressions;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
-using System.Text.RegularExpressions;
 
 namespace SmithForge.Main.Views
 {
@@ -131,6 +133,24 @@ namespace SmithForge.Main.Views
             }
         }
 
+        protected override void OnKeyDown(KeyEventArgs e)
+        {
+            base.OnKeyDown(e);
 
+            // Получаем настройки через ConfigService
+            var settings = ConfigService.Load();
+
+            // Проверяем режим и горячую клавишу
+            if (settings.ImportantPlaybackMode == ImportantPlaybackMode.Manual)
+            {
+                // Сравниваем с настроенной горячей клавишей
+                if (e.Key.ToString() == settings.ImportantPlaybackHotkey)
+                {
+                    var vm = DataContext as MainViewModel;
+                    vm?.PlayNextImportantCommand.Execute(null);
+                    e.Handled = true;
+                }
+            }
+        }
     }
 }
