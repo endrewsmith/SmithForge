@@ -4,6 +4,7 @@ using SmithForge.ViewModels;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 
@@ -11,20 +12,28 @@ namespace SmithForge.Features.ImportantOverlay
 {
     public class ImportantOverlayService
     {
+        private bool _isPlaying = false; // флаг, что идет воспроизведение
+
+        public bool IsPlaying => _isPlaying || _isAutoPlaying || _isPlayingManual;
+        private bool _isAutoPlaying = false;
+        private bool _isPlayingManual = false;
         private ImportantOverlayWindow? _window;
         private ImportantOverlayViewModel? _viewModel;
         private bool _isInitialized = false;
         private ChatDisplayMode _currentMode = ChatDisplayMode.AppearAndFade;
-        public bool IsVisible => _window != null && _window.Visibility == Visibility.Visible;
-
         private bool _isHidden = false;
         private double _savedTop;
         private double _savedLeft;
         private readonly AppSettings _settings;
 
-        // Очередь для ручного режима (хранит оригинальные объекты)
-        private readonly Queue<(Chater chater, CommonMessage message, string text)> _manualQueue = new();
-        private bool _isPlayingManual = false;
+        private readonly Queue<(Chater chater, CommonMessage message, string text)> _messageQueue = new();
+        private bool _isProcessing = false;
+        private readonly object _queueLock = new object();
+
+        // Событие для обновления счетчика (без прямого UI вызова)
+        public event EventHandler<int>? QueueCountChanged;
+        public bool IsVisible => _window != null && _window.Visibility == Visibility.Visible;
+        public int QueueSize { get { lock (_queueLock) return _messageQueue.Count; } }
 
         public ImportantOverlayService(AppSettings settings)
         {
@@ -34,19 +43,25 @@ namespace SmithForge.Features.ImportantOverlay
         public void Initialize(double top, double left, double width, double height, bool isSetupMode)
         {
             if (_isInitialized) return;
-            _viewModel = new ImportantOverlayViewModel();
-            _window = new ImportantOverlayWindow
+
+            Application.Current.Dispatcher.Invoke(() =>
             {
-                DataContext = _viewModel,
-                Top = top,
-                Left = left,
-                Width = width > 0 ? width : 450,
-                Height = height > 0 ? height : 600,
-                Visibility = Visibility.Visible
-            };
-            SetSetupMode(isSetupMode);
-            SetDisplayMode(_currentMode);
-            _isInitialized = true;
+                _viewModel = new ImportantOverlayViewModel();
+                _window = new ImportantOverlayWindow
+                {
+                    DataContext = _viewModel,
+                    Top = top,
+                    Left = left,
+                    Width = width > 0 ? width : 450,
+                    Height = height > 0 ? height : 600,
+                    Visibility = Visibility.Visible
+                };
+
+                SetSetupMode(isSetupMode);
+                SetDisplayMode(_currentMode);
+                _isInitialized = true;
+                Debug.WriteLine("[ImportantService] Инициализация завершена");
+            });
         }
 
         public void SetSetupMode(bool isSetupMode)
@@ -61,7 +76,17 @@ namespace SmithForge.Features.ImportantOverlay
             _currentMode = mode;
             _viewModel?.SetMode(mode);
         }
+        private bool _isAutoSwitchingEnabled = false;
 
+        public bool IsAutoSwitchingEnabled
+        {
+            get => _isAutoSwitchingEnabled;
+            set
+            {
+                _isAutoSwitchingEnabled = value;
+                Debug.WriteLine($"[ImportantService] IsAutoSwitchingEnabled = {value}");
+            }
+        }
         public void SetHidden(bool isHidden)
         {
             if (_window == null) return;
@@ -81,73 +106,217 @@ namespace SmithForge.Features.ImportantOverlay
             }
         }
 
-        /// <summary>
-        /// Главный метод показа сообщения
-        /// </summary>
         public void ShowImportantMessage(Chater chater, CommonMessage message)
         {
-            string importantText = $"Важное сообщение от {chater.EffectiveName}: {message.Message}";
+            string importantText = $"Сообщение от {chater.EffectiveName}: {message.Message}";
             var settings = ConfigService.Load();
 
             Debug.WriteLine($"[ImportantOverlay] Режим: {(settings.ImportantPlaybackMode == ImportantPlaybackMode.Auto ? "АВТО" : "РУЧНОЙ")}");
             Debug.WriteLine($"[ImportantOverlay] Текст: {importantText}");
+            Debug.WriteLine($"[ImportantOverlay] IsAutoSwitchingEnabled: {_isAutoSwitchingEnabled}");
+            Debug.WriteLine($"[ImportantOverlay] QueueSize до добавления: {_messageQueue.Count}");
+            Debug.WriteLine($"[ImportantOverlay] IsPlaying: {_isPlaying}");
 
-            if (settings.ImportantPlaybackMode == ImportantPlaybackMode.Auto)
+            // Добавляем в очередь
+            int newCount;
+            lock (_queueLock)
             {
-                // АВТО-РЕЖИМ: сразу показываем и озвучиваем
-                _ = Task.Run(async () => await ShowAndSpeakAsync(chater, message, importantText));
+                _messageQueue.Enqueue((chater, message, importantText));
+                newCount = _messageQueue.Count;
+                Debug.WriteLine($"[Queue] Добавлено. Всего: {newCount}");
+            }
+
+            // Вызываем событие обновления счетчика
+            Application.Current.Dispatcher.BeginInvoke(new Action(() =>
+            {
+                try
+                {
+                    QueueCountChanged?.Invoke(this, newCount);
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine($"[ImportantOverlay] Ошибка в QueueCountChanged: {ex.Message}");
+                }
+            }), System.Windows.Threading.DispatcherPriority.Normal);
+
+            // Логика воспроизведения
+            bool shouldPlay = false;
+
+            if (!_isAutoSwitchingEnabled)
+            {
+                shouldPlay = settings.ImportantPlaybackMode == ImportantPlaybackMode.Auto && !_isAutoPlaying;
+                Debug.WriteLine($"[ImportantOverlay] Режим чтения ВЫКЛ, shouldPlay={shouldPlay}");
             }
             else
             {
-                // РУЧНОЙ РЕЖИМ: сохраняем оригинальные объекты в очередь
-                _manualQueue.Enqueue((chater, message, importantText));
-                Debug.WriteLine($"[ManualQueue] Добавлено. Всего: {_manualQueue.Count}");
-
-                // Обновляем счетчик
-                Application.Current.Dispatcher.Invoke(() =>
+                // Если уже идет воспроизведение И пришло новое сообщение
+                if (_isPlaying && newCount > 1)
                 {
-                    var vm = Application.Current.MainWindow?.DataContext as MainViewModel;
-                    vm?.UpdateImportantQueueCount(_manualQueue.Count);
-                });
+                    Debug.WriteLine("[ImportantOverlay] Идет воспроизведение, пришло новое сообщение - переключаем на ручной режим");
+                    shouldPlay = false;
+
+                    // Переключаем режим на ручной
+                    Application.Current.Dispatcher.BeginInvoke(new Action(() =>
+                    {
+                        var mainVm = Application.Current.MainWindow?.DataContext as MainViewModel;
+                        mainVm?.SetImportantPlaybackMode(ImportantPlaybackMode.Manual);
+                    }));
+
+                    // Останавливаем текущее авто-воспроизведение
+                    _isAutoPlaying = false;
+                }
+                // Если очередь пуста (была 0, стало 1) - воспроизводим
+                else if (newCount == 1 && !_isPlaying)
+                {
+                    shouldPlay = settings.ImportantPlaybackMode == ImportantPlaybackMode.Auto && !_isAutoPlaying;
+                    Debug.WriteLine($"[ImportantOverlay] Режим чтения ВКЛ, первое сообщение, shouldPlay={shouldPlay}");
+                }
+                else
+                {
+                    shouldPlay = false;
+                    Debug.WriteLine($"[ImportantOverlay] Режим чтения ВКЛ, newCount={newCount}, shouldPlay=False (накопление)");
+                }
+            }
+
+            if (shouldPlay)
+            {
+                Debug.WriteLine("[ImportantOverlay] Запускаем авто-воспроизведение");
+                _ = Task.Run(async () => await ProcessAutoQueueAsync());
+            }
+            else
+            {
+                Debug.WriteLine("[ImportantOverlay] Не запускаем авто-воспроизведение");
             }
         }
+        private async Task ProcessAutoQueueAsync()
+        {
+            try
+            {
+                lock (_queueLock)
+                {
+                    if (_isProcessing) return;
+                    _isProcessing = true;
+                }
 
-        /// <summary>
-        /// Показать и озвучить сообщение (для авто-режима и ручного воспроизведения)
-        /// </summary>
+                _isAutoPlaying = true;
+
+                while (true)
+                {
+                    // Проверяем режим
+                    var settings = ConfigService.Load();
+                    if (_isAutoSwitchingEnabled && settings.ImportantPlaybackMode != ImportantPlaybackMode.Auto)
+                    {
+                        Debug.WriteLine("[ProcessAutoQueue] Режим изменился на ручной, останавливаем");
+                        break;
+                    }
+
+                    (Chater chater, CommonMessage message, string text) item;
+                    lock (_queueLock)
+                    {
+                        if (_messageQueue.Count == 0) break;
+                        item = _messageQueue.Peek();
+                    }
+
+                    await ShowAndSpeakAsync(item.chater, item.message, item.text);
+
+                    int newCount;
+                    lock (_queueLock)
+                    {
+                        _messageQueue.Dequeue();
+                        newCount = _messageQueue.Count;
+                        Debug.WriteLine($"[Queue] Воспроизведено. Осталось: {newCount}");
+                    }
+
+                    // Вызываем событие обновления счетчика
+                    Application.Current.Dispatcher.BeginInvoke(new Action(() =>
+                    {
+                        QueueCountChanged?.Invoke(this, newCount);
+                    }), System.Windows.Threading.DispatcherPriority.Normal);
+
+                    // Если режим чтения включен, останавливаемся после воспроизведения одного сообщения
+                    if (_isAutoSwitchingEnabled)
+                    {
+                        Debug.WriteLine("[ProcessAutoQueue] Режим чтения ВКЛ, останавливаем авто-воспроизведение после одного сообщения");
+                        break;
+                    }
+
+                    // Если очередь пуста, выходим
+                    if (newCount == 0)
+                    {
+                        Debug.WriteLine("[ProcessAutoQueue] Очередь пуста, останавливаем");
+                        break;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[ProcessAutoQueue] ОШИБКА: {ex.Message}");
+            }
+            finally
+            {
+                _isAutoPlaying = false;
+                lock (_queueLock) { _isProcessing = false; }
+            }
+        }
         private async Task ShowAndSpeakAsync(Chater chater, CommonMessage message, string text)
         {
             try
             {
+                _isPlaying = true;
                 Debug.WriteLine($"[ShowAndSpeak] Начинаем: {text}");
 
-                // 1. Показываем сообщение в оверлее
                 await Application.Current.Dispatcher.InvokeAsync(() =>
                 {
                     _viewModel?.ShowMessage(chater, message);
                 });
 
-                // Небольшая задержка для анимации
                 await Task.Delay(200);
-
-                // 2. Воспроизводим звук уведомления
-                await VoiceService.PlayImportantSoundAsync();
-
-                // 3. Воспроизводим голос
                 await VoiceService.SayAsync(text);
+                await Task.Delay(800);
 
-                Debug.WriteLine("[ShowAndSpeak] Завершено успешно");
+                await Application.Current.Dispatcher.InvokeAsync(() =>
+                {
+                    _viewModel?.ClearMessages();
+                });
+
+                Debug.WriteLine("[ShowAndSpeak] Сообщение отработано");
+
+                // После воспроизведения проверяем очередь
+                int remainingCount;
+                lock (_queueLock)
+                {
+                    remainingCount = _messageQueue.Count;
+                }
+
+                Debug.WriteLine($"[ShowAndSpeak] После воспроизведения, осталось в очереди: {remainingCount}");
+
+                // Если очередь пуста, вызываем событие для переключения режима
+                Application.Current.Dispatcher.BeginInvoke(new Action(() =>
+                {
+                    QueueCountChanged?.Invoke(this, remainingCount);
+                    Debug.WriteLine($"[ShowAndSpeak] QueueCountChanged вызван с count={remainingCount}");
+
+                    // ✅ Принудительная синхронизация, если очередь пуста и режим ручной
+                    if (remainingCount == 0)
+                    {
+                        var mainVm = Application.Current.MainWindow?.DataContext as MainViewModel;
+                        if (mainVm != null && mainVm.ImportantPlaybackMode == ImportantPlaybackMode.Manual && mainVm.IsAutoSwitchingEnabled)
+                        {
+                            Debug.WriteLine("[ShowAndSpeak] Принудительное переключение режима на Auto");
+                            mainVm.ImportantPlaybackMode = ImportantPlaybackMode.Auto;
+                        }
+                    }
+                }), System.Windows.Threading.DispatcherPriority.Normal);
             }
             catch (Exception ex)
             {
                 Debug.WriteLine($"[ShowAndSpeak Error] {ex.Message}");
-                Debug.WriteLine($"[ShowAndSpeak Error] StackTrace: {ex.StackTrace}");
+            }
+            finally
+            {
+                _isPlaying = false;
             }
         }
-
-        /// <summary>
-        /// Воспроизвести следующее сообщение из очереди (для ручного режима)
-        /// </summary>
         public async Task PlayNextFromQueueAsync()
         {
             if (_isPlayingManual)
@@ -156,33 +325,24 @@ namespace SmithForge.Features.ImportantOverlay
                 return;
             }
 
-            if (_manualQueue.Count == 0)
+            (Chater chater, CommonMessage message, string text) item;
+            lock (_queueLock)
             {
-                Debug.WriteLine("[ManualQueue] Очередь пуста");
-                return;
+                if (_messageQueue.Count == 0)
+                {
+                    Debug.WriteLine("[ManualQueue] Очередь пуста");
+                    return;
+                }
+                item = _messageQueue.Dequeue();
             }
-
-            var (chater, message, text) = _manualQueue.Dequeue();
-            Debug.WriteLine($"[ManualQueue] Воспроизводим: {text}, осталось: {_manualQueue.Count}");
-
-            // Обновляем счетчик
-            Application.Current.Dispatcher.Invoke(() =>
-            {
-                var vm = Application.Current.MainWindow?.DataContext as MainViewModel;
-                vm?.UpdateImportantQueueCount(_manualQueue.Count);
-            });
 
             _isPlayingManual = true;
 
             try
             {
-                // Используем оригинальные объекты
-                await ShowAndSpeakAsync(chater, message, text);
+                QueueCountChanged?.Invoke(this, _messageQueue.Count);
+                await ShowAndSpeakAsync(item.chater, item.message, item.text);
                 Debug.WriteLine("[ManualQueue] Воспроизведение завершено");
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine($"[PlayNextFromQueueAsync Error] {ex.Message}");
             }
             finally
             {
@@ -190,19 +350,23 @@ namespace SmithForge.Features.ImportantOverlay
             }
         }
 
-        public int QueueSize => _manualQueue.Count;
-
         public void ClearQueue()
         {
-            _manualQueue.Clear();
-            Debug.WriteLine("[ManualQueue] Очередь очищена");
-            Application.Current.Dispatcher.Invoke(() =>
+            int newCount;
+            lock (_queueLock)
             {
-                var vm = Application.Current.MainWindow?.DataContext as MainViewModel;
-                vm?.UpdateImportantQueueCount(0);
-            });
-        }
+                _messageQueue.Clear();
+                newCount = 0;
+                Debug.WriteLine("[Queue] Очередь очищена");
+            }
 
+            // Вызываем событие в UI потоке
+            Application.Current.Dispatcher.BeginInvoke(new Action(() =>
+            {
+                QueueCountChanged?.Invoke(this, newCount);
+                Debug.WriteLine($"[ImportantOverlay] QueueCountChanged вызван после очистки, новый счетчик: {newCount}");
+            }), System.Windows.Threading.DispatcherPriority.Normal);
+        }
         public void SavePosition(AppSettings settings)
         {
             if (_window == null) return;
@@ -225,7 +389,11 @@ namespace SmithForge.Features.ImportantOverlay
 
         public void SetAutoDisplay(bool isAuto)
         {
-            Debug.WriteLine($"[ImportantService] SetAutoDisplay: {isAuto}");
+            if (_viewModel != null)
+            {
+                _viewModel.IsAutoDisplay = isAuto;
+                Debug.WriteLine($"[ImportantService] AutoDisplay: {isAuto}");
+            }
         }
 
         public void Show() { if (_window != null) _window.Visibility = Visibility.Visible; }

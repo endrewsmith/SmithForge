@@ -29,64 +29,66 @@ namespace SmithForge.Main.Services
 
         public static async Task SayAsync(string text)
         {
-            Debug.WriteLine($"[VoiceService] SayAsync вызван: {text}");
+            Debug.WriteLine($"[VoiceService] SayAsync НАЧАЛО, поток: {Thread.CurrentThread.ManagedThreadId}");
 
-            if (string.IsNullOrWhiteSpace(text))
+            try
             {
-                Debug.WriteLine("[VoiceService] Текст пуст");
-                return;
-            }
-
-            string cleanText = Regex.Replace(text, @"<[^>]*>", "").Trim();
-            if (string.IsNullOrEmpty(cleanText))
-            {
-                Debug.WriteLine("[VoiceService] Очищенный текст пуст");
-                return;
-            }
-
-            await Task.Run(() =>
-            {
-                try
+                if (string.IsNullOrWhiteSpace(text))
                 {
-                    Debug.WriteLine("[VoiceService] Начинаем воспроизведение голоса");
-                    using (SpeechSynthesizer synth = new SpeechSynthesizer())
-                    {
-                        synth.SetOutputToDefaultAudioDevice();
-                        synth.Volume = _voiceVolume;
-                        Debug.WriteLine($"[VoiceService] Громкость голоса: {_voiceVolume}%");
+                    Debug.WriteLine("[VoiceService] Текст пуст");
+                    return;
+                }
 
-                        if (!string.IsNullOrEmpty(_currentVoiceName))
+                string cleanText = Regex.Replace(text, @"<[^>]*>", "").Trim();
+                if (string.IsNullOrEmpty(cleanText))
+                {
+                    Debug.WriteLine("[VoiceService] Очищенный текст пуст");
+                    return;
+                }
+
+                await Task.Run(() =>
+                {
+                    Debug.WriteLine($"[VoiceService] Task.Run внутри, поток: {Thread.CurrentThread.ManagedThreadId}");
+                    try
+                    {
+                        using (SpeechSynthesizer synth = new SpeechSynthesizer())
                         {
-                            try
+                            synth.SetOutputToDefaultAudioDevice();
+                            synth.Volume = _voiceVolume;
+
+                            if (!string.IsNullOrEmpty(_currentVoiceName))
                             {
-                                synth.SelectVoice(_currentVoiceName);
-                                Debug.WriteLine($"[VoiceService] Выбран голос: {_currentVoiceName}");
-                            }
-                            catch (Exception ex)
-                            {
-                                Debug.WriteLine($"[VoiceService] Ошибка выбора голоса: {ex.Message}");
-                                var voice = synth.GetInstalledVoices().FirstOrDefault(v => v.Enabled);
-                                if (voice != null)
+                                try
                                 {
-                                    synth.SelectVoice(voice.VoiceInfo.Name);
-                                    Debug.WriteLine($"[VoiceService] Использован голос по умолчанию: {voice.VoiceInfo.Name}");
+                                    synth.SelectVoice(_currentVoiceName);
+                                }
+                                catch (Exception ex)
+                                {
+                                    Debug.WriteLine($"[VoiceService] Ошибка выбора голоса: {ex.Message}");
                                 }
                             }
+
+                            synth.Rate = 1;
+                            Debug.WriteLine($"[VoiceService] Начинаем синтез речи: {cleanText}");
+                            synth.Speak(cleanText);
+                            Debug.WriteLine("[VoiceService] Синтез речи завершен");
                         }
-
-                        synth.Rate = 1;
-                        synth.Speak(cleanText);
-                        Debug.WriteLine($"[VoiceService] Голос воспроизведен: {cleanText}");
                     }
-                }
-                catch (Exception ex)
-                {
-                    Debug.WriteLine($"[SAPI5 Error] {ex.Message}");
-                    Debug.WriteLine($"[SAPI5 Error] {ex.StackTrace}");
-                }
-            });
-        }
+                    catch (Exception ex)
+                    {
+                        Debug.WriteLine($"[VoiceService] SAPI Error: {ex.Message}");
+                        Debug.WriteLine($"[VoiceService] SAPI StackTrace: {ex.StackTrace}");
+                    }
+                });
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[VoiceService] SayAsync Error: {ex.Message}");
+                Debug.WriteLine($"[VoiceService] SayAsync StackTrace: {ex.StackTrace}");
+            }
 
+            Debug.WriteLine("[VoiceService] SayAsync ЗАВЕРШЕН");
+        }
         public static List<string> GetAvailableVoiceNames()
         {
             try
@@ -178,7 +180,6 @@ namespace SmithForge.Main.Services
                         player.Play();
                         Debug.WriteLine($"[VoiceService] Воспроизведен звук: {fileName}");
 
-                        // Освобождаем ресурсы после воспроизведения
                         player.MediaEnded += (s, e) => player.Close();
                     }
                     else
@@ -192,76 +193,82 @@ namespace SmithForge.Main.Services
                 }
             });
         }
+public static async Task PlayImportantSoundAsync()
+{
+    Debug.WriteLine("[VoiceService] PlayImportantSoundAsync: НАЧАЛО");
 
-        public static async Task PlayImportantSoundAsync()
+    if (_uiDispatcher == null)
+    {
+        Debug.WriteLine("[VoiceService] UI Dispatcher не инициализирован");
+        return;
+    }
+
+    string soundPath = Path.Combine(
+        AppDomain.CurrentDomain.BaseDirectory,
+        "SF_Data", "Assets", "Sounds", "important.mp3");
+
+    if (!File.Exists(soundPath))
+    {
+        Debug.WriteLine($"[VoiceService] Файл не найден: {soundPath}");
+        return;
+    }
+
+    var tcs = new TaskCompletionSource<bool>();
+
+    // Выполняем в UI потоке и ждем завершения
+    await _uiDispatcher.InvokeAsync(async () =>
+    {
+        try
         {
-            Debug.WriteLine("[VoiceService] PlayImportantSoundAsync: НАЧАЛО");
-
-            if (_uiDispatcher == null)
+            MediaPlayer player = new MediaPlayer();
+            
+            void OnMediaEnded(object? s, EventArgs e)
             {
-                Debug.WriteLine("[VoiceService] UI Dispatcher не инициализирован");
-                return;
+                Debug.WriteLine("[VoiceService] PlayImportantSoundAsync: MediaEnded");
+                player.MediaEnded -= OnMediaEnded;
+                player.MediaFailed -= OnMediaFailed;
+                player.Close();
+                tcs.TrySetResult(true);
             }
-
-            string soundPath = Path.Combine(
-                AppDomain.CurrentDomain.BaseDirectory,
-                "SF_Data", "Assets", "Sounds", "important.mp3");
-
-            if (!File.Exists(soundPath))
+            
+            void OnMediaFailed(object? s, ExceptionEventArgs e)
             {
-                Debug.WriteLine($"[VoiceService] Файл не найден: {soundPath}");
-                return;
+                Debug.WriteLine("[VoiceService] PlayImportantSoundAsync: MediaFailed");
+                player.MediaEnded -= OnMediaEnded;
+                player.MediaFailed -= OnMediaFailed;
+                player.Close();
+                tcs.TrySetResult(false);
             }
-
-            var tcs = new TaskCompletionSource<bool>();
-
-            _uiDispatcher.Invoke(() =>
+            
+            player.MediaEnded += OnMediaEnded;
+            player.MediaFailed += OnMediaFailed;
+            player.Volume = _importantSoundVolume / 100.0;
+            player.Open(new Uri(soundPath, UriKind.Absolute));
+            player.Play();
+            Debug.WriteLine($"[VoiceService] Воспроизведен важный звук (громкость: {_importantSoundVolume}%)");
+            
+            // Таймаут
+            await Task.Delay(3000);
+            
+            if (!tcs.Task.IsCompleted)
             {
-                try
-                {
-                    MediaPlayer player = new MediaPlayer();
-
-                    player.MediaEnded += (s, e) =>
-                    {
-                        Debug.WriteLine("[VoiceService] PlayImportantSoundAsync: MediaEnded");
-                        player.Close();
-                        tcs.TrySetResult(true);
-                    };
-
-                    player.MediaFailed += (s, e) =>
-                    {
-                        Debug.WriteLine("[VoiceService] PlayImportantSoundAsync: MediaFailed");
-                        player.Close();
-                        tcs.TrySetResult(false);
-                    };
-
-                    player.Volume = _importantSoundVolume / 100.0;
-                    player.Open(new Uri(soundPath, UriKind.Absolute));
-                    player.Play();
-                    Debug.WriteLine($"[VoiceService] Воспроизведен важный звук (громкость: {_importantSoundVolume}%)");
-
-                    // Устанавливаем таймаут на случай, если звук не вызовет MediaEnded
-                    Task.Delay(3000).ContinueWith(_ =>
-                    {
-                        if (!tcs.Task.IsCompleted)
-                        {
-                            Debug.WriteLine("[VoiceService] PlayImportantSoundAsync: Таймаут");
-                            player.Close();
-                            tcs.TrySetResult(false);
-                        }
-                    });
-                }
-                catch (Exception ex)
-                {
-                    Debug.WriteLine($"[VoiceService] PlayImportantSoundAsync: Ошибка {ex.Message}");
-                    tcs.TrySetResult(false);
-                }
-            });
-
-            await tcs.Task;
-            Debug.WriteLine("[VoiceService] PlayImportantSoundAsync: ЗАВЕРШЕНО");
+                Debug.WriteLine("[VoiceService] PlayImportantSoundAsync: Таймаут");
+                player.MediaEnded -= OnMediaEnded;
+                player.MediaFailed -= OnMediaFailed;
+                player.Close();
+                tcs.TrySetResult(false);
+            }
         }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"[VoiceService] PlayImportantSoundAsync: Ошибка {ex.Message}");
+            tcs.TrySetResult(false);
+        }
+    });
 
+    await tcs.Task;
+    Debug.WriteLine("[VoiceService] PlayImportantSoundAsync: ЗАВЕРШЕНО");
+}
         // ========== МЕТОДЫ ДЛЯ СТИКЕРОВ И ВАЖНЫХ СООБЩЕНИЙ ==========
 
         public static void PlayStickerSound()

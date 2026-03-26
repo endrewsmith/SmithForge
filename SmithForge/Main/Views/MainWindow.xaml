@@ -13,6 +13,46 @@
         <converters:EnumToBooleanConverter x:Key="EnumToBooleanConverter"/>
         <converters:EnumToVisibilityConverter x:Key="EnumToVisibilityConverter"/>
         <converters:PlaybackModeToColorConverter x:Key="PlaybackModeToColorConverter"/>
+        <!-- Стиль для ToggleButton -->
+        <Style x:Key="AutoSwitchToggleButtonStyle" TargetType="ToggleButton">
+            <Setter Property="Background" Value="#E0E0E0"/>
+            <Setter Property="Foreground" Value="#333"/>
+            <Setter Property="BorderBrush" Value="#CCC"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Padding" Value="8,4"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ToggleButton">
+                        <Border Background="{TemplateBinding Background}"
+                            BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="{TemplateBinding BorderThickness}"
+                            CornerRadius="4"
+                            Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter Property="Background" Value="#4CAF50"/>
+                                <Setter Property="Foreground" Value="White"/>
+                                <Setter Property="BorderBrush" Value="#388E3C"/>
+                                <Setter Property="FontWeight" Value="Bold"/>
+                            </Trigger>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter Property="Background" Value="#C0C0C0"/>
+                            </Trigger>
+                            <MultiTrigger>
+                                <MultiTrigger.Conditions>
+                                    <Condition Property="IsChecked" Value="True"/>
+                                    <Condition Property="IsMouseOver" Value="True"/>
+                                </MultiTrigger.Conditions>
+                                <Setter Property="Background" Value="#66BB6A"/>
+                            </MultiTrigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
     </Window.Resources>
 
 
@@ -273,10 +313,12 @@
                             <ColumnDefinition Width="Auto"/>
                             <ColumnDefinition Width="Auto"/>
                             <ColumnDefinition Width="Auto"/>
+
                         </Grid.ColumnDefinitions>
 
                         <Grid.RowDefinitions>
                             <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="40"/>
                             <RowDefinition Height="Auto"/>
                         </Grid.RowDefinitions>
 
@@ -348,9 +390,14 @@
                            FontSize="11" FontWeight="Bold"/>
                             </Border>
                         </StackPanel>
-
+                        <!-- Кнопка авто-переключения режимов -->
+                        <ToggleButton Grid.Row="1" Grid.Column="1" Content="🔄 Режим чтения" 
+              IsChecked="{Binding IsAutoSwitchingEnabled}"
+              Style="{StaticResource AutoSwitchToggleButtonStyle}"
+              Width="90" Height="28" Margin="5,0"
+              ToolTip="Автоматически переключать режим в зависимости от очереди"/>
                         <!-- Строка 0: Громкость звука -->
-                        <StackPanel Grid.Row="0" Grid.Column="3" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,15,0">
+                        <StackPanel Grid.Row="1" Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,15,0">
                             <TextBlock Text="🔊 звук:" FontSize="11" VerticalAlignment="Center" Margin="0,0,5,0"/>
                             <Slider Width="80" Minimum="0" Maximum="100" 
                     Value="{Binding ImportantSoundVolume, UpdateSourceTrigger=PropertyChanged}"
@@ -360,7 +407,7 @@
                         </StackPanel>
 
                         <!-- Строка 0: Громкость голоса -->
-                        <StackPanel Grid.Row="0" Grid.Column="4" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,15,0">
+                        <StackPanel Grid.Row="1" Grid.Column="3" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,15,0">
                             <TextBlock Text="🎤 голос:" FontSize="11" VerticalAlignment="Center" Margin="0,0,5,0"/>
                             <Slider Width="80" Minimum="0" Maximum="100" 
                     Value="{Binding VoiceVolume, UpdateSourceTrigger=PropertyChanged}"
@@ -370,7 +417,7 @@
                         </StackPanel>
 
                         <!-- Строка 0: Горячая клавиша -->
-                        <StackPanel Grid.Row="0" Grid.Column="5" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,10,0"
+                        <StackPanel Grid.Row="0" Grid.Column="3" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,10,0"
                     Visibility="{Binding ImportantPlaybackMode, Converter={StaticResource EnumToVisibilityConverter}, ConverterParameter=Manual}">
                             <TextBlock Text="⌨️" FontSize="14" VerticalAlignment="Center" Margin="0,0,5,0"/>
                             <ComboBox Width="70" Height="24" 
@@ -381,16 +428,16 @@
                         </StackPanel>
 
                         <!-- Строка 1: Режим отображения и кнопки -->
-                        <ComboBox Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="3"
+                        <ComboBox Grid.Row="1" Grid.Column="4" Grid.ColumnSpan="2"
                   ItemsSource="{Binding AvailableModes}"
                   SelectedValue="{Binding ImportantChatMode}"
                   SelectedValuePath="Mode"
                   DisplayMemberPath="Name"
                   Width="150" 
-                  Margin="0,5,0,0"
-                  VerticalAlignment="Center"/>
+                  Margin="20,10,0,0"
+                  VerticalAlignment="Top"/>
 
-                        <StackPanel Grid.Row="1" Grid.Column="4" Grid.ColumnSpan="2" 
+                        <StackPanel Grid.Row="0" Grid.Column="4" Grid.ColumnSpan="2" 
                     Orientation="Horizontal" 
                     HorizontalAlignment="Right" 
                     Margin="0,5,0,0">

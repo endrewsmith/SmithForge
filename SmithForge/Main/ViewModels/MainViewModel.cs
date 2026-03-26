@@ -23,7 +23,8 @@ namespace SmithForge.ViewModels
 {
     internal partial class MainViewModel : ObservableObject
     {
-        // В начало класса, после других [ObservableProperty]
+
+
         [ObservableProperty]
         private ImportantPlaybackMode _importantPlaybackMode = ImportantPlaybackMode.Auto;
 
@@ -31,20 +32,28 @@ namespace SmithForge.ViewModels
         private string _importantPlaybackHotkey = "F8";
 
         [ObservableProperty]
-        private int _importantQueueCount = 0; // Количество сообщений в очереди
-        // Громкость для важных сообщений
+        private int _importantQueueCount = 0;
+
         [ObservableProperty]
         private int _importantSoundVolume = 100;
 
         [ObservableProperty]
         private int _voiceVolume = 100;
+
         [ObservableProperty]
         private int _stickerDisplayTime = 5000;
-        // Режимы отображения для чатов
-        [ObservableProperty] private ChatDisplayMode _mainChatMode = ChatDisplayMode.AppearAndFade;
-        [ObservableProperty] private ChatDisplayMode _shortsChatMode = ChatDisplayMode.AppearAndFade;
-        [ObservableProperty] private ChatDisplayMode _importantChatMode = ChatDisplayMode.AppearAndFade;
-        [ObservableProperty] private ChatDisplayMode _stickersChatMode = ChatDisplayMode.AppearAndFade;
+
+        [ObservableProperty]
+        private ChatDisplayMode _mainChatMode = ChatDisplayMode.AppearAndFade;
+
+        [ObservableProperty]
+        private ChatDisplayMode _shortsChatMode = ChatDisplayMode.AppearAndFade;
+
+        [ObservableProperty]
+        private ChatDisplayMode _importantChatMode = ChatDisplayMode.AppearAndFade;
+
+        [ObservableProperty]
+        private ChatDisplayMode _stickersChatMode = ChatDisplayMode.AppearAndFade;
 
         public List<SmithForge.Main.Models.ChatDisplayModeInfo> AvailableModes { get; } = ChatDisplayModeFactory.GetAvailableModes();
 
@@ -62,14 +71,32 @@ namespace SmithForge.ViewModels
         [NotifyCanExecuteChangedFor(nameof(StopCommand))]
         private bool _isProcessRunning;
 
-        [ObservableProperty] private bool _isOverlaySetupMode = true;
-        [ObservableProperty] private bool _isOverlayHidden = false;
-        [ObservableProperty] private string _lastMessageText = "Ожидание сообщений...";
-        [ObservableProperty] private AppSettings _settings;
-        [ObservableProperty] private StreamSession _currentSession;
-        [ObservableProperty] private string _programPath;
-        [ObservableProperty] private int _lastStreamNumber;
-        [ObservableProperty] private bool _isStickersVisible = true;
+        [ObservableProperty]
+        private bool _isOverlaySetupMode = true;
+
+        [ObservableProperty]
+        private bool _isOverlayHidden = false;
+
+        [ObservableProperty]
+        private string _lastMessageText = "Ожидание сообщений...";
+
+        [ObservableProperty]
+        private AppSettings _settings;
+
+        [ObservableProperty]
+        private StreamSession _currentSession;
+
+        [ObservableProperty]
+        private string _programPath;
+
+        [ObservableProperty]
+        private int _lastStreamNumber;
+
+        [ObservableProperty]
+        private bool _isStickersVisible = true;
+
+        [ObservableProperty]
+        private bool _isAutoSwitchingEnabled = true;
 
         public ObservableCollection<Chater> Users { get; } = new();
 
@@ -82,7 +109,6 @@ namespace SmithForge.ViewModels
             _isStickersVisible = Settings.IsStickersVisible;
             DatabaseService.Initialize();
 
-            // Загружаем режимы из настроек
             _mainChatMode = Settings.MainChatMode;
             _shortsChatMode = Settings.ShortsChatMode;
             _importantChatMode = Settings.ImportantChatMode;
@@ -90,7 +116,6 @@ namespace SmithForge.ViewModels
 
             StickerManager.LoadPacks();
 
-            // Инициализация сервисов
             _overlayService = new ChatOverlayService();
             _overlayService.Initialize(Settings.OverlayTop, Settings.OverlayLeft);
             _overlayService.SetSetupMode(IsOverlaySetupMode);
@@ -109,6 +134,7 @@ namespace SmithForge.ViewModels
             _shortsService.LoadPosition(Settings);
 
             _importantService = new ImportantOverlayService(Settings);
+            _importantService.IsAutoSwitchingEnabled = IsAutoSwitchingEnabled;
             _importantService.Initialize(
                 Settings.ImportantOverlayTop,
                 Settings.ImportantOverlayLeft,
@@ -118,6 +144,14 @@ namespace SmithForge.ViewModels
             _importantService.SetSetupMode(IsOverlaySetupMode);
             _importantService.SetDisplayMode(ImportantChatMode);
             _importantService.LoadPosition(Settings);
+            _importantService.QueueCountChanged += (s, count) =>
+            {
+                Application.Current.Dispatcher.BeginInvoke(() =>
+                {
+                    ImportantQueueCount = count;
+                    Debug.WriteLine($"[MainViewModel] Получено событие QueueCountChanged: count={count}");
+                });
+            };
 
             _stickersService = new StickersOverlayService();
             _stickersService.Initialize(
@@ -130,7 +164,6 @@ namespace SmithForge.ViewModels
             _stickersService.SetDisplayMode(StickersChatMode);
             _stickersService.LoadPosition(Settings);
 
-            // Применяем скрытие окон
             if (_isOverlayHidden)
             {
                 _overlayService.SetHidden(true);
@@ -177,10 +210,8 @@ namespace SmithForge.ViewModels
             _dashboardService.Initialize();
             _stickerDisplayTime = Settings.StickerDisplayTimeMs;
 
-            // Загружаем настройки громкости
             _importantSoundVolume = Settings.ImportantSoundVolume;
             _voiceVolume = Settings.VoiceVolume;
-            // 👇 ПРИМЕНЯЕМ НАЧАЛЬНЫЕ ЗНАЧЕНИЯ ГРОМКОСТИ
             VoiceService.SetImportantSoundVolume(_importantSoundVolume);
             VoiceService.SetVoiceVolume(_voiceVolume);
 
@@ -188,28 +219,27 @@ namespace SmithForge.ViewModels
             _importantPlaybackHotkey = Settings.ImportantPlaybackHotkey;
 
             VoiceService.Initialize(Dispatcher.CurrentDispatcher);
+
+            // Если режим чтения включен и очередь пуста, режим должен быть Auto
+            if (IsAutoSwitchingEnabled && ImportantQueueCount == 0 && _importantPlaybackMode == ImportantPlaybackMode.Manual)
+            {
+                Debug.WriteLine("[MainViewModel] Стартовая синхронизация: очередь пуста, переключаем режим на Auto");
+                ImportantPlaybackMode = ImportantPlaybackMode.Auto;
+            }
+            else if (IsAutoSwitchingEnabled && ImportantQueueCount > 0 && _importantPlaybackMode == ImportantPlaybackMode.Auto)
+            {
+                Debug.WriteLine($"[MainViewModel] Стартовая синхронизация: в очереди {ImportantQueueCount} сообщений, переключаем режим на Manual");
+                ImportantPlaybackMode = ImportantPlaybackMode.Manual;
+            }
         }
 
         partial void OnImportantPlaybackModeChanged(ImportantPlaybackMode value)
         {
             Settings.ImportantPlaybackMode = value;
             ConfigService.Save(Settings);
-
-            switch (value)
-            {
-                case ImportantPlaybackMode.Auto:
-                    // _importantService.SetAutoDisplay(true); // УДАЛИТЬ
-                    Debug.WriteLine("[MainVM] Режим: АВТО - сообщения воспроизводятся сразу");
-                    break;
-
-                case ImportantPlaybackMode.Manual:
-                    // _importantService.SetAutoDisplay(false); // УДАЛИТЬ
-                    _importantService.ClearQueue();
-                    ImportantQueueCount = 0;
-                    Debug.WriteLine("[MainVM] Режим: РУЧНОЙ - сообщения накапливаются в очереди");
-                    break;
-            }
+            Debug.WriteLine($"[MainVM] Режим: {(value == ImportantPlaybackMode.Auto ? "АВТО" : "РУЧНОЙ")}");
         }
+
         partial void OnImportantPlaybackHotkeyChanged(string value)
         {
             Settings.ImportantPlaybackHotkey = value;
@@ -217,16 +247,92 @@ namespace SmithForge.ViewModels
             Debug.WriteLine($"[MainVM] Горячая клавиша: {value}");
         }
 
-        // Обновление счетчика очереди
+        partial void OnIsAutoSwitchingEnabledChanged(bool value)
+        {
+            Debug.WriteLine($"[ReadingMode] Режим чтения: {(value ? "ВКЛ" : "ВЫКЛ")}");
+
+            // Обновляем свойство в ImportantOverlayService
+            _importantService.IsAutoSwitchingEnabled = value;
+
+            if (value)
+            {
+                if (ImportantQueueCount > 0 && ImportantPlaybackMode == ImportantPlaybackMode.Auto)
+                {
+                    ImportantPlaybackMode = ImportantPlaybackMode.Manual;
+                    Debug.WriteLine("[ReadingMode] Есть сообщения в очереди, переключено в РУЧНОЙ режим");
+                }
+                else if (ImportantQueueCount == 0 && ImportantPlaybackMode == ImportantPlaybackMode.Manual)
+                {
+                    ImportantPlaybackMode = ImportantPlaybackMode.Auto;
+                    Debug.WriteLine("[ReadingMode] Очередь пуста, переключено в АВТО режим");
+                }
+            }
+        }
         public void UpdateImportantQueueCount(int count)
         {
-            Application.Current.Dispatcher.Invoke(() =>
+            try
             {
+                if (!Application.Current.Dispatcher.CheckAccess())
+                {
+                    Debug.WriteLine($"[MainViewModel] UpdateImportantQueueCount: перенаправление в UI поток");
+                    Application.Current.Dispatcher.BeginInvoke(() => UpdateImportantQueueCount(count));
+                    return;
+                }
+
                 ImportantQueueCount = count;
-            });
+
+                Debug.WriteLine($"[MainViewModel] ==============================================");
+                Debug.WriteLine($"[MainViewModel] UpdateImportantQueueCount ВЫЗВАН!");
+                Debug.WriteLine($"[MainViewModel] count = {count}");
+                Debug.WriteLine($"[MainViewModel] IsAutoSwitchingEnabled = {IsAutoSwitchingEnabled}");
+                Debug.WriteLine($"[MainViewModel] ImportantPlaybackMode (до) = {ImportantPlaybackMode}");
+                Debug.WriteLine($"[MainViewModel] ImportantPlaybackMode == Auto = {ImportantPlaybackMode == ImportantPlaybackMode.Auto}");
+                Debug.WriteLine($"[MainViewModel] ImportantPlaybackMode == Manual = {ImportantPlaybackMode == ImportantPlaybackMode.Manual}");
+                Debug.WriteLine($"[MainViewModel] _importantService?.IsPlaying = {_importantService?.IsPlaying}");
+
+                if (IsAutoSwitchingEnabled)
+                {
+                    Debug.WriteLine("[MainViewModel] Режим чтения ВКЛ, проверяем условия");
+
+                    // Если в очереди есть сообщения И режим авто -> переключаем в ручной
+                    if (count > 0 && ImportantPlaybackMode == ImportantPlaybackMode.Auto)
+                    {
+                        Debug.WriteLine($"[ReadingMode] ✅ УСЛОВИЕ 1: count={count} > 0 и режим Auto");
+                        Debug.WriteLine($"[ReadingMode] Переключаем АВТО -> РУЧНОЙ");
+                        ImportantPlaybackMode = ImportantPlaybackMode.Manual;
+                        Debug.WriteLine($"[ReadingMode] Новый режим: {ImportantPlaybackMode}");
+                    }
+                    // Если очередь пуста И режим ручной -> переключаем в авто
+                    else if (count == 0 && ImportantPlaybackMode == ImportantPlaybackMode.Manual)
+                    {
+                        Debug.WriteLine($"[ReadingMode] ✅ УСЛОВИЕ 2: count={count} == 0 и режим Manual");
+                        Debug.WriteLine($"[ReadingMode] Переключаем РУЧНОЙ -> АВТО");
+                        ImportantPlaybackMode = ImportantPlaybackMode.Auto;
+                        Debug.WriteLine($"[ReadingMode] Новый режим: {ImportantPlaybackMode}");
+                    }
+                    else
+                    {
+                        Debug.WriteLine($"[ReadingMode] ❌ Условия НЕ выполнены:");
+                        Debug.WriteLine($"[ReadingMode]   count>0 = {count > 0}");
+                        Debug.WriteLine($"[ReadingMode]   count==0 = {count == 0}");
+                        Debug.WriteLine($"[ReadingMode]   isAuto = {ImportantPlaybackMode == ImportantPlaybackMode.Auto}");
+                        Debug.WriteLine($"[ReadingMode]   isManual = {ImportantPlaybackMode == ImportantPlaybackMode.Manual}");
+                    }
+                }
+                else
+                {
+                    Debug.WriteLine("[MainViewModel] Режим чтения ВЫКЛ, переключение не выполняется");
+                }
+
+                Debug.WriteLine($"[MainViewModel] ImportantPlaybackMode (после) = {ImportantPlaybackMode}");
+                Debug.WriteLine($"[MainViewModel] ==============================================");
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[MainViewModel] UpdateImportantQueueCount Error: {ex.Message}");
+                Debug.WriteLine($"[MainViewModel] StackTrace: {ex.StackTrace}");
+            }
         }
-
-
         [RelayCommand]
         private async Task PlayNextImportant()
         {
@@ -236,6 +342,7 @@ namespace SmithForge.ViewModels
                 ImportantQueueCount = _importantService.QueueSize;
             }
         }
+
         partial void OnStickerDisplayTimeChanged(int value)
         {
             Settings.StickerDisplayTimeMs = value;
@@ -250,7 +357,20 @@ namespace SmithForge.ViewModels
             VoiceService.SetImportantSoundVolume(value);
             Debug.WriteLine($"[MainVM] Громкость звука важных сообщений: {value}%");
         }
+        public void SetImportantPlaybackMode(ImportantPlaybackMode mode)
+        {
+            if (!Application.Current.Dispatcher.CheckAccess())
+            {
+                Application.Current.Dispatcher.Invoke(() => SetImportantPlaybackMode(mode));
+                return;
+            }
 
+            if (ImportantPlaybackMode != mode)
+            {
+                ImportantPlaybackMode = mode;
+                Debug.WriteLine($"[MainViewModel] Режим принудительно установлен: {mode}");
+            }
+        }
         partial void OnVoiceVolumeChanged(int value)
         {
             Settings.VoiceVolume = value;
@@ -258,6 +378,7 @@ namespace SmithForge.ViewModels
             VoiceService.SetVoiceVolume(value);
             Debug.WriteLine($"[MainVM] Громкость голоса: {value}%");
         }
+
         private void LoadInitialData()
         {
             var history = DatabaseService.LoadAll();
@@ -284,7 +405,6 @@ namespace SmithForge.ViewModels
             Debug.WriteLine($"   - Текст: {uiMessage}");
             Debug.WriteLine($"   - IsProcessedByCommand: {msg.IsProcessedByCommand}");
 
-            // Проверяем команды
             bool isStickerAction = commands != null && commands.Any(c =>
                 c.Name.Equals("st", StringComparison.OrdinalIgnoreCase) ||
                 c.Name.Equals("стикер", StringComparison.OrdinalIgnoreCase) ||
@@ -294,7 +414,6 @@ namespace SmithForge.ViewModels
                 c.Name.Equals("important", StringComparison.OrdinalIgnoreCase) ||
                 c.Name.Equals("важно", StringComparison.OrdinalIgnoreCase));
 
-            // Очищаем текст от тегов
             string cleanUiMessage = uiMessage;
             if (isImportantAction)
             {
@@ -313,13 +432,11 @@ namespace SmithForge.ViewModels
                 DisplayTimeMs = msg.DisplayTimeMs
             };
 
-            // Отправляем в дашборд всегда
             _dashboardService.AddMessage(chater, overlayMsg);
 
-            // Обработка в зависимости от типа сообщения
             if (isImportantAction)
             {
-                Debug.WriteLine($"[Important] Важное сообщение от {chater.Login}");
+                Debug.WriteLine($"[Important] Сообщение от {chater.Login}");
                 Task.Run(async () =>
                 {
                     await Task.Delay(200);
@@ -461,7 +578,6 @@ namespace SmithForge.ViewModels
             LastMessageText = "✅ Настройки сохранены";
         }
 
-        // Обработчики изменения режимов
         partial void OnMainChatModeChanged(ChatDisplayMode value)
         {
             Settings.MainChatMode = value;
