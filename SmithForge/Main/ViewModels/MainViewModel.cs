@@ -1,5 +1,8 @@
 ﻿using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using SmithForge.Features.ChatOverlay;
+using SmithForge.Features.ChatOverlayShorts;
+using SmithForge.Features.ImportantOverlay;
 using SmithForge.Features.StickersOverlay;
 using SmithForge.Main.Models;
 using SmithForge.Main.Models.ChatModes;
@@ -14,9 +17,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
-using SmithForge.Features.ImportantOverlay;
-using SmithForge.Features.ChatOverlay;
-using SmithForge.Features.ChatOverlayShorts;
+using System.Windows.Threading;
 
 namespace SmithForge.ViewModels
 {
@@ -179,10 +180,14 @@ namespace SmithForge.ViewModels
             // Загружаем настройки громкости
             _importantSoundVolume = Settings.ImportantSoundVolume;
             _voiceVolume = Settings.VoiceVolume;
-
+            // 👇 ПРИМЕНЯЕМ НАЧАЛЬНЫЕ ЗНАЧЕНИЯ ГРОМКОСТИ
+            VoiceService.SetImportantSoundVolume(_importantSoundVolume);
+            VoiceService.SetVoiceVolume(_voiceVolume);
 
             _importantPlaybackMode = Settings.ImportantPlaybackMode;
             _importantPlaybackHotkey = Settings.ImportantPlaybackHotkey;
+
+            VoiceService.Initialize(Dispatcher.CurrentDispatcher);
         }
 
         partial void OnImportantPlaybackModeChanged(ImportantPlaybackMode value)
@@ -190,16 +195,21 @@ namespace SmithForge.ViewModels
             Settings.ImportantPlaybackMode = value;
             ConfigService.Save(Settings);
 
-            if (value == ImportantPlaybackMode.Auto)
+            switch (value)
             {
-                // При переключении на авто - очищаем очередь
-                ImportantQueueService.ClearQueue();
-                ImportantQueueCount = 0;
+                case ImportantPlaybackMode.Auto:
+                    // _importantService.SetAutoDisplay(true); // УДАЛИТЬ
+                    Debug.WriteLine("[MainVM] Режим: АВТО - сообщения воспроизводятся сразу");
+                    break;
+
+                case ImportantPlaybackMode.Manual:
+                    // _importantService.SetAutoDisplay(false); // УДАЛИТЬ
+                    _importantService.ClearQueue();
+                    ImportantQueueCount = 0;
+                    Debug.WriteLine("[MainVM] Режим: РУЧНОЙ - сообщения накапливаются в очереди");
+                    break;
             }
-
-            Debug.WriteLine($"[MainVM] Режим воспроизведения важных сообщений: {value}");
         }
-
         partial void OnImportantPlaybackHotkeyChanged(string value)
         {
             Settings.ImportantPlaybackHotkey = value;
@@ -216,13 +226,14 @@ namespace SmithForge.ViewModels
             });
         }
 
+
         [RelayCommand]
-        private void PlayNextImportant()
+        private async Task PlayNextImportant()
         {
             if (ImportantPlaybackMode == ImportantPlaybackMode.Manual)
             {
-                ImportantQueueService.PlayNext();
-                UpdateImportantQueueCount(ImportantQueueService.QueueCount);
+                await _importantService.PlayNextFromQueueAsync();
+                ImportantQueueCount = _importantService.QueueSize;
             }
         }
         partial void OnStickerDisplayTimeChanged(int value)

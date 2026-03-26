@@ -1,15 +1,11 @@
-﻿using SmithForge.Features.ImportantOverlay;
-using SmithForge.Main.Models;
+﻿using SmithForge.Main.Models;
 using SmithForge.Main.Services;
 using SmithForge.ViewModels;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
-using System.Linq;
-using System.Runtime;
 using System.Threading.Tasks;
 using System.Windows;
-using static Dapper.SqlMapper;
 
 namespace SmithForge.Features.ImportantOverlay
 {
@@ -21,14 +17,14 @@ namespace SmithForge.Features.ImportantOverlay
         private ChatDisplayMode _currentMode = ChatDisplayMode.AppearAndFade;
         public bool IsVisible => _window != null && _window.Visibility == Visibility.Visible;
 
-        private Queue<(Chater user, CommonMessage msg)> _messageQueue = new();
-        private bool _isShowingQueue = false;
-
         private bool _isHidden = false;
         private double _savedTop;
         private double _savedLeft;
-
         private readonly AppSettings _settings;
+
+        // Очередь для ручного режима (хранит оригинальные объекты)
+        private readonly Queue<(Chater chater, CommonMessage message, string text)> _manualQueue = new();
+        private bool _isPlayingManual = false;
 
         public ImportantOverlayService(AppSettings settings)
         {
@@ -38,10 +34,6 @@ namespace SmithForge.Features.ImportantOverlay
         public void Initialize(double top, double left, double width, double height, bool isSetupMode)
         {
             if (_isInitialized) return;
-
-            System.Diagnostics.Debug.WriteLine($"[ImportantService] ===== ИНИЦИАЛИЗАЦИЯ =====");
-            System.Diagnostics.Debug.WriteLine($"[ImportantService] Получено из settings: top={top}, left={left}, width={width}, height={height}");
-
             _viewModel = new ImportantOverlayViewModel();
             _window = new ImportantOverlayWindow
             {
@@ -52,9 +44,6 @@ namespace SmithForge.Features.ImportantOverlay
                 Height = height > 0 ? height : 600,
                 Visibility = Visibility.Visible
             };
-
-            System.Diagnostics.Debug.WriteLine($"[ImportantService] Окно создано: {_window.Width}x{_window.Height}");
-
             SetSetupMode(isSetupMode);
             SetDisplayMode(_currentMode);
             _isInitialized = true;
@@ -65,17 +54,12 @@ namespace SmithForge.Features.ImportantOverlay
             if (_window == null || _viewModel == null) return;
             _viewModel.IsSetupMode = isSetupMode;
             _window.SetClickThrough(!isSetupMode);
-            System.Diagnostics.Debug.WriteLine($"[ImportantService] Режим настройки: {isSetupMode}");
         }
 
         public void SetDisplayMode(ChatDisplayMode mode)
         {
             _currentMode = mode;
-            if (_viewModel != null)
-            {
-                _viewModel.SetMode(mode);
-            }
-            System.Diagnostics.Debug.WriteLine($"[ImportantService] Установлен режим отображения: {mode}");
+            _viewModel?.SetMode(mode);
         }
 
         public void SetHidden(bool isHidden)
@@ -88,162 +72,164 @@ namespace SmithForge.Features.ImportantOverlay
                 _window.Top = -2000;
                 _window.Left = -2000;
                 _isHidden = true;
-                System.Diagnostics.Debug.WriteLine("[ImportantService] Окно спрятано за экран");
             }
             else if (!isHidden && _isHidden)
             {
                 _window.Top = _savedTop;
                 _window.Left = _savedLeft;
                 _isHidden = false;
-                System.Diagnostics.Debug.WriteLine("[ImportantService] Окно возвращено на позицию");
             }
         }
 
+        /// <summary>
+        /// Главный метод показа сообщения
+        /// </summary>
         public void ShowImportantMessage(Chater chater, CommonMessage message)
         {
             string importantText = $"Важное сообщение от {chater.EffectiveName}: {message.Message}";
-
-            // Получаем актуальные настройки
             var settings = ConfigService.Load();
 
-            System.Diagnostics.Debug.WriteLine($"[ImportantOverlay] Текущий режим: {settings.ImportantPlaybackMode}");
-            System.Diagnostics.Debug.WriteLine($"[ImportantOverlay] Auto = {ImportantPlaybackMode.Auto}, Manual = {ImportantPlaybackMode.Manual}");
+            Debug.WriteLine($"[ImportantOverlay] Режим: {(settings.ImportantPlaybackMode == ImportantPlaybackMode.Auto ? "АВТО" : "РУЧНОЙ")}");
+            Debug.WriteLine($"[ImportantOverlay] Текст: {importantText}");
 
-            // Проверяем режим воспроизведения
             if (settings.ImportantPlaybackMode == ImportantPlaybackMode.Auto)
             {
-                System.Diagnostics.Debug.WriteLine("[ImportantOverlay] РЕЖИМ: АВТОМАТИЧЕСКИЙ");
-                _ = Task.Run(async () =>
-                {
-                    await VoiceService.PlayImportantSoundAsync();
-                    await VoiceService.SayAsync(importantText);
-                });
+                // АВТО-РЕЖИМ: сразу показываем и озвучиваем
+                _ = Task.Run(async () => await ShowAndSpeakAsync(chater, message, importantText));
             }
             else
             {
-                System.Diagnostics.Debug.WriteLine("[ImportantOverlay] РЕЖИМ: РУЧНОЙ");
+                // РУЧНОЙ РЕЖИМ: сохраняем оригинальные объекты в очередь
+                _manualQueue.Enqueue((chater, message, importantText));
+                Debug.WriteLine($"[ManualQueue] Добавлено. Всего: {_manualQueue.Count}");
 
-                // Добавляем в очередь (это потокобезопасно)
-                ImportantQueueService.Enqueue(importantText);
-
-                // Обновляем счетчик в UI потоке
+                // Обновляем счетчик
                 Application.Current.Dispatcher.Invoke(() =>
                 {
-                    var mainViewModel = Application.Current.MainWindow?.DataContext as MainViewModel;
-                    mainViewModel?.UpdateImportantQueueCount(ImportantQueueService.QueueCount);
+                    var vm = Application.Current.MainWindow?.DataContext as MainViewModel;
+                    vm?.UpdateImportantQueueCount(_manualQueue.Count);
                 });
             }
-
-            // Отображаем сообщение в оверлее - обязательно в UI потоке
-            Application.Current.Dispatcher.Invoke(() =>
-            {
-                _viewModel?.ShowMessage(chater, message);
-            });
         }
-        private void AddMessageToOverlay(Chater chater, CommonMessage message)
+
+        /// <summary>
+        /// Показать и озвучить сообщение (для авто-режима и ручного воспроизведения)
+        /// </summary>
+        private async Task ShowAndSpeakAsync(Chater chater, CommonMessage message, string text)
         {
-            // Используйте существующий метод для отображения сообщения
-            // Например, если у вас есть метод ShowMessage или AddMessage:
-
-            Application.Current.Dispatcher.Invoke(() =>
+            try
             {
-                // Вариант 1: Если есть ObservableCollection
-                // Messages.Add(message);
+                Debug.WriteLine($"[ShowAndSpeak] Начинаем: {text}");
 
-                // Вариант 2: Если есть метод для добавления сообщения
-                // AddMessage(message);
-
-                // Вариант 3: Вызвать событие
-                // MessageReceived?.Invoke(chater, message);
-
-                // Если ничего из этого не подходит, просто покажите сообщение через Debug
-                System.Diagnostics.Debug.WriteLine($"[ImportantOverlay] Показ сообщения: {chater.EffectiveName}: {message.Message}");
-            });
-        }
-        private async Task ProcessQueue()
-        {
-            _isShowingQueue = true;
-            while (true)
-            {
-                (Chater user, CommonMessage msg) item;
-                lock (_messageQueue)
+                // 1. Показываем сообщение в оверлее
+                await Application.Current.Dispatcher.InvokeAsync(() =>
                 {
-                    if (_messageQueue.Count == 0) break;
-                    item = _messageQueue.Dequeue();
-                }
+                    _viewModel?.ShowMessage(chater, message);
+                });
 
-                // Показываем текст в ViewModel
-                await Application.Current.Dispatcher.InvokeAsync(() => _viewModel?.ShowMessage(item.user, item.msg));
+                // Небольшая задержка для анимации
+                await Task.Delay(200);
 
-                // Ждем время отображения (управляется в ViewModel)
-                // Не очищаем сообщение здесь - это делает ViewModel после таймера
+                // 2. Воспроизводим звук уведомления
+                await VoiceService.PlayImportantSoundAsync();
 
-                // Небольшая пауза между сообщениями
-                await Task.Delay(300);
+                // 3. Воспроизводим голос
+                await VoiceService.SayAsync(text);
+
+                Debug.WriteLine("[ShowAndSpeak] Завершено успешно");
             }
-            _isShowingQueue = false;
-        }
-        public void SavePosition(AppSettings settings)
-        {
-            if (_window == null)
+            catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"[ImportantService] ОШИБКА: _window = null");
+                Debug.WriteLine($"[ShowAndSpeak Error] {ex.Message}");
+                Debug.WriteLine($"[ShowAndSpeak Error] StackTrace: {ex.StackTrace}");
+            }
+        }
+
+        /// <summary>
+        /// Воспроизвести следующее сообщение из очереди (для ручного режима)
+        /// </summary>
+        public async Task PlayNextFromQueueAsync()
+        {
+            if (_isPlayingManual)
+            {
+                Debug.WriteLine("[ManualQueue] Уже воспроизводится");
                 return;
             }
 
-            System.Diagnostics.Debug.WriteLine($"[ImportantService] ===== СОХРАНЕНИЕ ПОЗИЦИИ =====");
-            System.Diagnostics.Debug.WriteLine($"[ImportantService] Текущая позиция: Top={_window.Top}, Left={_window.Left}");
-            System.Diagnostics.Debug.WriteLine($"[ImportantService] Текущие размеры: Width={_window.Width}, Height={_window.Height}");
+            if (_manualQueue.Count == 0)
+            {
+                Debug.WriteLine("[ManualQueue] Очередь пуста");
+                return;
+            }
 
+            var (chater, message, text) = _manualQueue.Dequeue();
+            Debug.WriteLine($"[ManualQueue] Воспроизводим: {text}, осталось: {_manualQueue.Count}");
+
+            // Обновляем счетчик
+            Application.Current.Dispatcher.Invoke(() =>
+            {
+                var vm = Application.Current.MainWindow?.DataContext as MainViewModel;
+                vm?.UpdateImportantQueueCount(_manualQueue.Count);
+            });
+
+            _isPlayingManual = true;
+
+            try
+            {
+                // Используем оригинальные объекты
+                await ShowAndSpeakAsync(chater, message, text);
+                Debug.WriteLine("[ManualQueue] Воспроизведение завершено");
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[PlayNextFromQueueAsync Error] {ex.Message}");
+            }
+            finally
+            {
+                _isPlayingManual = false;
+            }
+        }
+
+        public int QueueSize => _manualQueue.Count;
+
+        public void ClearQueue()
+        {
+            _manualQueue.Clear();
+            Debug.WriteLine("[ManualQueue] Очередь очищена");
+            Application.Current.Dispatcher.Invoke(() =>
+            {
+                var vm = Application.Current.MainWindow?.DataContext as MainViewModel;
+                vm?.UpdateImportantQueueCount(0);
+            });
+        }
+
+        public void SavePosition(AppSettings settings)
+        {
+            if (_window == null) return;
             settings.ImportantOverlayTop = _isHidden ? _savedTop : _window.Top;
             settings.ImportantOverlayLeft = _isHidden ? _savedLeft : _window.Left;
             settings.ImportantOverlayWidth = _window.Width;
             settings.ImportantOverlayHeight = _window.Height;
             settings.ImportantChatMode = _currentMode;
-
-            System.Diagnostics.Debug.WriteLine($"[ImportantService] СОХРАНЕНО в settings: {settings.ImportantOverlayWidth}x{settings.ImportantOverlayHeight}");
         }
 
         public void LoadPosition(AppSettings settings)
         {
             if (_window == null) return;
-
-            System.Diagnostics.Debug.WriteLine($"[ImportantService] ===== ЗАГРУЗКА ПОЗИЦИИ =====");
-            System.Diagnostics.Debug.WriteLine($"[ImportantService] До загрузки: {_window.Width}x{_window.Height}");
-            System.Diagnostics.Debug.WriteLine($"[ImportantService] Из settings: width={settings.ImportantOverlayWidth}, height={settings.ImportantOverlayHeight}");
-
             _window.Top = settings.ImportantOverlayTop;
             _window.Left = settings.ImportantOverlayLeft;
             _window.Width = settings.ImportantOverlayWidth;
             _window.Height = settings.ImportantOverlayHeight;
-
             SetDisplayMode(settings.ImportantChatMode);
-
-            System.Diagnostics.Debug.WriteLine($"[ImportantService] После загрузки: {_window.Width}x{_window.Height}");
         }
 
-        public void Show()
+        public void SetAutoDisplay(bool isAuto)
         {
-            if (_window == null) return;
-            _window.Visibility = Visibility.Visible;
-            _window.Topmost = true;
-            System.Diagnostics.Debug.WriteLine("[ImportantService] Окно показано");
+            Debug.WriteLine($"[ImportantService] SetAutoDisplay: {isAuto}");
         }
 
-        public void Hide()
-        {
-            if (_window == null) return;
-            _window.Visibility = Visibility.Collapsed;
-            System.Diagnostics.Debug.WriteLine("[ImportantService] Окно скрыто");
-        }
-
-        public void Toggle()
-        {
-            if (_window == null) return;
-            if (_window.Visibility == Visibility.Visible)
-                Hide();
-            else
-                Show();
-        }
+        public void Show() { if (_window != null) _window.Visibility = Visibility.Visible; }
+        public void Hide() { if (_window != null) _window.Visibility = Visibility.Collapsed; }
+        public void Toggle() { if (_window != null) _window.Visibility = _window.Visibility == Visibility.Visible ? Visibility.Collapsed : Visibility.Visible; }
     }
 }
