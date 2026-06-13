@@ -696,5 +696,57 @@ namespace SmithForge.ViewModels
         {
             IsStickersVisible = !IsStickersVisible;
         }
+
+        [RelayCommand]
+        private async Task AddKarmaToAll()
+        {
+            // Запрос подтверждения
+            var result = MessageBox.Show(
+                $"Начислить 10 кармы всем {Users.Count} зрителям, которые были в чате за текущий стрим?",
+                "Подтверждение",
+                MessageBoxButton.YesNo,
+                MessageBoxImage.Question);
+
+            if (result != MessageBoxResult.Yes) return;
+
+            try
+            {
+                int count = 0;
+                foreach (var chater in Users)
+                {
+                    // Начисляем 10 кармы
+                    chater.Karma += 10;
+                    chater.TotalKarma += 10;
+
+                    // Обновляем в базе данных через UpdateChaterStats
+                    DatabaseService.UpdateChaterStats(chater);
+                    ChaterStorage.AddOrUpdate(chater);
+                    count++;
+                }
+
+                LastMessageText = $"✅ Начислено 10 кармы {count} зрителям!";
+                Debug.WriteLine($"[Karma] Начислено 10 кармы {count} пользователям");
+
+                // Обновляем список пользователей в UI
+                Application.Current.Dispatcher.Invoke(() =>
+                {
+                    var temp = Users.ToList();
+                    Users.Clear();
+                    foreach (var user in temp)
+                    {
+                        Users.Add(user);
+                    }
+                });
+
+                // Воспроизводим звук уведомления
+                await VoiceService.PlayImportantSoundAsync();
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[Karma] Ошибка начисления: {ex.Message}");
+                LastMessageText = $"❌ Ошибка начисления: {ex.Message}";
+                MessageBox.Show($"Ошибка: {ex.Message}", "Ошибка", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
     }
 }

@@ -62,6 +62,10 @@ namespace SmithForge.Main.Models
         [ObservableProperty]
         private bool _showTimestamp = false;
 
+        // ДОБАВЛЕНО: Свойство для размера шрифта
+        [ObservableProperty]
+        private double _fontSize = 12;
+
         public bool IsSticker => !string.IsNullOrEmpty(StickerPath);
         public string LikesDisplay => Likes > 0 ? Likes.ToString() : string.Empty;
         public string DislikesDisplay => Dislikes > 0 ? Dislikes.ToString() : string.Empty;
@@ -147,7 +151,7 @@ namespace SmithForge.Main.Models
                 borderFactory.SetValue(Border.BackgroundProperty, Brushes.Transparent);
                 borderFactory.SetValue(Border.CornerRadiusProperty, new CornerRadius(4));
                 borderFactory.SetValue(Border.PaddingProperty, new Thickness(0));
-                borderFactory.SetValue(Border.MarginProperty, new Thickness(0, 0, 0, 1));
+                borderFactory.SetValue(Border.MarginProperty, new Thickness(0, 0, 0, 4));
                 var contentPresenterFactory = new FrameworkElementFactory(typeof(ContentPresenter));
                 contentPresenterFactory.SetValue(ContentPresenter.ContentProperty, new Binding("."));
                 contentPresenterFactory.SetValue(ContentPresenter.ContentTemplateProperty, originalTemplate);
@@ -175,6 +179,8 @@ namespace SmithForge.Main.Models
                     textBlock.SetBinding(TextBlock.TextProperty, new Binding("MessageText"));
                     textBlock.SetValue(TextBlock.ForegroundProperty, Brushes.White);
                     textBlock.SetValue(TextBlock.MarginProperty, new Thickness(5));
+                    // Привязываем FontSize к свойству FontSize
+                    textBlock.SetBinding(TextBlock.FontSizeProperty, new Binding("FontSize"));
                     template.VisualTree = textBlock;
                     template.Seal();
                     _emergencyTemplate = template;
@@ -215,14 +221,15 @@ namespace SmithForge.Main.Models
         partial void OnUserChanged(Chater value)
         {
             _cachedSkin = null;
+            _cachedAvatarPath = null;
             OnPropertyChanged(nameof(DisplayName));
             OnPropertyChanged(nameof(MessageCount));
             OnPropertyChanged(nameof(UserRank));
             OnPropertyChanged(nameof(PlatformColor));
             OnPropertyChanged(nameof(MessageSkin));
+            OnPropertyChanged(nameof(AvatarPath));
         }
 
-        // ДОБАВЛЯЕМ ОБНОВЛЕНИЕ ПРИ ИЗМЕНЕНИИ ТЕКСТА
         partial void OnMessageTextChanged(string value)
         {
             OnPropertyChanged(nameof(FormattedMessage));
@@ -238,17 +245,16 @@ namespace SmithForge.Main.Models
                 if (_cachedAvatarPath != null) return _cachedAvatarPath;
                 if (User == null) return null;
 
-                string basePath = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "SF_Data", "Assets", "Avatars", "Default");
-                string fileName = System.IO.Path.GetFileNameWithoutExtension(User.AvatarFileName ?? "default");
-                string[] extensions = { ".jpg", ".jpeg", ".png", ".gif" };
+                string avatarPath = User.FullAvatarPath;
 
-                foreach (string ext in extensions)
+                if (!string.IsNullOrEmpty(avatarPath) && System.IO.File.Exists(avatarPath))
                 {
-                    string testPath = System.IO.Path.Combine(basePath, fileName + ext);
-                    if (System.IO.File.Exists(testPath)) return _cachedAvatarPath = testPath;
+                    _cachedAvatarPath = avatarPath;
+                    return _cachedAvatarPath;
                 }
 
-                _cachedAvatarPath = System.IO.Path.Combine(basePath, "default.jpg");
+                string basePath = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "SF_Data", "Assets", "Avatars", "Default");
+                _cachedAvatarPath = System.IO.Path.Combine(basePath, "unknown.png");
                 return _cachedAvatarPath;
             }
         }

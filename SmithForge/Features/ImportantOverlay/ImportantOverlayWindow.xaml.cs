@@ -1,13 +1,15 @@
 ﻿using System;
+using System.Diagnostics;
+using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Input;
-using System.Runtime.InteropServices;
 using System.Windows.Interop;
 
 namespace SmithForge.Features.ImportantOverlay
 {
     public partial class ImportantOverlayWindow : Window
     {
+        private bool _isHidden = false;
         // Импорт WinAPI для изменения размера окна "на лету"
         [DllImport("user32.dll")]
         private static extern bool ReleaseCapture();
@@ -33,9 +35,19 @@ namespace SmithForge.Features.ImportantOverlay
             this.SizeChanged += OnSizeChanged;
             this.LocationChanged += OnLocationChanged;
         }
-
+        public void SetHidden(bool isHidden)  // ← ДОБАВИТЬ ЭТОТ МЕТОД
+        {
+            _isHidden = isHidden;
+        }
         private void OnLocationChanged(object sender, EventArgs e)
         {
+            // Не сохраняем позицию, если окно скрыто за экраном
+            if (_isHidden)
+            {
+                Debug.WriteLine("[ImportantWindow] LocationChanged: окно скрыто, сохранение пропущено");
+                return;
+            }
+
             if (DataContext is ImportantOverlayViewModel vm &&
                 Application.Current.MainWindow?.DataContext is SmithForge.ViewModels.MainViewModel mainVm)
             {
@@ -45,6 +57,13 @@ namespace SmithForge.Features.ImportantOverlay
         }
         private void OnSizeChanged(object sender, SizeChangedEventArgs e)
         {
+            // ✅ Добавить эту проверку
+            if (_isHidden)
+            {
+                Debug.WriteLine("[ImportantWindow] SizeChanged: окно скрыто, сохранение пропущено");
+                return;
+            }
+
             // При изменении размера сразу сохраняем в настройки
             if (DataContext is ImportantOverlayViewModel vm &&
                 Application.Current.MainWindow?.DataContext is SmithForge.ViewModels.MainViewModel mainVm)
@@ -57,15 +76,13 @@ namespace SmithForge.Features.ImportantOverlay
         {
             if (isClickThrough)
             {
-                this.Background = System.Windows.Media.Brushes.Transparent;
                 this.IsHitTestVisible = false;
-                if (DragArea != null) DragArea.Visibility = Visibility.Collapsed;
+                DragArea.Visibility = Visibility.Collapsed;
             }
             else
             {
-                this.Background = System.Windows.Media.Brushes.Transparent;
                 this.IsHitTestVisible = true;
-                if (DragArea != null) DragArea.Visibility = Visibility.Visible;
+                DragArea.Visibility = Visibility.Visible;
             }
         }
 

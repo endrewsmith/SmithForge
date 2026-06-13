@@ -27,6 +27,22 @@ namespace SmithForge.Main.Services
 
         // ========== ОСНОВНЫЕ МЕТОДЫ ==========
 
+        /// <summary>
+        /// Очищает текст от специальных символов, оставляя только буквы, цифры и пробелы
+        /// </summary>
+        public static string CleanSpecialCharacters(string text)
+        {
+            if (string.IsNullOrWhiteSpace(text)) return text;
+
+            // Убираем всё, кроме букв (включая русские), цифр и пробелов
+            string cleaned = Regex.Replace(text, @"[^\p{L}\p{N}\s]", "");
+
+            // Убираем множественные пробелы
+            cleaned = Regex.Replace(cleaned, @"\s+", " ").Trim();
+
+            return cleaned;
+        }
+
         public static async Task SayAsync(string text)
         {
             Debug.WriteLine($"[VoiceService] SayAsync НАЧАЛО, поток: {Thread.CurrentThread.ManagedThreadId}");
@@ -39,7 +55,7 @@ namespace SmithForge.Main.Services
                     return;
                 }
 
-                string cleanText = Regex.Replace(text, @"<[^>]*>", "").Trim();
+                string cleanText = CleanSpecialCharacters(text);
                 if (string.IsNullOrEmpty(cleanText))
                 {
                     Debug.WriteLine("[VoiceService] Очищенный текст пуст");

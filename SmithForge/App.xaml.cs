@@ -1,4 +1,5 @@
-﻿using System;
+﻿using SmithForge.Main.Services;
+using System;
 using System.Globalization;
 using System.Windows;
 using System.Windows.Markup;
@@ -30,6 +31,9 @@ namespace SmithForge
             DispatcherUnhandledException += App_DispatcherUnhandledException;
 
             base.OnStartup(e);
+
+            // Инициализируем сервис эмодзи
+            //YouTubeEmojiService.Initialize();
         }
 
         private void CurrentDomain_UnhandledException(object sender, UnhandledExceptionEventArgs e)

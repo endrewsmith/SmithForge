@@ -59,9 +59,10 @@ namespace SmithForge.Main.Services
                 new ExtendCommand(),
                 new LikeCommand(),
                 new DislikeCommand(),
-                new NickCommand(),      // ДОБАВЛЯЕМ
-new VoiceCommand(),
-                new StickerCommand(),   // ДОБАВЛЯЕМ
+                new NickCommand(),
+                new VoiceCommand(),
+                new StickerCommand(),
+                new AvatarCommand(),
             };
 
             foreach (var cmd in commandsList)

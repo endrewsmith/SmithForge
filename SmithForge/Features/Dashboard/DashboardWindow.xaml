@@ -15,23 +15,47 @@
 
     <Window.Resources>
         <overlay:RankToColorConverter x:Key="RankToColorConverter"/>
+
+        <!-- Стиль для кнопок управления -->
+        <Style x:Key="ControlButtonStyle" TargetType="Button">
+            <Setter Property="Width" Value="28"/>
+            <Setter Property="Height" Value="28"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Foreground" Value="#CCC"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="FontSize" Value="14"/>
+            <Setter Property="FontWeight" Value="Bold"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Margin" Value="2,0"/>
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Foreground" Value="#9147ff"/>
+                    <Setter Property="Background" Value="#3a3a3a"/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
     </Window.Resources>
 
     <Grid>
-        <!-- Верхняя полоса для перетаскивания -->
-        <Border Height="30" VerticalAlignment="Top" Background="#333" 
+        <!-- Верхняя панель с заголовком и кнопками управления -->
+        <Border Height="55" VerticalAlignment="Top" Background="#333" 
                 MouseLeftButtonDown="Window_MouseLeftButtonDown">
             <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="30"/>
+                    <RowDefinition Height="25"/>
+                </Grid.RowDefinitions>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*"/>
                     <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
 
-                <TextBlock Grid.Column="0" Text="📊 DASHBOARD" Foreground="White" 
+                <!-- Заголовок -->
+                <TextBlock Grid.Row="0" Grid.Column="0" Text="📊 DASHBOARD" Foreground="White" 
                            HorizontalAlignment="Center" VerticalAlignment="Center"/>
 
                 <!-- Кнопка закрытия -->
-                <Button Grid.Column="1" 
+                <Button Grid.Row="0" Grid.Column="1" 
                         Content="✕" 
                         Width="30" 
                         Height="30"
@@ -44,17 +68,46 @@
                         Click="CloseButton_Click"
                         ToolTip="Закрыть дашборд"
                         Margin="0,0,5,0"/>
+
+                <!-- Панель кнопок управления -->
+                <StackPanel Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="2" 
+                            Orientation="Horizontal" 
+                            HorizontalAlignment="Center"
+                            VerticalAlignment="Center">
+
+                    <Button Style="{StaticResource ControlButtonStyle}"
+                            Content="−"
+                            Command="{Binding DecreaseFontSizeCommand}"
+                            ToolTip="Уменьшить шрифт"/>
+
+                    <TextBlock Text="A" 
+                               Foreground="#CCC" 
+                               FontSize="12" 
+                               VerticalAlignment="Center"
+                               Margin="5,0"/>
+
+                    <Button Style="{StaticResource ControlButtonStyle}"
+                            Content="+"
+                            Command="{Binding IncreaseFontSizeCommand}"
+                            ToolTip="Увеличить шрифт"/>
+
+                    <Rectangle Width="1" Height="20" Fill="#555" Margin="8,0"/>
+
+                    <Button Style="{StaticResource ControlButtonStyle}"
+                            Content="🗑"
+                            Command="{Binding ClearMessagesCommand}"
+                            ToolTip="Очистить все сообщения"/>
+                </StackPanel>
             </Grid>
         </Border>
 
-        <!-- Основной контент -->
         <ScrollViewer x:Name="MainScrollViewer"
-                      VerticalScrollBarVisibility="Auto" 
+                      VerticalScrollBarVisibility="Visible" 
                       HorizontalScrollBarVisibility="Disabled"
                       Background="#373737"
-                      Margin="0,30,0,20"
-                      VerticalContentAlignment="Bottom">
-
+                      Margin="0,55,0,0"
+                      Padding="0,10,0,0"
+                      ScrollChanged="MainScrollViewer_ScrollChanged">
             <ItemsControl x:Name="MessagesList" 
                           ItemsSource="{Binding DisplayMessages}" 
                           IsHitTestVisible="False"
@@ -75,8 +128,45 @@
             </ItemsControl>
         </ScrollViewer>
 
-        <!-- Gripper для изменения размера -->
-        <Border Width="20" Height="20" 
+        <!-- Кнопка "Вниз" -->
+        <Button x:Name="ScrollToBottomButton"
+                Width="40" 
+                Height="40"
+                HorizontalAlignment="Right"
+                VerticalAlignment="Bottom"
+                Margin="0,0,20,20"
+                Command="{Binding ScrollToBottomCommand}"
+                Visibility="Collapsed"
+                Cursor="Hand"
+                ToolTip="Прокрутить к последнему сообщению">
+            <Button.Style>
+                <Style TargetType="Button">
+                    <Setter Property="Opacity" Value="0.5"/>
+                    <Style.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter Property="Opacity" Value="1"/>
+                        </Trigger>
+                    </Style.Triggers>
+                </Style>
+            </Button.Style>
+            <Button.Template>
+                <ControlTemplate TargetType="Button">
+                    <Border Background="#9147ff" 
+                            CornerRadius="20"
+                            BorderThickness="0">
+                        <TextBlock Text="↓" 
+                                   Foreground="White" 
+                                   FontSize="20"
+                                   FontWeight="Bold"
+                                   HorizontalAlignment="Center"
+                                   VerticalAlignment="Center"/>
+                    </Border>
+                </ControlTemplate>
+            </Button.Template>
+        </Button>
+
+        <!-- Gripper -->
+        <Border Width="10" Height="10" 
                 HorizontalAlignment="Right" 
                 VerticalAlignment="Bottom" 
                 Background="#555" 

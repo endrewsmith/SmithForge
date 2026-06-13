@@ -56,6 +56,7 @@ namespace SmithForge.Main.Models
         public double ImportantOverlayLeft { get; set; } = 300;
         public double ImportantOverlayWidth { get; set; } = 400;
         public double ImportantOverlayHeight { get; set; } = 200;
+        public bool ImportantOverlayVisible { get; set; } = true;
 
         // Настройки для стикеров
         public double StickersWindowTop { get; set; } = 400;

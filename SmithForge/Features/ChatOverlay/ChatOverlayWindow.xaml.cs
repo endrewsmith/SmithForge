@@ -66,9 +66,9 @@ namespace SmithForge.Features.ChatOverlay
             double tolerance = 10;
 
             bool left = pos.X <= tolerance;
-            bool right = pos.X >= this.Width - tolerance;
+            bool right = pos.X >= this.ActualWidth - tolerance;
             bool top = pos.Y <= tolerance;
-            bool bottom = pos.Y >= this.Height - tolerance;
+            bool bottom = pos.Y >= this.ActualHeight - tolerance;
 
             if (left || right || top || bottom)
             {
@@ -105,9 +105,9 @@ namespace SmithForge.Features.ChatOverlay
                 double tolerance = 10;
 
                 bool left = pos.X <= tolerance;
-                bool right = pos.X >= this.Width - tolerance;
+                bool right = pos.X >= this.ActualWidth - tolerance;
                 bool top = pos.Y <= tolerance;
-                bool bottom = pos.Y >= this.Height - tolerance;
+                bool bottom = pos.Y >= this.ActualHeight - tolerance;
 
                 if (top && left)
                     this.Cursor = Cursors.SizeNWSE;

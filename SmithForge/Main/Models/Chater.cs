@@ -1,9 +1,10 @@
 ﻿using CommunityToolkit.Mvvm.ComponentModel;
 using SmithForge.Main.Collections;
+using System;
 using System.Collections.ObjectModel;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
-using System;
 
 namespace SmithForge.Main.Models
 {
@@ -63,36 +64,86 @@ namespace SmithForge.Main.Models
         public ConcurrentHashSet<string> Channels { get; } = new();
 
         // --- UI ХЕЛПЕРЫ (Computed Properties) ---
-        public string FullAvatarPath
+        public string FullAvatarPath => GetAvatarPath();
+
+        private string GetAvatarPath()
         {
-            get
+            string basePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "SF_Data", "Assets", "Avatars");
+
+            // 1. Custom
+            string customPath = Path.Combine(basePath, "custom", $"{Id}.png");
+            Debug.WriteLine($"[Chater] Проверка custom: {customPath}, exists={File.Exists(customPath)}");
+            if (File.Exists(customPath))
+                return customPath;
+
+            // 2. Platform
+            string platformPath = Path.Combine(basePath, "platform", $"{Id}.png");
+            Debug.WriteLine($"[Chater] Проверка platform: {platformPath}, exists={File.Exists(platformPath)}");
+            if (File.Exists(platformPath))
+                return platformPath;
+
+            // 3. Default по рангу
+            string rankPath = Path.Combine(basePath, "default", $"rank{Rank}.png");
+            Debug.WriteLine($"[Chater] Проверка rank: {rankPath}, exists={File.Exists(rankPath)}");
+            if (File.Exists(rankPath))
+                return rankPath;
+
+            // 4. Unknown
+            string unknownPath = Path.Combine(basePath, "default", "unknown.png");
+            Debug.WriteLine($"[Chater] Проверка unknown: {unknownPath}, exists={File.Exists(unknownPath)}");
+            return File.Exists(unknownPath) ? unknownPath : string.Empty;
+        }
+
+        // Метод для принудительного обновления аватара в UI
+        public void RefreshAvatar()
+        {
+            Debug.WriteLine($"[Chater] RefreshAvatar вызван для {Id}, FullAvatarPath={FullAvatarPath}");
+            OnPropertyChanged(nameof(FullAvatarPath));
+        }
+
+        // Метод для проверки существования аватара
+        public bool HasCustomAvatar()
+        {
+            string basePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "SF_Data", "Assets", "Avatars");
+            string customPath = Path.Combine(basePath, "custom", $"{Id}.png");
+            return File.Exists(customPath);
+        }
+
+        public bool HasPlatformAvatar()
+        {
+            string basePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "SF_Data", "Assets", "Avatars");
+            string platformPath = Path.Combine(basePath, "platform", $"{Id}.png");
+            return File.Exists(platformPath);
+        }
+
+        // Метод для получения информации об аватаре (для отладки)
+        public string GetAvatarDebugInfo()
+        {
+            string basePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "SF_Data", "Assets", "Avatars");
+            string customPath = Path.Combine(basePath, "custom", $"{Id}.png");
+            string platformPath = Path.Combine(basePath, "platform", $"{Id}.png");
+            string rankPath = Path.Combine(basePath, "default", $"rank{Rank}.png");
+            string unknownPath = Path.Combine(basePath, "default", "unknown.png");
+
+            return $"Custom: {(File.Exists(customPath) ? "✅" : "❌")} {customPath}\n" +
+                   $"Platform: {(File.Exists(platformPath) ? "✅" : "❌")} {platformPath}\n" +
+                   $"Rank {Rank}: {(File.Exists(rankPath) ? "✅" : "❌")} {rankPath}\n" +
+                   $"Unknown: {(File.Exists(unknownPath) ? "✅" : "❌")} {unknownPath}\n" +
+                   $"Final: {FullAvatarPath}";
+        }
+
+        private string GetPrimaryPlatform()
+        {
+            var account = Accounts.FirstOrDefault();
+            if (account == null) return "";
+
+            return account.Platform?.ToLower() switch
             {
-                // 1. Сначала проверяем пользовательскую аватарку (загруженную вручную)
-                string userAvatarPath = Path.Combine(
-                    AppDomain.CurrentDomain.BaseDirectory,
-                    "SF_Data", "Assets", "Avatars", "User",
-                    AvatarFileName);
-
-                if (File.Exists(userAvatarPath))
-                    return userAvatarPath;
-
-                // 2. Затем проверяем аватарку из программы (по умолчанию)
-                string defaultAvatarPath = Path.Combine(
-                    AppDomain.CurrentDomain.BaseDirectory,
-                    "SF_Data", "Assets", "Avatars", "Default",
-                    AvatarFileName);
-
-                if (File.Exists(defaultAvatarPath))
-                    return defaultAvatarPath;
-
-                // 3. Если ничего нет - возвращаем заглушку из папки Default
-                string fallbackPath = Path.Combine(
-                    AppDomain.CurrentDomain.BaseDirectory,
-                    "SF_Data", "Assets", "Avatars", "Default",
-                    "default_avatar.png"); // или default.png
-
-                return File.Exists(fallbackPath) ? fallbackPath : string.Empty;
-            }
+                "tw" or "twitch" => "twitch",
+                "yt" or "youtube" => "youtube",
+                "gg" or "goodgame" => "goodgame",
+                _ => ""
+            };
         }
         public string AllPlatforms => string.Join(", ", Accounts.Select(a => a.DisplayName));
 

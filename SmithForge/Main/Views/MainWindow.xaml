@@ -66,6 +66,7 @@
             <RowDefinition Height="*"/>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
         <!-- МЕНЮ (Строка 0) -->
@@ -231,9 +232,41 @@
         </ListBox>
 
         <!-- СТАТУС-БАР (Строка 5) -->
+        <!-- СТАТУС-БАР (Строка 5) -->
         <StatusBar Grid.Row="5">
-            <TextBlock Text="Юзеров в базе: "/>
-            <TextBlock Text="{Binding Users.Count}"/>
+            <StatusBar.ItemsPanel>
+                <ItemsPanelTemplate>
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                    </Grid>
+                </ItemsPanelTemplate>
+            </StatusBar.ItemsPanel>
+            <StatusBarItem Grid.Column="0">
+                <TextBlock Text="Юзеров в базе: "/>
+            </StatusBarItem>
+            <StatusBarItem Grid.Column="1">
+                <TextBlock Text="{Binding Users.Count}"/>
+            </StatusBarItem>
+            <StatusBarItem Grid.Column="2">
+                <Button Content="✨ Начислить всем кармы +10" 
+                Command="{Binding AddKarmaToAllCommand}"
+                Background="#FFD966"
+                Foreground="#333"
+                Padding="10,3"
+                Margin="5,0"
+                Cursor="Hand"
+                ToolTip="Начислить 10 кармы всем активным зрителям">
+                    <Button.Resources>
+                        <Style TargetType="Border">
+                            <Setter Property="CornerRadius" Value="4"/>
+                        </Style>
+                    </Button.Resources>
+                </Button>
+            </StatusBarItem>
         </StatusBar>
 
         <!-- СЕКЦИЯ УПРАВЛЕНИЯ ОКНАМИ ЧАТОВ (Строка 6) -->

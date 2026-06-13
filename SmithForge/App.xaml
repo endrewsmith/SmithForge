@@ -2,12 +2,14 @@
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:local="clr-namespace:SmithForge"
-             xmlns:utils="clr-namespace:SmithForge.Main.Utils" 
+             xmlns:utils="clr-namespace:SmithForge.Main.Utils"
+             xmlns:converters="clr-namespace:SmithForge.Main.Converters"
              StartupUri="Main/Views/MainWindow.xaml">
 
     <Application.Resources>
         <!-- Глобальная регистрация конвертера для всех окон -->
         <utils:UnixToDateTimeConverter x:Key="UnixConverter"/>
+        <converters:FormattedTextWithEmojiConverter x:Key="FormattedTextWithEmojiConverter"/>
     </Application.Resources>
 </Application>
 

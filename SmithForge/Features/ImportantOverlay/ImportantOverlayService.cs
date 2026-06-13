@@ -7,20 +7,22 @@ using System.Diagnostics;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
+using System.Windows.Threading;
 
 namespace SmithForge.Features.ImportantOverlay
 {
     public class ImportantOverlayService
     {
         private bool _isPlaying = false; // флаг, что идет воспроизведение
-
         public bool IsPlaying => _isPlaying || _isAutoPlaying || _isPlayingManual;
+
         private bool _isAutoPlaying = false;
         private bool _isPlayingManual = false;
         private ImportantOverlayWindow? _window;
         private ImportantOverlayViewModel? _viewModel;
         private bool _isInitialized = false;
         private ChatDisplayMode _currentMode = ChatDisplayMode.AppearAndFade;
+
         private bool _isHidden = false;
         private double _savedTop;
         private double _savedLeft;
@@ -38,32 +40,75 @@ namespace SmithForge.Features.ImportantOverlay
         public ImportantOverlayService(AppSettings settings)
         {
             _settings = settings;
+            // Сразу создаем окно "в тени", как в работающем сервисе стикеров
+            CreateOverlay();
         }
+        private void CreateOverlay()
+        {
 
+                if (_window == null)
+                {
+                _viewModel = new ImportantOverlayViewModel();
+
+                _window = new ImportantOverlayWindow
+                    {
+                    DataContext = _viewModel,
+                        Visibility = Visibility.Collapsed  // ← НЕ Show()/Hide(), просто Collapsed
+                    };
+                _window.Show();
+                _window.Hide();
+
+                //_isInitialized = true;
+                //// Убираем _window.Show(); _window.Hide();
+                //// Просто создаём окно, но не показываем
+                //_window.Visibility = Visibility.Collapsed;
+
+                Debug.WriteLine("[ImportantService] Окно создано (скрыто)");
+                }
+           
+        }
         public void Initialize(double top, double left, double width, double height, bool isSetupMode)
         {
-            if (_isInitialized) return;
+            if (_window == null) return;
 
             Application.Current.Dispatcher.Invoke(() =>
             {
-                _viewModel = new ImportantOverlayViewModel();
-                _window = new ImportantOverlayWindow
+                _window.Width = width > 0 ? width : 450;
+                _window.Height = height > 0 ? height : 300;
+
+                _savedTop = top;
+                _savedLeft = left;
+
+                Debug.WriteLine($"[ImportantService] ПРОВЕРКА ФЛАГА: IsOverlayHidden = {_settings.IsOverlayHidden}");
+
+                // ✅ Сразу применяем скрытие если нужно
+                if (_settings.IsOverlayHidden)
                 {
-                    DataContext = _viewModel,
-                    Top = top,
-                    Left = left,
-                    Width = width > 0 ? width : 450,
-                    Height = height > 0 ? height : 600,
-                    Visibility = Visibility.Visible
-                };
+                    _window.SetHidden(true);
+                    _window.Top = 1 - _window.Height;
+                    _window.Left = 1 - _window.Width;
+                    _isHidden = true;
+                    Debug.WriteLine($"[ImportantService] Инициализация: окно скрыто за экраном, Top={_window.Top}, Left={_window.Left}");
+                }
+                else
+                {
+                    _window.SetHidden(false);
+                    _window.Top = top;
+                    _window.Left = left;
+                    _isHidden = false;
+                }
 
                 SetSetupMode(isSetupMode);
                 SetDisplayMode(_currentMode);
+
+                if (_settings.ImportantOverlayVisible && !_settings.IsOverlayHidden)
+                {
+                    _window.Visibility = Visibility.Visible;
+                }
+
                 _isInitialized = true;
-                Debug.WriteLine("[ImportantService] Инициализация завершена");
             });
         }
-
         public void SetSetupMode(bool isSetupMode)
         {
             if (_window == null || _viewModel == null) return;
@@ -90,25 +135,41 @@ namespace SmithForge.Features.ImportantOverlay
         public void SetHidden(bool isHidden)
         {
             if (_window == null) return;
+
+            Debug.WriteLine($"[ImportantService] SetHidden({isHidden}), текущее _isHidden={_isHidden}");
+
             if (isHidden && !_isHidden)
             {
+                // Сохраняем позицию
                 _savedTop = _window.Top;
                 _savedLeft = _window.Left;
-                _window.Top = -2000;
-                _window.Left = -2000;
+
+                // Убираем окно за экран
+                _window.Top = 1 - _window.Height;
+                _window.Left = 1 - _window.Width;
+
                 _isHidden = true;
+                Debug.WriteLine("[ImportantService] Окно спрятано за экран");
             }
             else if (!isHidden && _isHidden)
             {
+                // Возвращаем на сохраненную позицию
                 _window.Top = _savedTop;
                 _window.Left = _savedLeft;
                 _isHidden = false;
+
+                // ✅ ПОКАЗЫВАЕМ ОКНО (если оно должно быть видимым)
+                if (_settings.ImportantOverlayVisible)
+                {
+                    _window.Visibility = Visibility.Visible;
+                }
+
+                Debug.WriteLine($"[ImportantService] Окно возвращено на позицию: Top={_savedTop}, Left={_savedLeft}");
             }
         }
-
         public void ShowImportantMessage(Chater chater, CommonMessage message)
         {
-            string importantText = $"Сообщение от {chater.EffectiveName}: {message.Message}";
+            string importantText = $"{chater.EffectiveName} пишет: {message.Message}";
             var settings = ConfigService.Load();
 
             Debug.WriteLine($"[ImportantOverlay] Режим: {(settings.ImportantPlaybackMode == ImportantPlaybackMode.Auto ? "АВТО" : "РУЧНОЙ")}");
@@ -374,17 +435,28 @@ namespace SmithForge.Features.ImportantOverlay
             settings.ImportantOverlayLeft = _isHidden ? _savedLeft : _window.Left;
             settings.ImportantOverlayWidth = _window.Width;
             settings.ImportantOverlayHeight = _window.Height;
+            settings.ImportantOverlayVisible = _window.Visibility == Visibility.Visible;
             settings.ImportantChatMode = _currentMode;
         }
 
         public void LoadPosition(AppSettings settings)
         {
             if (_window == null) return;
+            if (_isHidden)
+            {
+                Debug.WriteLine("[ImportantService] LoadPosition: окно скрыто, позиция не загружена");
+                return;
+            }
             _window.Top = settings.ImportantOverlayTop;
             _window.Left = settings.ImportantOverlayLeft;
             _window.Width = settings.ImportantOverlayWidth;
             _window.Height = settings.ImportantOverlayHeight;
             SetDisplayMode(settings.ImportantChatMode);
+
+            if (settings.ImportantOverlayVisible)
+            {
+                _window.Visibility = Visibility.Visible;
+            }
         }
 
         public void SetAutoDisplay(bool isAuto)
@@ -396,8 +468,12 @@ namespace SmithForge.Features.ImportantOverlay
             }
         }
 
-        public void Show() { if (_window != null) _window.Visibility = Visibility.Visible; }
+        public void Show() {
+            if (_window != null) _window.Visibility = Visibility.Visible;
+        }
         public void Hide() { if (_window != null) _window.Visibility = Visibility.Collapsed; }
-        public void Toggle() { if (_window != null) _window.Visibility = _window.Visibility == Visibility.Visible ? Visibility.Collapsed : Visibility.Visible; }
+        public void Toggle() {
+            if (_window != null) _window.Visibility = _window.Visibility == Visibility.Visible ? Visibility.Collapsed : Visibility.Visible;
+        }
     }
 }
