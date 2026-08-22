@@ -1,0 +1,214 @@
+﻿<UserControl x:Class="SmithForge.Features.YouTubeManager.Views.YouTubeManagerView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             mc:Ignorable="d"
+             d:DesignHeight="750" d:DesignWidth="900">
+
+    <Grid Margin="10">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- ==========================================
+             РЯД 1: НАСТРОЙКИ
+             ========================================== -->
+        <GroupBox Grid.Row="0" Header="🔑 Настройки YouTube" Margin="0,0,0,10">
+            <StackPanel>
+                <!-- API Key -->
+                <WrapPanel Margin="0,0,0,5">
+                    <TextBlock Text="API Key:" FontWeight="Bold" 
+                               VerticalAlignment="Center" MinWidth="80"/>
+                    <TextBox Text="{Binding ApiKey}" 
+                             Width="400"/>
+                    <Button Content="💾 Сохранить"
+                            Command="{Binding SaveSettingsCommand}"
+                            Padding="8,3"/>
+                </WrapPanel>
+
+                <!-- Channel ID и поиск -->
+                <WrapPanel Margin="0,0,0,5">
+                    <TextBlock Text="Channel ID:" FontWeight="Bold" 
+                               VerticalAlignment="Center" MinWidth="80"/>
+                    <TextBox Text="{Binding ChannelId}" 
+                             Width="200"/>
+
+                    <Button Content="🔍 API (квота)"
+                            Command="{Binding FindStreamsViaApiCommand}"
+                            Background="#2196F3" 
+                            Foreground="White"
+                            Padding="8,5"/>
+
+                    <Button Content="🆓 LIVE (бесплатно)"
+                            Command="{Binding FindStreamsViaHtmlCommand}"
+                            Background="#4CAF50" 
+                            Foreground="White"
+                            Padding="8,5"
+                            Margin="5,0,0,0"/>
+                </WrapPanel>
+
+                <!-- Ручной ввод Video ID -->
+                <WrapPanel>
+                    <TextBlock Text="Video ID:" FontWeight="Bold" 
+                               VerticalAlignment="Center" MinWidth="80"/>
+                    <TextBox Text="{Binding ManualVideoId}" 
+                             Width="200" 
+                             ToolTip="Введите ID видео (11 символов)"/>
+
+                    <Button Content="➕ Добавить вручную"
+                            Command="{Binding AddManualStreamCommand}"
+                            Background="#FF9800" 
+                            Foreground="White"
+                            Padding="8,5"/>
+
+                    <Button Content="🗑 Очистить все"
+                            Command="{Binding ClearAllStreamsCommand}"
+                            Background="#F44336" 
+                            Foreground="White"
+                            Padding="8,5"
+                            Margin="5,0,0,0"/>
+                </WrapPanel>
+            </StackPanel>
+        </GroupBox>
+
+        <!-- ==========================================
+             РЯД 2: СПИСОК СТРИМОВ С ФИЛЬТРОМ
+             ========================================== -->
+        <GroupBox Grid.Row="1" Header="📺 Доступные стримы" Margin="0,0,0,10">
+            <StackPanel>
+                <!-- Фильтр -->
+                <WrapPanel Margin="0,0,0,5">
+                    <TextBlock Text="Фильтр:" FontWeight="Bold" 
+                               VerticalAlignment="Center" MinWidth="50"/>
+
+                    <ComboBox Width="150"
+                              VerticalAlignment="Center"
+                              SelectedValue="{Binding CurrentFilter}">
+                        <ComboBoxItem Content="📺 Все стримы" Tag="all"/>
+                        <ComboBoxItem Content="📺 Обычные" Tag="regular"/>
+                        <ComboBoxItem Content="🎬 Shorts" Tag="shorts"/>
+                    </ComboBox>
+
+                    <TextBlock Text="{Binding FilterCountText}" 
+                               VerticalAlignment="Center"
+                               Margin="15,0,0,0"
+                               Foreground="Gray"/>
+                </WrapPanel>
+
+                <!-- Список -->
+                <ListBox ItemsSource="{Binding FilteredStreams}"
+                         Height="120"
+                         SelectionMode="Multiple"
+                         Background="#FAFAFA"
+                         BorderBrush="#E0E0E0"
+                         BorderThickness="1">
+                    <ListBox.ItemTemplate>
+                        <DataTemplate>
+                            <StackPanel Orientation="Horizontal">
+                                <CheckBox IsChecked="{Binding IsSelected}"
+                                          VerticalAlignment="Center"
+                                          Margin="5,0,10,0"/>
+                                <TextBlock Text="{Binding DisplayText}" 
+                                           VerticalAlignment="Center"/>
+                            </StackPanel>
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
+                </ListBox>
+
+                <!-- Кнопки -->
+                <WrapPanel Margin="0,5,0,0">
+                    <Button Content="▶ Подключиться к выбранным"
+                            Command="{Binding ConnectSelectedCommand}"
+                            Background="#4CAF50" 
+                            Foreground="White"
+                            Padding="12,6"/>
+
+                    <Button Content="▶ Подключиться ко всем"
+                            Command="{Binding ConnectAllCommand}"
+                            Background="#2196F3" 
+                            Foreground="White"
+                            Padding="12,6"
+                            Margin="5,0,0,0"/>
+
+                    <Button Content="⏹ Отключить все"
+                            Command="{Binding DisconnectAllCommand}"
+                            Background="#F44336" 
+                            Foreground="White"
+                            Padding="12,6"
+                            Margin="5,0,0,0"/>
+
+                    <TextBlock Text="{Binding StatusText}" 
+                               VerticalAlignment="Center"
+                               Margin="15,0,0,0"
+                               FontWeight="Bold"
+                               Foreground="{Binding StatusColor}"/>
+                </WrapPanel>
+            </StackPanel>
+        </GroupBox>
+
+        <!-- ==========================================
+             РЯД 3: СТАТУС
+             ========================================== -->
+        <WrapPanel Grid.Row="2" Margin="0,0,0,10">
+            <TextBlock Text="{Binding ActiveStreamsText}" Margin="0,0,15,0"/>
+            <TextBlock Text="{Binding MessagesCountText}" Margin="0,0,15,0"/>
+            <TextBlock Text="{Binding ActiveClientsText}" Margin="0,0,15,0"/>
+        </WrapPanel>
+
+        <!-- ==========================================
+             РЯД 4: СООБЩЕНИЯ
+             ========================================== -->
+        <ListBox Grid.Row="3"
+                 ItemsSource="{Binding Messages}"
+                 Margin="0,0,0,5"
+                 Background="#FAFAFA">
+            <ListBox.ItemTemplate>
+                <DataTemplate>
+                    <Border BorderBrush="#E0E0E0" 
+                            BorderThickness="0,0,0,1"
+                            Padding="5,3">
+                        <WrapPanel>
+                            <TextBlock Text="{Binding Timestamp, StringFormat={}{0:HH:mm:ss}}"
+                                       Foreground="Gray"
+                                       FontSize="11"
+                                       Margin="0,0,8,0"/>
+
+                            <TextBlock Text="{Binding Author}" 
+                                       FontWeight="Bold"
+                                       Foreground="{Binding Color}"
+                                       Margin="0,0,8,0"/>
+
+                            <TextBlock Text="{Binding Text}" 
+                                       TextWrapping="Wrap"/>
+
+                            <TextBlock Text="{Binding VideoId}" 
+                                       Foreground="Gray"
+                                       FontSize="10"
+                                       Margin="8,0,0,0"/>
+                        </WrapPanel>
+                    </Border>
+                </DataTemplate>
+            </ListBox.ItemTemplate>
+        </ListBox>
+
+        <!-- ==========================================
+             РЯД 5: ЛОГ
+             ========================================== -->
+        <GroupBox Grid.Row="4" Header="📋 Лог" Height="120">
+            <ScrollViewer VerticalScrollBarVisibility="Auto">
+                <TextBox x:Name="LogBox" 
+                         TextWrapping="Wrap"
+                         IsReadOnly="True"
+                         Background="#F5F5F5"
+                         FontFamily="Consolas"
+                         FontSize="11"
+                         MinHeight="80"/>
+            </ScrollViewer>
+        </GroupBox>
+    </Grid>
+</UserControl>

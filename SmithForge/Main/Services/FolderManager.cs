@@ -8,15 +8,9 @@ using System.Threading.Tasks;
 
 namespace SmithForge.Main.Services
 {
-    using System;
-    using System.IO;
-    using System.Diagnostics;
-
-    namespace SmithForge.Main.Services
+    public static class FolderManager
     {
-        public static class FolderManager
-        {
-            // Переименовали корень в SF_Data (Smith Forge Data)
+        // Переименовали корень в SF_Data (Smith Forge Data)
             private static readonly string Root = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "SF_Data");
 
             // Пути к подпапкам
@@ -52,5 +46,3 @@ namespace SmithForge.Main.Services
             public static string GetAvatarPath(string extId) => Path.Combine(CacheDir, $"{extId}.png");
         }
     }
-
-}

@@ -1,3 +1,4 @@
 <Solution>
+  <Project Path="SmithForge.ChatEngine/SmithForge.ChatEngine.csproj" Id="7a02915c-a328-4884-91d8-e43a47259829" />
   <Project Path="SmithForge/SmithForge.csproj" />
 </Solution>

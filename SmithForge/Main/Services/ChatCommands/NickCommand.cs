@@ -53,6 +53,7 @@ namespace SmithForge.Main.Services.ChatCommands
 
             string oldName = chater.DisplayName ?? chater.Login;
             chater.DisplayName = newName;
+            chater.IsDisplayNameCustom = true; // ✅ Помечаем, что имя установлено вручную через команду
 
             DatabaseService.SaveChater(chater);
             ChaterStorage.AddOrUpdate(chater);

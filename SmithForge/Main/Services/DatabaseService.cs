@@ -1,7 +1,6 @@
 ﻿using Dapper;
 using Microsoft.Data.Sqlite;
 using SmithForge.Main.Models;
-using SmithForge.Main.Services.SmithForge.Main.Services;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -18,6 +17,18 @@ namespace SmithForge.Main.Services
             using var db = new SqliteConnection(ConnectionString);
             db.Open();
             db.Execute(Sql.InitTables);
+
+            // ✅ Добавляем колонку IsDisplayNameCustom если её нет (для существующих БД)
+            try
+            {
+                db.Execute("ALTER TABLE Chaters ADD COLUMN IsDisplayNameCustom INTEGER DEFAULT 0");
+                Debug.WriteLine("[DB] Колонка IsDisplayNameCustom добавлена");
+            }
+            catch (Exception ex)
+            {
+                // Колонка уже существует - игнорируем
+                Debug.WriteLine($"[DB] IsDisplayNameCustom уже существует: {ex.Message}");
+            }
 
             // Инициализация таблицы реакций
             InitializeReactionsTable();
@@ -74,6 +85,43 @@ namespace SmithForge.Main.Services
 
         // --- СОХРАНЕНИЕ ---
 
+        /// <summary>
+        /// Миграция аккаунта: заменяет короткое имя на ID канала в базе данных
+        /// </summary>
+        public static void MigrateAccountToChannelId(string chaterId, string oldExternalId, string newExternalId)
+        {
+            try
+            {
+                using var db = new SqliteConnection(ConnectionString);
+                db.Open();
+
+                // Обновляем ExternalId в таблице ExternalAccounts
+                db.Execute(@"
+                    UPDATE ExternalAccounts 
+                    SET ExternalId = @newExternalId 
+                    WHERE ChaterId = @chaterId AND ExternalId = @oldExternalId",
+                    new { chaterId, oldExternalId, newExternalId });
+
+                // Обновляем кэш
+                var chater = ChaterStorage.GetById(chaterId);
+                if (chater != null)
+                {
+                    var account = chater.Accounts.FirstOrDefault(a => a.ExternalId == oldExternalId);
+                    if (account != null)
+                    {
+                        account.ExternalId = newExternalId;
+                        ChaterStorage.AddOrUpdate(chater);
+                    }
+                }
+
+                Debug.WriteLine($"[DB] Миграция аккаунта: '{oldExternalId}' -> '{newExternalId}'");
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[DB ERROR] Миграция аккаунта: {ex.Message}");
+            }
+        }
+
         public static void SaveChater(Chater c)
         {
             using var db = new SqliteConnection(ConnectionString);
@@ -81,12 +129,26 @@ namespace SmithForge.Main.Services
             using var tx = db.BeginTransaction();
             try
             {
+                // Миграция: заменяем короткие имена на ID каналов
+                foreach (var acc in c.Accounts.ToList())
+                {
+                    // Если аккаунт имеет короткое имя вида "youtube:@smithch"
+                    // и это YouTube, заменяем на ID канала
+                    if (acc.Platform.ToLower() == "youtube" && acc.ExternalId.Contains(":@"))
+                    {
+                        // Это короткое имя — нужно заменить на ID канала
+                        // Но у нас нет ID канала здесь, поэтому пропускаем
+                        // Миграция произойдёт при следующем сообщении через ProcessConnectorMessage
+                    }
+                }
+
                 db.Execute(Sql.SaveChaterFull, new
                 {
                     c.Id,
                     c.PersonId,
                     Name = c.Login,
                     c.DisplayName,
+                    IsDisplayNameCustom = c.IsDisplayNameCustom ? 1 : 0, // ✅ Добавлено
                     c.AvatarFileName,
                     c.Rank,
                     KarmaMultiplier = 1.0 + (c.Rank * 0.1),
@@ -100,6 +162,10 @@ namespace SmithForge.Main.Services
                     IsKeyPermanent = c.IsKarmaKeyPermanent ? 1 : 0
                 }, tx);
 
+                // Сначала удаляем ВСЕ старые аккаунты этого чаттера
+                db.Execute("DELETE FROM ExternalAccounts WHERE ChaterId = @chaterId", new { chaterId = c.Id }, tx);
+
+                // Вставляем актуальные аккаунты
                 foreach (var acc in c.Accounts)
                 {
                     db.Execute(Sql.SaveExternal, new { acc.ExternalId, ChaterId = c.Id, acc.Platform, Name = acc.OriginalName }, tx);
@@ -453,6 +519,7 @@ namespace SmithForge.Main.Services
         PersonId TEXT, 
         MainName TEXT NOT NULL, 
         DisplayName TEXT,
+        IsDisplayNameCustom INTEGER DEFAULT 0,
         AvatarFileName TEXT DEFAULT 'default.png', 
         Rank INTEGER DEFAULT 0, 
         KarmaMultiplier REAL DEFAULT 1.0, 
@@ -496,7 +563,8 @@ namespace SmithForge.Main.Services
             public const string LoadBase = @"
     SELECT 
         c.Id, c.PersonId, c.MainName as Login, 
-        COALESCE(c.DisplayName, '') as DisplayName, 
+        COALESCE(c.DisplayName, '') as DisplayName,
+        c.IsDisplayNameCustom,
         c.AvatarFileName, c.Rank, c.Karma, c.TotalKarma, 
         c.MessageCount, c.FirstSeen, c.LastMessageTime, 
         c.MessageXamlTemplate,
@@ -519,16 +587,17 @@ namespace SmithForge.Main.Services
 
             public const string SaveChaterFull = @"
         INSERT INTO Chaters (
-            Id, PersonId, MainName, DisplayName, AvatarFileName, Rank, 
+            Id, PersonId, MainName, DisplayName, IsDisplayNameCustom, AvatarFileName, Rank, 
             KarmaMultiplier, Karma, TotalKarma, MessageCount, FirstSeen, 
             LastMessageTime, MessageXamlTemplate, CustomKarmaKey, IsKeyPermanent
         ) VALUES (
-            @Id, @PersonId, @Name, @DisplayName, @AvatarFileName, @Rank, 
+            @Id, @PersonId, @Name, @DisplayName, @IsDisplayNameCustom, @AvatarFileName, @Rank, 
             @KarmaMultiplier, @Karma, @TotalKarma, @MessageCount, @FirstSeen, 
             @LastMessageTime, @MessageXamlTemplate, @CustomKarmaKey, @IsKeyPermanent
         ) 
         ON CONFLICT(Id) DO UPDATE SET 
-            DisplayName = excluded.DisplayName, 
+            DisplayName = excluded.DisplayName,
+            IsDisplayNameCustom = excluded.IsDisplayNameCustom,
             MainName = excluded.MainName,
             AvatarFileName = excluded.AvatarFileName,
             Rank = excluded.Rank,

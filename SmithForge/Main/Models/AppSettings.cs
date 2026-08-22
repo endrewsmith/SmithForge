@@ -7,12 +7,17 @@ using System.Linq;
 
 namespace SmithForge.Main.Models
 {
+    // === ОСНОВНОЙ КЛАСС НАСТРОЕК ===
     public partial class AppSettings : ObservableObject
     {
-        private static readonly string ConfigPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "SF_Data", "settings.xml");
+        private static readonly string ConfigPath = Path.Combine(
+            AppDomain.CurrentDomain.BaseDirectory,
+            "SF_Data",
+            "settings.xml"
+        );
+
         private static readonly List<int> DefaultRankThresholds = new List<int> { 10, 50, 100, 200, 500, 1000 };
 
-        // Поле для хранения порогов
         private List<int> _rankThresholds;
 
         public AppSettings()
@@ -20,74 +25,76 @@ namespace SmithForge.Main.Models
             CommandShortcuts = new List<ShortcutItem>();
             CommandPrefixes = new List<string> { "!", "/" };
             _rankThresholds = new List<int>(DefaultRankThresholds);
+
+            YouTube = new YouTubeSettings();
+            Twitch = new TwitchSettings();
+            GoodGame = new GoodGameSettings();
         }
 
-        public int StickerDisplayTimeMs { get; set; } = 5000;
-
-        // Окно приложения
+        // === Окно приложения ===
         public double WindowTop { get; set; } = 100;
         public double WindowLeft { get; set; } = 100;
         public double WindowWidth { get; set; } = 800;
         public double WindowHeight { get; set; } = 600;
 
-        // Сетевые настройки
+        // === Сетевые настройки ===
         public double NetworkPort { get; set; } = 10880;
         public string ProgramPath { get; set; } = string.Empty;
         public int LastStreamNumber { get; set; } = 0;
         public int MinMessageLength { get; set; } = 1;
         public bool IsOverlaySetupMode { get; set; } = true;
 
-        // Настройки для главного оверлея
+        // === Настройки для главного оверлея ===
         public double OverlayTop { get; set; } = 100;
         public double OverlayLeft { get; set; } = 100;
         public double OverlayWidth { get; set; } = 450;
         public double OverlayHeight { get; set; } = 600;
         public bool OverlayVisible { get; set; } = true;
 
-        // Настройки для шортов
+        // === Настройки для шортов ===
         public double ShortsWindowTop { get; set; } = 200;
         public double ShortsWindowLeft { get; set; } = 200;
         public double ShortsWindowWidth { get; set; } = 450;
         public double ShortsWindowHeight { get; set; } = 600;
         public bool ShortsWindowVisible { get; set; } = true;
 
-        // Настройки для важных сообщений
+        // === Настройки для важных сообщений ===
         public double ImportantOverlayTop { get; set; } = 300;
         public double ImportantOverlayLeft { get; set; } = 300;
         public double ImportantOverlayWidth { get; set; } = 400;
         public double ImportantOverlayHeight { get; set; } = 200;
         public bool ImportantOverlayVisible { get; set; } = true;
 
-        // Настройки для стикеров
+        // === Настройки для стикеров ===
         public double StickersWindowTop { get; set; } = 400;
         public double StickersWindowLeft { get; set; } = 400;
         public double StickersWindowWidth { get; set; } = 300;
         public double StickersWindowHeight { get; set; } = 300;
         public bool StickersWindowVisible { get; set; } = true;
 
-        // Дополнительные настройки видимости
+        // === Дополнительные настройки видимости ===
         public bool IsStickersVisible { get; set; } = true;
         public bool IsOverlayHidden { get; set; } = false;
 
-        // Режимы для чатов
+        // === Режимы для чатов ===
         public ChatDisplayMode MainChatMode { get; set; } = ChatDisplayMode.AppearAndFade;
         public ChatDisplayMode ShortsChatMode { get; set; } = ChatDisplayMode.AppearAndFade;
         public ChatDisplayMode ImportantChatMode { get; set; } = ChatDisplayMode.AppearAndFade;
         public ChatDisplayMode StickersChatMode { get; set; } = ChatDisplayMode.AppearAndFade;
 
-        // Множители для платформ
+        // === Множители для платформ ===
         public double KarmaRateTwitch { get; set; } = 1.0;
         public double KarmaRateYouTube { get; set; } = 1.0;
         public double KarmaRateGoodGame { get; set; } = 1.0;
 
-        // Команды и префиксы
+        // === Команды и префиксы ===
         [XmlArray("CommandShortcuts")]
         [XmlArrayItem("Shortcut")]
         public List<ShortcutItem> CommandShortcuts { get; set; }
 
         public List<string> CommandPrefixes { get; set; }
 
-        // Настройки голоса
+        // === Настройки голоса ===
         public string SelectedVoice { get; set; } = string.Empty;
         public string DefaultMaleVoice { get; set; } = string.Empty;
         public string DefaultFemaleVoice { get; set; } = string.Empty;
@@ -95,61 +102,54 @@ namespace SmithForge.Main.Models
         public int ImportantSoundVolume { get; set; } = 100;
         public int VoiceVolume { get; set; } = 100;
 
-        // Режим воспроизведения важных сообщений (Auto/Manual)
-        public ImportantPlaybackMode ImportantPlaybackMode { get; set; } = ImportantPlaybackMode.Auto;
+        // === Режим воспроизведения важных сообщений ===
+        public ImportantPlaybackMode ImportantPlaybackMode { get; set; } = ImportantPlaybackMode.Auto; // ← Ошибка была здесь
 
-        // Горячая клавиша для воспроизведения (по умолчанию F8)
+        // === Горячая клавиша ===
         public string ImportantPlaybackHotkey { get; set; } = "F8";
 
-        // Пороги рангов - с автоматической очисткой при get и set
-        [XmlIgnore] // Игнорируем для XML, так как используем отдельное поле
+        public int StickerDisplayTimeMs { get; set; } = 5000;
+
+        // === Платформы ===
+        [XmlElement("YouTube")]
+        public YouTubeSettings YouTube { get; set; }
+
+        [XmlElement("Twitch")]
+        public TwitchSettings Twitch { get; set; }
+
+        [XmlElement("GoodGame")]
+        public GoodGameSettings GoodGame { get; set; }
+
+        // === Ранги ===
+        [XmlIgnore]
         public List<int> RankThresholds
         {
             get
             {
-                // При получении всегда возвращаем уникальные отсортированные значения
                 if (_rankThresholds == null)
-                {
                     _rankThresholds = new List<int>(DefaultRankThresholds);
-                }
                 return _rankThresholds.Distinct().OrderBy(x => x).ToList();
             }
             set
             {
-                if (value != null)
-                {
-                    // Очищаем дубликаты и сортируем
-                    _rankThresholds = value.Distinct().OrderBy(x => x).ToList();
-                }
-                else
-                {
-                    _rankThresholds = new List<int>(DefaultRankThresholds);
-                }
+                _rankThresholds = value?.Distinct().OrderBy(x => x).ToList()
+                    ?? new List<int>(DefaultRankThresholds);
                 OnPropertyChanged();
             }
         }
 
-        // Специальный метод для XML сериализации
         [XmlArray("RankThresholds")]
         [XmlArrayItem("int")]
         public List<int> RankThresholdsForXml
         {
-            get
-            {
-                // При сериализации возвращаем очищенный список
-                return RankThresholds;
-            }
-            set
-            {
-                // При десериализации очищаем дубликаты
-                if (value != null)
-                {
-                    RankThresholds = value;
-                }
-            }
+            get => RankThresholds;
+            set => RankThresholds = value;
         }
 
-        /// <summary> Создает настройки по умолчанию с предустановленными командами </summary>
+        // ============================================================
+        // === МЕТОДЫ ===
+        // ============================================================
+
         public static AppSettings CreateDefaultSettings()
         {
             var settings = new AppSettings
@@ -173,16 +173,36 @@ namespace SmithForge.Main.Models
                 MainChatMode = ChatDisplayMode.AppearAndFade,
                 ShortsChatMode = ChatDisplayMode.AppearAndFade,
                 ImportantChatMode = ChatDisplayMode.AppearAndFade,
-                StickersChatMode = ChatDisplayMode.AppearAndFade
+                StickersChatMode = ChatDisplayMode.AppearAndFade,
+                ImportantPlaybackMode = ImportantPlaybackMode.Auto, // ← Исправлено
+
+                YouTube = new YouTubeSettings
+                {
+                    ApiKey = Environment.GetEnvironmentVariable("YOUTUBE_API_KEY") ?? string.Empty,
+                    ChannelId = string.Empty,
+                    AutoConnect = true,
+                    ShowSubscriberAlerts = true,
+                    PollingInterval = 600,
+                    Colors = new YouTubeColorSettings()
+                },
+                Twitch = new TwitchSettings
+                {
+                    ClientId = string.Empty,
+                    AccessToken = string.Empty,
+                    ChannelName = string.Empty,
+                    AutoConnect = false
+                },
+                GoodGame = new GoodGameSettings
+                {
+                    ChannelId = string.Empty,
+                    AutoConnect = false
+                }
             };
 
-            // Устанавливаем пороги
             settings._rankThresholds = new List<int>(DefaultRankThresholds);
-
             return settings;
         }
 
-        /// <summary> Сохраняет настройки в XML файл </summary>
         public void Save()
         {
             try
@@ -193,34 +213,25 @@ namespace SmithForge.Main.Models
                     Directory.CreateDirectory(directory);
                 }
 
-                // Очищаем дубликаты перед сохранением
-                if (CommandPrefixes != null)
-                {
-                    CommandPrefixes = CommandPrefixes.Distinct().ToList();
-                }
+                CommandPrefixes = CommandPrefixes?.Distinct().ToList() ?? new List<string>();
 
-                // Очищаем дубликаты в сокращениях
-                if (CommandShortcuts != null)
-                {
-                    CommandShortcuts = CommandShortcuts
-                        .GroupBy(x => x.Key)
-                        .Select(g => g.First())
-                        .ToList();
-                }
+                CommandShortcuts = CommandShortcuts?
+                    .GroupBy(x => x.Key)
+                    .Select(g => g.First())
+                    .ToList() ?? new List<ShortcutItem>();
 
-                // Очищаем пороги через setter
                 if (_rankThresholds != null)
-                {
-                    RankThresholds = _rankThresholds; // Триггерит очистку
-                }
+                    RankThresholds = _rankThresholds;
+
+                YouTube ??= new YouTubeSettings();
+                Twitch ??= new TwitchSettings();
+                GoodGame ??= new GoodGameSettings();
 
                 var serializer = new XmlSerializer(typeof(AppSettings));
                 using var writer = new StreamWriter(ConfigPath);
                 serializer.Serialize(writer, this);
 
                 System.Diagnostics.Debug.WriteLine($"[AppSettings] Настройки сохранены в {ConfigPath}");
-                System.Diagnostics.Debug.WriteLine($"[AppSettings] Сохранено сокращений: {CommandShortcuts?.Count ?? 0}");
-                System.Diagnostics.Debug.WriteLine($"[AppSettings] Сохранено порогов: {_rankThresholds?.Count ?? 0}");
             }
             catch (Exception ex)
             {
@@ -228,7 +239,6 @@ namespace SmithForge.Main.Models
             }
         }
 
-        /// <summary> Загружает настройки из XML файла </summary>
         public static AppSettings Load()
         {
             try
@@ -241,32 +251,23 @@ namespace SmithForge.Main.Models
 
                     if (settings != null)
                     {
-                        // Инициализация сокращений
-                        if (settings.CommandShortcuts == null || settings.CommandShortcuts.Count == 0)
-                        {
-                            System.Diagnostics.Debug.WriteLine("[AppSettings] CommandShortcuts пуст, заполняем значениями по умолчанию");
-                            settings.CommandShortcuts = CreateDefaultSettings().CommandShortcuts;
-                        }
+                        settings.CommandShortcuts ??= CreateDefaultSettings().CommandShortcuts;
+                        settings.CommandPrefixes ??= new List<string> { "!", "/" };
+                        settings._rankThresholds ??= new List<int>(DefaultRankThresholds);
 
-                        // Инициализация префиксов
-                        if (settings.CommandPrefixes == null || settings.CommandPrefixes.Count == 0)
-                        {
-                            settings.CommandPrefixes = new List<string> { "!", "/" };
-                        }
+                        settings.YouTube ??= new YouTubeSettings();
+                        settings.YouTube.Colors ??= new YouTubeColorSettings();
+                        settings.Twitch ??= new TwitchSettings();
+                        settings.GoodGame ??= new GoodGameSettings();
 
-                        // Принудительная очистка порогов (через setter)
-                        if (settings._rankThresholds != null)
+                        if (string.IsNullOrEmpty(settings.YouTube.ApiKey))
                         {
-                            settings.RankThresholds = settings._rankThresholds;
-                        }
-                        else
-                        {
-                            settings.RankThresholds = new List<int>(DefaultRankThresholds);
+                            var envApiKey = Environment.GetEnvironmentVariable("YOUTUBE_API_KEY");
+                            if (!string.IsNullOrEmpty(envApiKey))
+                                settings.YouTube.ApiKey = envApiKey;
                         }
 
                         System.Diagnostics.Debug.WriteLine($"[AppSettings] Настройки загружены из {ConfigPath}");
-                        System.Diagnostics.Debug.WriteLine($"[AppSettings] Загружено сокращений: {settings.CommandShortcuts.Count}");
-                        System.Diagnostics.Debug.WriteLine($"[AppSettings] Загружено порогов: {settings._rankThresholds?.Count ?? 0}");
                         return settings;
                     }
                 }
@@ -276,38 +277,115 @@ namespace SmithForge.Main.Models
                 System.Diagnostics.Debug.WriteLine($"[AppSettings] Ошибка загрузки: {ex.Message}");
             }
 
-            System.Diagnostics.Debug.WriteLine("[AppSettings] Созданы настройки по умолчанию");
             return CreateDefaultSettings();
         }
 
-        /// <summary> Вспомогательный метод для конвертации List в Dictionary </summary>
         public Dictionary<string, string> GetCommandShortcutsAsDictionary()
         {
             var dict = new Dictionary<string, string>();
-            if (CommandShortcuts != null)
+            foreach (var item in CommandShortcuts ?? new List<ShortcutItem>())
             {
-                foreach (var item in CommandShortcuts)
-                {
-                    if (!dict.ContainsKey(item.Key))
-                    {
-                        dict[item.Key] = item.Value;
-                    }
-                }
+                if (!dict.ContainsKey(item.Key))
+                    dict[item.Key] = item.Value;
             }
             return dict;
         }
 
-        /// <summary> Вспомогательный метод для установки Dictionary в List </summary>
         public void SetCommandShortcutsFromDictionary(Dictionary<string, string> dict)
         {
-            if (dict != null)
-            {
-                CommandShortcuts = dict.Select(kvp => new ShortcutItem { Key = kvp.Key, Value = kvp.Value }).ToList();
-            }
+            CommandShortcuts = dict?.Select(kvp => new ShortcutItem { Key = kvp.Key, Value = kvp.Value }).ToList()
+                ?? new List<ShortcutItem>();
         }
+
+        // === Вспомогательные методы для YouTube ===
+        public string GetYouTubeApiKey() => YouTube?.ApiKey ?? string.Empty;
+        public string GetYouTubeChannelId() => YouTube?.ChannelId ?? string.Empty;
+
+        public void UpdateYouTubeSettings(string apiKey, string channelId, bool autoConnect = true)
+        {
+            YouTube ??= new YouTubeSettings();
+            YouTube.ApiKey = apiKey;
+            YouTube.ChannelId = channelId;
+            YouTube.AutoConnect = autoConnect;
+            OnPropertyChanged(nameof(YouTube));
+        }
+
+        public bool IsYouTubeConfigured() =>
+            YouTube != null &&
+            !string.IsNullOrEmpty(YouTube.ApiKey) &&
+            !string.IsNullOrEmpty(YouTube.ChannelId);
     }
 
-    /// <summary> Вспомогательный класс для хранения пары ключ-значение в XML </summary>
+    // ============================================================
+    // === КЛАССЫ НАСТРОЕК ПЛАТФОРМ ===
+    // ============================================================
+
+    public class YouTubeSettings
+    {
+        [XmlElement("ApiKey")]
+        public string ApiKey { get; set; } = string.Empty;
+
+        [XmlElement("ChannelId")]
+        public string ChannelId { get; set; } = string.Empty;
+
+        [XmlElement("AutoConnect")]
+        public bool AutoConnect { get; set; } = true;
+
+        [XmlElement("ShowSubscriberAlerts")]
+        public bool ShowSubscriberAlerts { get; set; } = true;
+
+        [XmlElement("PollingInterval")]
+        public int PollingInterval { get; set; } = 600;
+
+        [XmlElement("Colors")]
+        public YouTubeColorSettings Colors { get; set; } = new();
+
+        [XmlElement("LastVideoId")]
+        public string LastVideoId { get; set; } = string.Empty;
+
+        [XmlElement("MaxHistorySize")]
+        public int MaxHistorySize { get; set; } = 1000;
+    }
+
+    public class YouTubeColorSettings
+    {
+        [XmlElement("Streamer")]
+        public string Streamer { get; set; } = "#FFD600";
+
+        [XmlElement("Moderator")]
+        public string Moderator { get; set; } = "#5E84F1";
+
+        [XmlElement("Member")]
+        public string Member { get; set; } = "#107516";
+
+        [XmlElement("Verified")]
+        public string Verified { get; set; } = "#808080";
+    }
+
+    public class TwitchSettings
+    {
+        [XmlElement("ClientId")]
+        public string ClientId { get; set; } = string.Empty;
+
+        [XmlElement("AccessToken")]
+        public string AccessToken { get; set; } = string.Empty;
+
+        [XmlElement("ChannelName")]
+        public string ChannelName { get; set; } = string.Empty;
+
+        [XmlElement("AutoConnect")]
+        public bool AutoConnect { get; set; } = false;
+    }
+
+    public class GoodGameSettings
+    {
+        [XmlElement("ChannelId")]
+        public string ChannelId { get; set; } = string.Empty;
+
+        [XmlElement("AutoConnect")]
+        public bool AutoConnect { get; set; } = false;
+    }
+
     public class ShortcutItem
     {
         [XmlAttribute("key")]

@@ -4,7 +4,7 @@
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:local="clr-namespace:SmithForge.Features.StreamsManager"
-        xmlns:utils="clr-namespace:SmithForge.Main.Utils"
+        xmlns:utils="clr-namespace:SmithForge.Main.Converters"
         mc:Ignorable="d"
         Title="Лог сообщений стрима" Height="600" Width="750" 
         WindowStartupLocation="CenterOwner" Background="#F9F9F9">

@@ -1,9 +1,11 @@
 ﻿using CommunityToolkit.Mvvm.ComponentModel;
+using SmithForge.Main.Converters;
 using SmithForge.Main.Services;
 using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Data;
+using System.Windows.Input;
 using System.Windows.Media;
 
 namespace SmithForge.Main.Models
@@ -66,6 +68,9 @@ namespace SmithForge.Main.Models
         [ObservableProperty]
         private double _fontSize = 12;
 
+        public ICommand Action1Command { get; }
+        public ICommand Action2Command { get; }
+        public ICommand Action3Command { get; }
         public bool IsSticker => !string.IsNullOrEmpty(StickerPath);
         public string LikesDisplay => Likes > 0 ? Likes.ToString() : string.Empty;
         public string DislikesDisplay => Dislikes > 0 ? Dislikes.ToString() : string.Empty;
@@ -75,7 +80,7 @@ namespace SmithForge.Main.Models
         public string PlatformColor => User?.Accounts?.FirstOrDefault()?.PlatformColor ?? "#FFFFFF";
 
         // ДОБАВЛЯЕМ КОНВЕРТЕР ДЛЯ ФОРМАТИРОВАНИЯ
-        private static readonly FormattedTextConverter _formattedTextConverter = new();
+        private static readonly FormattedTextWithEmojiConverter _formattedTextConverter = new();
 
         // ДОБАВЛЯЕМ СВОЙСТВО ДЛЯ ФОРМАТИРОВАННОГО ТЕКСТА
         public object FormattedMessage
@@ -118,6 +123,91 @@ namespace SmithForge.Main.Models
                 {
                     System.Diagnostics.Debug.WriteLine($"[ERROR] {ex.Message}");
                     return GetEmergencyTemplate();
+                }
+            }
+        }
+
+        private static DataTemplate? _cachedDashboardTemplate;
+        private static readonly object _dashboardLock = new object();
+
+        public DataTemplate DashboardMessageSkin
+        {
+            get
+            {
+                System.Diagnostics.Debug.WriteLine($"[Dashboard] DashboardMessageSkin вызван, _cachedDashboardTemplate = {(_cachedDashboardTemplate != null ? "есть" : "null")}");
+
+                if (_cachedDashboardTemplate != null)
+                {
+                    System.Diagnostics.Debug.WriteLine("[Dashboard] Возвращаем кэшированный шаблон дашборда");
+                    return _cachedDashboardTemplate;
+                }
+
+                lock (_dashboardLock)
+                {
+                    System.Diagnostics.Debug.WriteLine("[Dashboard] Вход в lock, проверяем еще раз");
+
+                    if (_cachedDashboardTemplate != null)
+                    {
+                        System.Diagnostics.Debug.WriteLine("[Dashboard] В lock: кэш уже есть, возвращаем");
+                        return _cachedDashboardTemplate;
+                    }
+
+                    try
+                    {
+                        string dashboardPath = System.IO.Path.Combine(
+                            AppDomain.CurrentDomain.BaseDirectory,
+                            "SF_Data", "Assets", "Skins", "Unique", "dashboard.xaml");
+
+                        System.Diagnostics.Debug.WriteLine($"[Dashboard] Ищем дашборд-шаблон по пути: {dashboardPath}");
+                        System.Diagnostics.Debug.WriteLine($"[Dashboard] Файл существует: {System.IO.File.Exists(dashboardPath)}");
+
+                        if (System.IO.File.Exists(dashboardPath))
+                        {
+                            System.Diagnostics.Debug.WriteLine("[Dashboard] Файл найден, загружаем ResourceDictionary");
+
+                            var resourceDict = new ResourceDictionary();
+                            resourceDict.Source = new Uri(dashboardPath, UriKind.Absolute);
+
+                            System.Diagnostics.Debug.WriteLine($"[Dashboard] ResourceDictionary загружен, ключи: {string.Join(", ", resourceDict.Keys.Cast<object>())}");
+
+                            if (resourceDict.Contains("ChatMessageTemplate"))
+                            {
+                                System.Diagnostics.Debug.WriteLine("[Dashboard] Ключ 'ChatMessageTemplate' найден");
+
+                                var template = resourceDict["ChatMessageTemplate"] as DataTemplate;
+                                if (template != null)
+                                {
+                                    _cachedDashboardTemplate = CreateSafeTemplate(template);
+                                    System.Diagnostics.Debug.WriteLine("[Dashboard] ✅ Дашборд-шаблон успешно загружен и закэширован");
+                                    return _cachedDashboardTemplate;
+                                }
+                                else
+                                {
+                                    System.Diagnostics.Debug.WriteLine("[Dashboard] ❌ Шаблон 'DashboardMessageTemplate' имеет тип null");
+                                }
+                            }
+                            else
+                            {
+                                System.Diagnostics.Debug.WriteLine("[Dashboard] ❌ Ключ 'DashboardMessageTemplate' не найден в ResourceDictionary");
+                                System.Diagnostics.Debug.WriteLine($"[Dashboard] Доступные ключи: {string.Join(", ", resourceDict.Keys.Cast<object>())}");
+                            }
+                        }
+                        else
+                        {
+                            System.Diagnostics.Debug.WriteLine($"[Dashboard] ❌ Файл не существует: {dashboardPath}");
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        System.Diagnostics.Debug.WriteLine($"[Dashboard] ❌ Ошибка при загрузке дашборд-шаблона: {ex.Message}");
+                        System.Diagnostics.Debug.WriteLine($"[Dashboard] Stack trace: {ex.StackTrace}");
+                    }
+
+                    // Если дашборд-шаблон не найден, используем обычный MessageSkin
+                    System.Diagnostics.Debug.WriteLine("[Dashboard] Дашборд-шаблон не найден, используем стандартный MessageSkin (по рангам)");
+                    _cachedDashboardTemplate = MessageSkin;
+                    System.Diagnostics.Debug.WriteLine("[Dashboard] Стандартный MessageSkin закэширован как fallback");
+                    return _cachedDashboardTemplate;
                 }
             }
         }
@@ -206,7 +296,13 @@ namespace SmithForge.Main.Models
             ShowRank = true;
             ShowTimestamp = false;
             SkipLayoutAnimation = false;
+
+            // Инициализация команд - используем RelayCommand из SmithForge.Features.Dashboard
+            Action1Command = new SmithForge.Features.Dashboard.RelayCommand(OpenProfile);
+            Action2Command = new SmithForge.Features.Dashboard.RelayCommand(Action2);
+            Action3Command = new SmithForge.Features.Dashboard.RelayCommand(Action3);
         }
+
 
         public DisplayMessageViewModel(Chater user, CommonMessage msg, string stickerPath) : this(user, msg)
         {
@@ -257,6 +353,41 @@ namespace SmithForge.Main.Models
                 _cachedAvatarPath = System.IO.Path.Combine(basePath, "unknown.png");
                 return _cachedAvatarPath;
             }
+        }
+
+        private void OpenProfile()
+        {
+            try
+            {
+                System.Diagnostics.Debug.WriteLine($"[Dashboard] Открытие профиля для {DisplayName} (ID: {User?.Id})");
+
+                if (User == null)
+                {
+                    System.Diagnostics.Debug.WriteLine("[Dashboard] Ошибка: User = null");
+                    return;
+                }
+
+                // Открываем окно профиля
+                var profileWindow = new SmithForge.Features.ChaterProfile.ChaterProfileWindow(User);
+                profileWindow.Owner = Application.Current.MainWindow;
+                profileWindow.ShowDialog();
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[Dashboard] Ошибка при открытии профиля: {ex.Message}");
+            }
+        }
+
+        private void Action2()
+        {
+            System.Diagnostics.Debug.WriteLine($"[Dashboard] Нажата кнопка 2 для сообщения #{MessageNumber}");
+            MessageBox.Show($"Кнопка 2 - Сообщение #{MessageNumber}");
+        }
+
+        private void Action3()
+        {
+            System.Diagnostics.Debug.WriteLine($"[Dashboard] Нажата кнопка 3 для сообщения #{MessageNumber}");
+            MessageBox.Show($"Кнопка 3 - Сообщение #{MessageNumber}");
         }
     }
 }

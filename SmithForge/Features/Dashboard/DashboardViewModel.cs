@@ -13,31 +13,102 @@ namespace SmithForge.Features.Dashboard
 {
     public partial class DashboardViewModel : ObservableObject
     {
+        private double _currentFontSize = 15;
+        public DataTemplate DashboardTemplate { get; }
         public ObservableCollection<DisplayMessageViewModel> DisplayMessages { get; } = new();
 
         private bool _autoScrollEnabled = true;
         private bool _isScrolling = false; // Флаг, что идет анимация скролла
 
+        public double CurrentFontSize
+        {
+            get => _currentFontSize;
+            set => SetProperty(ref _currentFontSize, value);
+        }
         public bool AutoScrollEnabled
         {
             get => _autoScrollEnabled;
             set => SetProperty(ref _autoScrollEnabled, value);
         }
 
+        private DataTemplate LoadDashboardTemplate()
+        {
+            try
+            {
+                string dashboardSkinPath = System.IO.Path.Combine(
+                    AppDomain.CurrentDomain.BaseDirectory,
+                    "SF_Data", "Assets", "Skins", "Unique", "dashboard.xaml");
+
+                if (System.IO.File.Exists(dashboardSkinPath))
+                {
+                    var resourceDict = new ResourceDictionary();
+                    resourceDict.Source = new Uri(dashboardSkinPath, UriKind.Absolute);
+
+                    if (resourceDict.Contains("DashboardMessageTemplate"))
+                    {
+                        return resourceDict["DashboardMessageTemplate"] as DataTemplate;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[Dashboard] Ошибка: {ex.Message}");
+            }
+            return null;
+        }
+
         public ICommand ScrollToBottomCommand { get; }
+        public ICommand IncreaseFontSizeCommand { get; }
+        public ICommand DecreaseFontSizeCommand { get; }
+        public ICommand ClearMessagesCommand { get; }
 
         public DashboardViewModel()
         {
             ChaterStorage.OnChaterUpdated += OnChaterUpdated;
             ScrollToBottomCommand = new RelayCommand(ForceScrollToBottom);
 
+            IncreaseFontSizeCommand = new RelayCommand(IncreaseFontSize);
+            DecreaseFontSizeCommand = new RelayCommand(DecreaseFontSize);
+            ClearMessagesCommand = new RelayCommand(ClearMessages);
+
+            DashboardTemplate = LoadDashboardTemplate();
+        }
+        private void IncreaseFontSize()
+        {
+            if (CurrentFontSize < 24)
+            {
+                CurrentFontSize += 2;
+                ApplyFontSizeToMessages();
+                System.Diagnostics.Debug.WriteLine($"[Dashboard] Увеличен шрифт до {CurrentFontSize}");
+            }
         }
 
+        private void DecreaseFontSize()
+        {
+            if (CurrentFontSize > 8)
+            {
+                CurrentFontSize -= 2;
+                ApplyFontSizeToMessages();
+                System.Diagnostics.Debug.WriteLine($"[Dashboard] Уменьшен шрифт до {CurrentFontSize}");
+            }
+        }
+
+        private void ApplyFontSizeToMessages()
+        {
+            Application.Current.Dispatcher.Invoke(() =>
+            {
+                foreach (var msg in DisplayMessages)
+                {
+                    msg.FontSize = CurrentFontSize;
+                }
+            });
+        }
         public void AddMessage(Chater user, CommonMessage msg)
         {
             Application.Current.Dispatcher.Invoke(() =>
             {
                 var msgVm = new DisplayMessageViewModel(user, msg);
+                msgVm.FontSize = CurrentFontSize;
                 DisplayMessages.Add(msgVm);
 
                 while (DisplayMessages.Count > 1000)

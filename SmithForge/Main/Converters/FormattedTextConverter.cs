@@ -7,7 +7,7 @@ using System.Windows.Media;
 using System.Diagnostics;
 using System.Linq;
 
-namespace SmithForge.Main.Services
+namespace SmithForge.Main.Converters
 {
     public class FormattedTextConverter : IValueConverter
     {

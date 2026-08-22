@@ -6,13 +6,21 @@
         xmlns:local="clr-namespace:SmithForge.Main.Views"
         xmlns:converters="clr-namespace:SmithForge.Main.Converters"
         mc:Ignorable="d"
-        Title="SmithForge" Height="500" Width="800"
+        Title="SmithForge" Height="700" Width="900"
         WindowStartupLocation="CenterScreen">
 
     <Window.Resources>
         <converters:EnumToBooleanConverter x:Key="EnumToBooleanConverter"/>
         <converters:EnumToVisibilityConverter x:Key="EnumToVisibilityConverter"/>
         <converters:PlaybackModeToColorConverter x:Key="PlaybackModeToColorConverter"/>
+        <converters:BoolToColorConverter x:Key="BoolToColorConverter"/>
+        <converters:BoolToTextConverter x:Key="BoolToTextConverter"/>
+        <converters:StatusToColorConverter x:Key="StatusToColorConverter"/>
+        <converters:PlatformToVisibilityConverter x:Key="PlatformToVisibilityConverter"/>
+        <converters:YouTubeMethodToVisibilityConverter x:Key="YouTubeMethodToVisibilityConverter"/>
+        <converters:YouTubeMethodNotToVisibilityConverter x:Key="YouTubeMethodNotToVisibilityConverter"/>
+        <BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter"/>
+
         <!-- Стиль для ToggleButton -->
         <Style x:Key="AutoSwitchToggleButtonStyle" TargetType="ToggleButton">
             <Setter Property="Background" Value="#E0E0E0"/>
@@ -55,15 +63,15 @@
         </Style>
     </Window.Resources>
 
-
-
     <Grid Margin="0">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
@@ -143,6 +151,7 @@
                 <MenuItem Header="💾 Применить и сохранить" Command="{Binding SaveSettingsCommand}" FontWeight="Bold"/>
             </MenuItem>
             <MenuItem Header="Shorts Overlay" Click="ToggleShortsOverlay_Click"/>
+            <MenuItem Header="YouTube Manager" Click="OpenYouTubeManager_Click"/>
         </Menu>
 
         <!-- ПАНЕЛЬ УПРАВЛЕНИЯ (Строка 1) -->
@@ -193,16 +202,194 @@
             </StackPanel>
         </Border>
 
-        <!-- ПОСЛЕДНЕЕ СООБЩЕНИЕ (Строка 3) -->
-        <Border Grid.Row="3" Background="#F8F8F8" BorderBrush="#DDD" BorderThickness="0,1" Padding="10,5">
+        <Border Grid.Row="3" Background="#F5F5FA" BorderBrush="#DDD" BorderThickness="0,1,0,1" Padding="10,8">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+
+                <!-- Заголовок секции -->
+                <Grid Grid.Row="0" Margin="0,0,0,5">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+
+                    <TextBlock Grid.Column="0" Text="📡 Мои чаты" FontSize="14" FontWeight="Bold" Foreground="#2C3E50"/>
+
+                    <TextBlock Grid.Column="1" Text="{Binding Chats.Count, StringFormat='Всего: {0}'}" 
+                       FontSize="12" Foreground="Gray" VerticalAlignment="Center" Margin="10,0,0,0"/>
+
+                    <Button Grid.Column="2" Content="➕ Добавить чат" 
+                    Click="OpenChatManager_Click"
+                    Padding="10,5"
+                    Background="#4CAF50"
+                    Foreground="White"
+                    BorderThickness="0"
+                    Cursor="Hand"/>
+                </Grid>
+
+                <!-- Список чатов -->
+                <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" MaxHeight="120">
+                    <ItemsControl ItemsSource="{Binding Chats}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Border BorderBrush="#444" BorderThickness="1" CornerRadius="5" Margin="0,2" Padding="5" Background="#2D2D30">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+
+                                        <!-- Иконка платформы -->
+                                        <TextBlock Grid.Column="0" Text="{Binding PlatformIcon}" FontSize="20" Margin="5,0"/>
+
+                                        <!-- Информация о чате -->
+                                        <StackPanel Grid.Column="1" Margin="10,0">
+                                            <TextBlock Text="{Binding DisplayName}" FontWeight="Bold" Foreground="White" FontSize="13"/>
+
+                                            <!-- СТАТУС С ЦВЕТНЫМ ИНДИКАТОРОМ -->
+                                            <StackPanel Orientation="Horizontal" Margin="0,2,0,0">
+                                                <!-- Цветной индикатор статуса -->
+                                                <Border Width="8" Height="8" CornerRadius="4" 
+                                                Background="{Binding StatusColor}" 
+                                                Margin="0,0,5,0" 
+                                                VerticalAlignment="Center"/>
+                                                <TextBlock Text="{Binding ShortStatus}" 
+                                                   FontSize="12" 
+                                                   Foreground="{Binding StatusColor}"/>
+                                            </StackPanel>
+                                            <TextBlock Text="{Binding VideoIdDisplay}" 
+               FontSize="10" 
+               Foreground="Gray" 
+               Margin="0,2,0,0"
+               Visibility="{Binding IsYouTube, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+                                            <TextBlock Text="{Binding ModeDisplay}" FontSize="10" Foreground="Gray"/>
+                                            <!-- Метод подключения (для YouTube) -->
+                                            <TextBlock Text="{Binding MethodDisplay}" FontSize="9" Foreground="#888"
+                                                       Margin="0,1,0,0"
+                                                       Visibility="{Binding IsYouTube, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+
+                                            <!-- Поле для Video ID + кнопка (только для YouTube) -->
+                                            <Grid Margin="0,3,0,0"
+                                                  Visibility="{Binding IsYouTube, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                </Grid.ColumnDefinitions>
+                                                <TextBox Grid.Column="0" 
+                                                         Text="{Binding VideoId, UpdateSourceTrigger=PropertyChanged}"
+                                                         Width="130"
+                                                         Padding="5"
+                                                         VerticalAlignment="Center"
+                                                         Background="#2D2D30"
+                                                         Foreground="White"
+                                                         BorderBrush="#555"
+                                                         BorderThickness="1"
+                                                         ToolTip="Введите Video ID (11 символов)"/>
+                                                <Button Grid.Column="1" 
+                                                        Content="▶"
+                                                        Width="28"
+                                                        Height="24"
+                                                        Margin="5,0,0,0"
+                                                        Padding="0"
+                                                        Background="#4CAF50"
+                                                        Foreground="White"
+                                                        BorderThickness="0"
+                                                        Cursor="Hand"
+                                                        ToolTip="Подключиться по этому Video ID"
+                                                        Command="{Binding DataContext.ConnectByVideoIdCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                        CommandParameter="{Binding}">
+                                                    <Button.Template>
+                                                        <ControlTemplate TargetType="Button">
+                                                            <Border Background="{TemplateBinding Background}" 
+                                                                    CornerRadius="3"
+                                                                    BorderThickness="0">
+                                                                <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                                            </Border>
+                                                        </ControlTemplate>
+                                                    </Button.Template>
+                                                    <Button.Style>
+                                                        <Style TargetType="Button">
+                                                            <Style.Triggers>
+                                                                <Trigger Property="IsMouseOver" Value="True">
+                                                                    <Setter Property="Background" Value="#45a049"/>
+                                                                </Trigger>
+                                                            </Style.Triggers>
+                                                        </Style>
+                                                    </Button.Style>
+                                                </Button>
+                                            </Grid>
+                                        </StackPanel>
+
+                                        <!-- Счетчик сообщений -->
+                                        <TextBlock Grid.Column="2" Text="{Binding MessageCount}" Margin="10,0" Foreground="Gray"/>
+
+                                        <!-- Кнопка Connect/Disconnect -->
+                                        <Button Grid.Column="3" 
+        Margin="5,0"
+        Padding="8,3"
+        Command="{Binding ConnectCommand}">
+                                            <!-- ✅ УБРАТЬ Content="🔌 Подключить" -->
+                                            <Button.Style>
+                                                <Style TargetType="Button">
+                                                    <Setter Property="Content" Value="🔌 Подключить"/>
+                                                    <Setter Property="Background" Value="#4CAF50"/>
+                                                    <Setter Property="Foreground" Value="White"/>
+                                                    <Setter Property="BorderThickness" Value="0"/>
+                                                    <Setter Property="Cursor" Value="Hand"/>
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding IsConnected, UpdateSourceTrigger=PropertyChanged}" Value="True">
+                                                            <Setter Property="Content" Value="⏹ Отключить"/>
+                                                            <Setter Property="Background" Value="#FF6B6B"/>
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </Button.Style>
+                                        </Button>
+
+                                        <!-- Кнопка изменения метода (только для YouTube) -->
+                                        <Button Grid.Column="4" 
+                                                Content="⚙️"
+                                                Command="{Binding DataContext.ChangeMethodCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                CommandParameter="{Binding}"
+                                                Margin="5,0"
+                                                Padding="5,3"
+                                                Visibility="{Binding Platform, Converter={StaticResource PlatformToVisibilityConverter}, ConverterParameter='youtube'}"/>
+                                    </Grid>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </ScrollViewer>
+
+                <StackPanel Grid.Row="2" Orientation="Horizontal" Margin="0,5,0,0">
+                    <TextBlock FontSize="11" Foreground="Gray">
+                <Run Text="Активных: "/>
+                <Run Text="{Binding ConnectedChatsCount}" FontWeight="Bold" Foreground="#4CAF50"/>
+                <Run Text=" | Сообщений: "/>
+                <Run Text="{Binding TotalMessagesCount}" FontWeight="Bold" Foreground="#2196F3"/>
+                    </TextBlock>
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <!-- ПОСЛЕДНЕЕ СООБЩЕНИЕ (Строка 4) -->
+        <Border Grid.Row="4" Background="#F8F8F8" BorderBrush="#DDD" BorderThickness="0,1" Padding="10,5">
             <StackPanel Orientation="Horizontal">
                 <TextBlock Text="ПОСЛЕДНЕЕ: " FontWeight="Bold" VerticalAlignment="Center"/>
                 <TextBlock Text="{Binding LastMessageText}" Foreground="DarkGreen" VerticalAlignment="Center"/>
             </StackPanel>
         </Border>
 
-        <!-- СПИСОК ПОЛЬЗОВАТЕЛЕЙ (Строка 4) -->
-        <ListBox Grid.Row="4" ItemsSource="{Binding Users}" Margin="10"
+        <!-- СПИСОК ПОЛЬЗОВАТЕЛЕЙ (Строка 5) -->
+        <ListBox Grid.Row="5" ItemsSource="{Binding Users}" Margin="10"
                  VirtualizingStackPanel.IsVirtualizing="True"
                  VirtualizingStackPanel.VirtualizationMode="Recycling"
                  ScrollViewer.CanContentScroll="True">
@@ -231,15 +418,15 @@
             </ListBox.ItemTemplate>
         </ListBox>
 
-        <!-- СТАТУС-БАР (Строка 5) -->
-        <!-- СТАТУС-БАР (Строка 5) -->
-        <StatusBar Grid.Row="5">
+        <!-- СТАТУС-БАР (Строка 6) -->
+        <StatusBar Grid.Row="6">
             <StatusBar.ItemsPanel>
                 <ItemsPanelTemplate>
                     <Grid>
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="Auto"/>
                             <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
                             <ColumnDefinition Width="Auto"/>
                         </Grid.ColumnDefinitions>
                     </Grid>
@@ -252,6 +439,9 @@
                 <TextBlock Text="{Binding Users.Count}"/>
             </StatusBarItem>
             <StatusBarItem Grid.Column="2">
+                <TextBlock Text="{Binding YouTubeStatus}" Margin="20,0,0,0" Foreground="Gray"/>
+            </StatusBarItem>
+            <StatusBarItem Grid.Column="3">
                 <Button Content="✨ Начислить всем кармы +10" 
                 Command="{Binding AddKarmaToAllCommand}"
                 Background="#FFD966"
@@ -269,8 +459,8 @@
             </StatusBarItem>
         </StatusBar>
 
-        <!-- СЕКЦИЯ УПРАВЛЕНИЯ ОКНАМИ ЧАТОВ (Строка 6) -->
-        <Border Grid.Row="6" Background="#F0F0F5" BorderBrush="#DDD" BorderThickness="0,1" Padding="10" Margin="0,5,0,0">
+        <!-- СЕКЦИЯ УПРАВЛЕНИЯ ОКНАМИ ЧАТОВ (Строка 7) -->
+        <Border Grid.Row="7" Background="#F0F0F5" BorderBrush="#DDD" BorderThickness="0,1" Padding="10" Margin="0,5,0,0">
             <StackPanel>
                 <TextBlock Text="УПРАВЛЕНИЕ ОКНАМИ ЧАТОВ" FontSize="12" FontWeight="Bold" Foreground="#5C6BC0" Margin="0,0,0,8"/>
 
@@ -546,5 +736,137 @@
                 </Border>
             </StackPanel>
         </Border>
+
+        <!-- ========================================================== -->
+        <!-- YOUTUBE СЕКЦИЯ (Строка 8) -->
+        <!-- ========================================================== -->
+        <Border Grid.Row="8" Background="#FFF8F8" BorderBrush="#FFCDD2" BorderThickness="0,1,0,1" Padding="10" Margin="0,5,0,0">
+            <StackPanel>
+                <!-- Заголовок -->
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Grid.Column="0" Text="🔴 YouTube" FontSize="14" FontWeight="Bold" Foreground="#C62828" Margin="0,0,15,0"/>
+                    <TextBlock Grid.Column="1" Text="{Binding YouTubeStatus}" FontWeight="SemiBold" Foreground="#666"/>
+                    <Border Grid.Column="2" CornerRadius="3" Background="#E53935">
+                        <Button Content="🔄 Обновить" Command="{Binding LoadYouTubeStreamsCommand}" 
+            Width="100" Height="25" Background="Transparent" 
+            Foreground="White" BorderThickness="0">
+                            <Button.Style>
+                                <Style TargetType="Button">
+                                    <Setter Property="Border.CornerRadius" Value="3"/>
+                                </Style>
+                            </Button.Style>
+                        </Button>
+                    </Border>
+                </Grid>
+
+                <!-- Настройки YouTube -->
+                <Grid Margin="0,8,0,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+
+                    <TextBlock Grid.Row="0" Grid.Column="0" Text="Channel ID:" VerticalAlignment="Center" Margin="0,0,5,0"/>
+                    <TextBox Grid.Row="0" Grid.Column="1" Text="{Binding Settings.YouTube.ChannelId, UpdateSourceTrigger=PropertyChanged}" 
+                             Height="24" Margin="0,2,10,2" VerticalContentAlignment="Center"/>
+
+                    <TextBlock Grid.Row="1" Grid.Column="0" Text="API Key:" VerticalAlignment="Center" Margin="0,0,5,0"/>
+                    <TextBox Grid.Row="1" Grid.Column="1" Text="{Binding Settings.YouTube.ApiKey, UpdateSourceTrigger=PropertyChanged}" 
+                             Height="24" Margin="0,2,10,2" VerticalContentAlignment="Center"/>
+
+                    <CheckBox Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="2" 
+                              Content="Автоподключение к первому стриму" 
+                              IsChecked="{Binding Settings.YouTube.AutoConnect}"
+                              VerticalAlignment="Center" Margin="0,2,0,2"/>
+
+                    <StackPanel Grid.Row="0" Grid.Column="2" Grid.RowSpan="3" Orientation="Horizontal" Margin="10,0,0,0">
+                        <Button Content="💾 Сохранить" Command="{Binding SaveSettingsCommand}" 
+                                Width="90" Height="30" Margin="0,0,5,0"/>
+                        <Button Content="🎯 Выбрать стрим" Command="{Binding LoadYouTubeStreamsCommand}" 
+                                Width="100" Height="30" Margin="0,0,5,0"/>
+                        <Button Content="🔗 Подключиться" Command="{Binding ConnectYouTubeChatCommand}" 
+                                Width="100" Height="30" Margin="0,0,5,0" Background="#43A047" Foreground="White"/>
+                        <Button Content="⏹ Отключиться" Command="{Binding DisconnectYouTubeChatCommand}" 
+                                Width="100" Height="30" Background="#E53935" Foreground="White"/>
+                    </StackPanel>
+                </Grid>
+
+                <!-- Список стримов -->
+                <Border Background="White" CornerRadius="4" BorderBrush="#DDD" BorderThickness="1" Margin="0,8,0,0">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <ListBox Grid.Column="0" ItemsSource="{Binding YouTubeStreams}" 
+                                 SelectedItem="{Binding SelectedYouTubeStream}"
+                                 Height="80" BorderThickness="0" Background="Transparent">
+                            <ListBox.ItemTemplate>
+                                <DataTemplate>
+                                    <Border Background="White" CornerRadius="3" Padding="5" Margin="2">
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                            </Grid.ColumnDefinitions>
+                                            <StackPanel>
+                                                <TextBlock Text="{Binding Title}" FontWeight="SemiBold" FontSize="12"/>
+                                                <TextBlock Text="{Binding VideoId}" FontSize="10" Foreground="Gray"/>
+                                            </StackPanel>
+                                            <TextBlock Grid.Column="1" 
+                                                       Text="{Binding IsShorts, Converter={StaticResource BoolToTextConverter}}" 
+                                                       FontSize="10" Foreground="{Binding IsShorts, Converter={StaticResource BoolToColorConverter}}"
+                                                       VerticalAlignment="Center" Margin="10,0,0,0"/>
+                                        </Grid>
+                                    </Border>
+                                </DataTemplate>
+                            </ListBox.ItemTemplate>
+                        </ListBox>
+                        <StackPanel Grid.Column="1" Margin="5" VerticalAlignment="Center">
+                            <TextBlock Text="🎬" FontSize="20"/>
+                        </StackPanel>
+                    </Grid>
+                </Border>
+
+                <!-- Информация о подключении -->
+                <Grid Margin="0,8,0,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Grid.Column="0" Text="📺" FontSize="14" Margin="0,0,10,0"/>
+                    <TextBlock Grid.Column="1" Text="{Binding YouTubeVideoId, StringFormat='Video ID: {0}'}" 
+                               FontSize="11" Foreground="#555" VerticalAlignment="Center"/>
+                    <TextBlock Grid.Column="2" Text="{Binding IsYouTubeConnected, StringFormat='Статус: {0}'}" 
+                               FontSize="11" Foreground="{Binding IsYouTubeConnected, Converter={StaticResource BoolToColorConverter}}"/>
+                </Grid>
+            </StackPanel>
+        </Border>
+
+        <!-- СТАТУС-БАР НИЖНИЙ (Строка 9) -->
+        <StatusBar Grid.Row="9" Background="#F5F5F5">
+            <StatusBarItem>
+                <TextBlock Text="YouTube: " Foreground="Gray"/>
+            </StatusBarItem>
+            <StatusBarItem>
+                <TextBlock Text="{Binding YouTubeStatus}" Foreground="Gray"/>
+            </StatusBarItem>
+            <StatusBarItem HorizontalAlignment="Right">
+                <TextBlock Text="{Binding IsYouTubeConnected, StringFormat='Подключен: {0}'}" Foreground="Gray"/>
+            </StatusBarItem>
+        </StatusBar>
     </Grid>
 </Window>

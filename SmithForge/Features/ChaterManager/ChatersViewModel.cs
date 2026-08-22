@@ -162,6 +162,7 @@ namespace SmithForge.Features.ChaterManager
                 Id = Guid.NewGuid().ToString(),
                 Login = $"user_{DateTimeOffset.UtcNow.ToUnixTimeSeconds()}",
                 DisplayName = "Новый зритель",
+                IsDisplayNameCustom = true,  // ← ДОБАВИТЬ
                 MessageCount = 0,
                 FirstSeen = DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
                 LastMessageTime = 0,
@@ -219,6 +220,7 @@ namespace SmithForge.Features.ChaterManager
             if (SelectedChater.Accounts.Count == 1 && string.IsNullOrEmpty(SelectedChater.DisplayName))
             {
                 SelectedChater.DisplayName = NewAccountLogin;
+                SelectedChater.IsDisplayNameCustom = true; // ← ДОБАВЛЕНО
             }
 
             // ОЧИЩАЕМ ПОЛЯ ввода
@@ -306,6 +308,10 @@ namespace SmithForge.Features.ChaterManager
 
             try
             {
+                // ✅ Помечаем, что имя установлено вручную через UI
+                SelectedChater.IsDisplayNameCustom = true;
+                Debug.WriteLine($"IsDisplayNameCustom установлен: {SelectedChater.IsDisplayNameCustom}");
+
                 Debug.WriteLine("Вызов DatabaseService.SaveChater...");
                 DatabaseService.SaveChater(SelectedChater);
                 Debug.WriteLine("DatabaseService.SaveChater выполнен");

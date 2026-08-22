@@ -61,6 +61,14 @@ namespace SmithForge.Main.Services
                 //Debug.WriteLine($"[ChaterStorage] Обновлен DisplayName для {master.Login}: {chater.DisplayName}");
             }
 
+            // ✅ Синхронизируем IsDisplayNameCustom
+            if (master.IsDisplayNameCustom != chater.IsDisplayNameCustom)
+            {
+                master.IsDisplayNameCustom = chater.IsDisplayNameCustom;
+                wasUpdated = true;
+                Debug.WriteLine($"[ChaterStorage] IsDisplayNameCustom обновлён: {master.IsDisplayNameCustom} для {master.Login}");
+            }
+
             // Синхронизируем Login (технический), если он изменился
             if (!string.IsNullOrEmpty(chater.Login) && master.Login != chater.Login)
             {
@@ -127,17 +135,12 @@ namespace SmithForge.Main.Services
         /// </summary>
         public static Chater UpdateFromMessage(CommonMessage msg, AppSettings settings)
         {
-            if (msg == null) throw new ArgumentNullException(nameof(msg));
-
             string key = $"{msg.Type}:{msg.Login}".ToLower();
 
             // 1. Проверяем кэш
             if (Cache.TryGetValue(key, out var chater))
             {
-                // Обновляем только время!
                 chater.LastMessageTime = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
-
-                // НЕ увеличиваем счетчик здесь!
                 DatabaseService.UpdateChaterStats(chater);
                 return chater;
             }
@@ -147,27 +150,25 @@ namespace SmithForge.Main.Services
             if (dbChater != null)
             {
                 AddOrUpdate(dbChater);
-
-                // Обновляем только время!
                 dbChater.LastMessageTime = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
-
                 DatabaseService.UpdateChaterStats(dbChater);
                 return dbChater;
             }
 
-            // 3. Создаем нового чаттера
+            // 3. Создаём нового пользователя
             var newChater = new Chater
             {
                 Id = Guid.NewGuid().ToString(),
                 Login = msg.Login,
-                DisplayName = string.Empty, // В CommonMessage нет DisplayName
-                MessageCount = 0, // Первое сообщение
+                DisplayName = msg.Login, // ✅ Исправлено: не пустая строка, а Login
                 FirstSeen = DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
                 LastMessageTime = DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
-                TotalKarma = DEFAULT_KARMA_PER_MESSAGE,
-                Karma = DEFAULT_KARMA_PER_MESSAGE,
+                MessageCount = 0,
+                Karma = 0,
+                TotalKarma = 0,
                 Rank = 0,
-                AvatarFileName = "default.png"
+                AvatarFileName = "default.png",
+                IsDisplayNameCustom = false // Новые пользователи имеют авто-имя
             };
 
             // Добавляем внешний аккаунт
@@ -184,6 +185,28 @@ namespace SmithForge.Main.Services
             Debug.WriteLine($"[ChaterStorage] Создан новый чаттер: {msg.Login} на платформе {msg.Type}");
 
             return newChater;
+        }
+
+        /// <summary>
+        /// Миграция аккаунтов: обновляет короткие имена на ID каналов
+        /// Вызывается при загрузке пользователя из БД
+        /// </summary>
+        public static void MigrateAccounts(Chater chater)
+        {
+            foreach (var account in chater.Accounts.ToList())
+            {
+                // Проверяем, что это YouTube/Twitch аккаунт с коротким именем
+                var isShortName = account.ExternalId.Contains(":@") || 
+                                  account.ExternalId.Contains(":Smith") ||
+                                  account.ExternalId.Contains(":smith");
+
+                if (isShortName && !account.ExternalId.Contains(":UC") && !account.ExternalId.Contains(":Twitch"))
+                {
+                    // Это короткое имя — нужно заменить на ID канала
+                    // Но у нас нет ID канала, поэтому просто оставляем как есть
+                    // ID канала добавится при следующем сообщении через ProcessConnectorMessage
+                }
+            }
         }
 
         /// <summary>

@@ -1,0 +1,346 @@
+﻿<Window x:Class="SmithForge.Features.ChaterProfile.ChaterProfileWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:local="clr-namespace:SmithForge.Features.ChaterManager"
+        xmlns:overlay="clr-namespace:SmithForge.Features.ChatOverlay"
+        mc:Ignorable="d"
+        Title="Профиль зрителя" Height="750" Width="600"
+        WindowStartupLocation="CenterOwner"
+        Background="#F4F4F7">
+
+    <Window.Resources>
+        <local:RankToTextConverter x:Key="RankToTextConverter"/>
+        <overlay:RankToColorConverter x:Key="RankToColorConverter"/>
+        <BooleanToVisibilityConverter x:Key="BoolToVis"/>
+    </Window.Resources>
+
+    <Border Background="White" CornerRadius="8" Padding="20" Margin="10" BorderBrush="#E0E0E6" BorderThickness="1">
+        <ScrollViewer VerticalScrollBarVisibility="Auto">
+            <StackPanel>
+                <!-- Заголовок -->
+                <Grid Margin="0,0,0,20">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Text="Профиль зрителя" FontSize="20" FontWeight="Bold" Foreground="#2D2D30"/>
+                    <Button Grid.Column="1" 
+                            Content="✕" 
+                            Width="30" Height="30"
+                            Background="Transparent"
+                            BorderThickness="0"
+                            Foreground="#666"
+                            FontSize="16"
+                            Cursor="Hand"
+                            Click="CloseButton_Click"/>
+                </Grid>
+
+                <!-- Аватар (вне DataContext, чтобы привязываться к AvatarPath из ViewModel) -->
+                <Grid Margin="0,0,0,15">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+
+                    <Button Grid.Column="0" 
+                            Width="64" Height="64" 
+                            Cursor="Hand"
+                            Padding="0"
+                            BorderThickness="0"
+                            Background="Transparent"
+                            Command="{Binding ChangeAvatarCommand}"
+                            ToolTip="Нажмите, чтобы изменить аватар">
+                        <Border Width="64" Height="64" 
+                                CornerRadius="32" 
+                                Background="#333"
+                                Margin="0,0,0,0">
+                            <Grid>
+                                <Image Source="{Binding AvatarPath}" 
+                                       Width="64" Height="64"
+                                       Stretch="UniformToFill">
+                                    <Image.Style>
+                                        <Style TargetType="Image">
+                                            <Setter Property="Opacity" Value="1"/>
+                                            <Style.Triggers>
+                                                <Trigger Property="IsMouseOver" Value="True">
+                                                    <Setter Property="Opacity" Value="0.7"/>
+                                                </Trigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </Image.Style>
+                                </Image>
+                                <Border Background="#00000080" 
+                                        CornerRadius="32" 
+                                        Opacity="0"
+                                        IsHitTestVisible="False">
+                                    <Border.Style>
+                                        <Style TargetType="Border">
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding IsMouseOver, RelativeSource={RelativeSource AncestorType=Button}}" Value="True">
+                                                    <Setter Property="Opacity" Value="1"/>
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </Border.Style>
+                                    <TextBlock Text="✏️" 
+                                               FontSize="20" 
+                                               Foreground="White"
+                                               HorizontalAlignment="Center"
+                                               VerticalAlignment="Center"/>
+                                </Border>
+                            </Grid>
+                        </Border>
+                    </Button>
+
+                    <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                        <TextBlock Text="{Binding Chater.DisplayName}" 
+                                   FontSize="22" 
+                                   FontWeight="Bold" 
+                                   Foreground="#2D2D30"/>
+                        <TextBlock Text="{Binding Chater.Rank, Converter={StaticResource RankToTextConverter}}" 
+                                   FontSize="14" 
+                                   Foreground="#5C6BC0"/>
+                    </StackPanel>
+                </Grid>
+
+                <!-- ВСЕ ПОЛЯ КАРТОЧКИ (с DataContext="{Binding Chater}") -->
+                <StackPanel DataContext="{Binding Chater}">
+
+                    <!-- ИМЯ ПОЛЬЗОВАТЕЛЯ -->
+                    <TextBlock Text="ИМЯ ПОЛЬЗОВАТЕЛЯ" FontSize="10" FontWeight="Bold" Foreground="#5C6BC0" Margin="0,0,0,5"/>
+                    <TextBox Text="{Binding DisplayName, UpdateSourceTrigger=PropertyChanged, TargetNullValue=''}" 
+                             Margin="0,0,0,15" 
+                             FontSize="18" 
+                             Padding="8" 
+                             FontWeight="Bold"
+                             Background="#FFF9C4"/>
+
+                    <!-- ID ПОЛЬЗОВАТЕЛЯ -->
+                    <TextBlock Text="ID ПОЛЬЗОВАТЕЛЯ" FontSize="10" FontWeight="Bold" Foreground="#9E9EAE" Margin="0,0,0,5"/>
+                    <TextBox Text="{Binding Id}" 
+                             IsReadOnly="True" 
+                             Background="#F5F5F5" 
+                             Margin="0,0,0,15" 
+                             Padding="8" 
+                             FontSize="11"
+                             FontFamily="Consolas"/>
+
+                    <!-- КармаКей -->
+                    <TextBlock Text="КАРМАКЕЙ" FontSize="10" FontWeight="Bold" Foreground="#9E9EAE" Margin="0,0,0,5"/>
+                    <Grid Margin="0,0,0,15">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBox Grid.Column="0" 
+                                 Text="{Binding KarmaKeyDisplay, Mode=OneWay}" 
+                                 IsReadOnly="True" 
+                                 Background="#F5F5F5" 
+                                 Padding="8" 
+                                 FontWeight="Bold"/>
+                        <CheckBox Grid.Column="1" 
+                                  Content="Постоянный" 
+                                  IsChecked="{Binding IsKarmaKeyPermanent}" 
+                                  VerticalAlignment="Center" 
+                                  Margin="10,0,0,0"/>
+                    </Grid>
+
+                    <!-- СВЯЗАННЫЕ АККАУНТЫ -->
+                    <TextBlock Text="СВЯЗАННЫЕ АККАУНТЫ" FontSize="12" FontWeight="Bold" Foreground="#2D2D30" Margin="0,5,0,10"/>
+
+                    <ItemsControl ItemsSource="{Binding Accounts}" Margin="0,0,0,10">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Border Background="#F8F8FA" CornerRadius="6" Padding="10" Margin="0,2">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+
+                                        <Border Grid.Column="0" 
+                                                Background="{Binding PlatformColor}" 
+                                                Width="16" Height="16" 
+                                                CornerRadius="3" 
+                                                Margin="0,0,8,0"/>
+
+                                        <TextBlock Grid.Column="1" 
+                                                   Text="{Binding PlatformShort}" 
+                                                   FontWeight="Bold"
+                                                   Foreground="{Binding PlatformColor}"
+                                                   FontSize="12"
+                                                   Margin="0,0,4,0"/>
+
+                                        <TextBlock Grid.Column="2" 
+                                                   Text="{Binding DisplayId}" 
+                                                   FontWeight="SemiBold" 
+                                                   Foreground="#333"
+                                                   FontSize="13"
+                                                   VerticalAlignment="Center"
+                                                   ToolTip="{Binding DisplayId}"/>
+
+                                        <Button Grid.Column="3" 
+                                                Content="✖" 
+                                                Width="20" Height="20"
+                                                Background="#FFEBEE"
+                                                Foreground="#D32F2F"
+                                                BorderThickness="0"
+                                                FontWeight="Bold"
+                                                FontSize="12"
+                                                Command="{Binding DataContext.RemoveAccountCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                CommandParameter="{Binding}"
+                                                ToolTip="Отвязать аккаунт"/>
+                                    </Grid>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+
+                    <!-- Блок добавления аккаунта -->
+                    <Border Background="#F0F4FF" CornerRadius="8" Padding="12" Margin="0,5,0,15">
+                        <StackPanel>
+                            <TextBlock Text="Добавить новый аккаунт" FontSize="12" FontWeight="Bold" Foreground="#5C6BC0" Margin="0,0,0,8"/>
+
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+
+                                <ComboBox Grid.Column="0" 
+                                          ItemsSource="{Binding DataContext.AvailablePlatforms, RelativeSource={RelativeSource AncestorType=Window}}"
+                                          SelectedItem="{Binding DataContext.NewAccountPlatform, RelativeSource={RelativeSource AncestorType=Window}}"
+                                          Margin="0,0,5,0" Height="35"/>
+
+                                <TextBox Grid.Column="1" 
+                                         Text="{Binding DataContext.NewAccountLogin, RelativeSource={RelativeSource AncestorType=Window}, UpdateSourceTrigger=PropertyChanged}"
+                                         Margin="0,0,5,0" Height="35"/>
+
+                                <Button Grid.Column="2" 
+                                        Content="➕" 
+                                        Width="35" Height="35"
+                                        Background="#5C6BC0"
+                                        Foreground="White"
+                                        FontSize="16"
+                                        FontWeight="Bold"
+                                        BorderThickness="0"
+                                        Command="{Binding DataContext.AddAccountCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                        ToolTip="Привязать аккаунт"/>
+                            </Grid>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Карма -->
+                    <UniformGrid Columns="2" Margin="0,0,0,15">
+                        <StackPanel Margin="0,0,5,0">
+                            <TextBlock Text="КАРМА" FontSize="10" FontWeight="Bold" Foreground="#9E9EAE" Margin="0,0,0,5"/>
+                            <TextBox Text="{Binding Karma, UpdateSourceTrigger=PropertyChanged, StringFormat=F1}" 
+                                     Foreground="#2E7D32" 
+                                     FontWeight="Bold" 
+                                     Padding="8"/>
+                        </StackPanel>
+                        <StackPanel Margin="5,0,0,0">
+                            <TextBlock Text="ВСЯ КАРМА" FontSize="10" FontWeight="Bold" Foreground="#9E9EAE" Margin="0,0,0,5"/>
+                            <TextBox Text="{Binding TotalKarma, UpdateSourceTrigger=PropertyChanged, StringFormat=F1}" 
+                                     Foreground="#1565C0" 
+                                     FontWeight="Bold" 
+                                     Padding="8"/>
+                        </StackPanel>
+                    </UniformGrid>
+
+                    <!-- Ранг и множитель -->
+                    <UniformGrid Columns="2" Margin="0,0,0,15">
+                        <StackPanel Margin="0,0,5,0">
+                            <TextBlock Text="РАНГ" FontSize="10" FontWeight="Bold" Foreground="#9E9EAE" Margin="0,0,0,5"/>
+                            <TextBox Text="{Binding Rank, UpdateSourceTrigger=PropertyChanged}" 
+                                     Height="35"
+                                     Padding="8"
+                                     FontWeight="Bold"/>
+                        </StackPanel>
+                        <StackPanel Margin="5,0,0,0">
+                            <TextBlock Text="МНОЖИТЕЛЬ" FontSize="10" FontWeight="Bold" Foreground="#9E9EAE" Margin="0,0,0,5"/>
+                            <TextBox Text="{Binding KarmaMultiplier, Mode=OneWay, StringFormat='x{0:N1}'}" 
+                                     IsReadOnly="True" 
+                                     Background="#F5F5F5" 
+                                     Padding="8" 
+                                     FontWeight="Bold"/>
+                        </StackPanel>
+                    </UniformGrid>
+
+                    <!-- Сообщения -->
+                    <TextBlock Text="ВСЕГО СООБЩЕНИЙ" FontSize="10" FontWeight="Bold" Foreground="#9E9EAE" Margin="0,0,0,5"/>
+                    <TextBox Text="{Binding MessageCount, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,25" Padding="8"/>
+
+                </StackPanel>
+
+                <!-- Секция объединения аккаунтов -->
+                <Border Background="#F0F0F5" CornerRadius="8" Padding="15" Margin="0,10,0,0">
+                    <StackPanel>
+                        <TextBlock Text="ОБЪЕДИНЕНИЕ АККАУНТОВ" FontSize="12" FontWeight="Bold" Foreground="#5C6BC0" Margin="0,0,0,10"/>
+
+                        <TextBlock Text="ID аккаунта-донора:" FontSize="11" Foreground="#666" Margin="0,0,0,5"/>
+                        <TextBox Text="{Binding MergeDonorId, UpdateSourceTrigger=PropertyChanged}" 
+                                 Margin="0,0,0,10" Padding="8" Height="35"/>
+
+                        <Button Content="Поглотить" 
+                                Command="{Binding MergeCommand}"
+                                Background="#FF5722" 
+                                Foreground="White"
+                                Height="35"
+                                FontWeight="Bold"
+                                BorderThickness="0"
+                                Cursor="Hand"/>
+
+                        <TextBlock Text="* Все аккаунты и статистика донора будут перенесены, сам донор удалён. Имя поглотителя сохраняется." 
+                                   FontSize="9" Foreground="#999" TextWrapping="Wrap" Margin="0,8,0,0"/>
+                    </StackPanel>
+                </Border>
+
+                <!-- КНОПКИ -->
+                <Grid Margin="0,15,0,10">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+
+                    <Button Grid.Column="0" 
+                            Content="СОХРАНИТЬ ИЗМЕНЕНИЯ" 
+                            Command="{Binding SaveCommand}"
+                            Foreground="White" Height="45" FontWeight="Bold"
+                            Background="#5C6BC0"
+                            Margin="0,0,10,0"/>
+
+                    <Border Grid.Column="1" 
+                            Width="45" Height="45"
+                            CornerRadius="6"
+                            Background="#4CAF50"
+                            Visibility="{Binding Chater.IsRecentlySaved, Converter={StaticResource BoolToVis}}">
+                        <TextBlock Text="✓" 
+                                   FontSize="24" 
+                                   FontWeight="Bold" 
+                                   Foreground="White"
+                                   HorizontalAlignment="Center"
+                                   VerticalAlignment="Center"/>
+                    </Border>
+                </Grid>
+
+                <!-- Кнопка удаления -->
+                <Button Content="Удалить профиль полностью" 
+                        Command="{Binding DeleteChaterCommand}"
+                        Foreground="#D32F2F" 
+                        Height="35" 
+                        FontWeight="SemiBold" 
+                        Margin="0,5,0,0"
+                        Background="Transparent" 
+                        BorderBrush="#FFEBEE" 
+                        BorderThickness="1"
+                        Cursor="Hand"/>
+            </StackPanel>
+        </ScrollViewer>
+    </Border>
+</Window>

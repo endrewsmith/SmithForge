@@ -15,7 +15,7 @@ namespace SmithForge.Main.Converters
     {
         // Регулярка для эмодзи
         private static readonly Regex EmojiRegex = new Regex(
-            @"(:([a-z0-9]+(?:-[a-z0-9]+)*):|\[([^\]]+)\]|;;([^;]+);;|\{([^\}]+)\})",
+            @"(:([a-z0-9_]+(?:-[a-z0-9_]+)*):|\[([^\]]+)\]|;;([^;]+);;|\{([^\}]+)\})",
             RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
         // Регулярка для HTML тегов
@@ -23,29 +23,57 @@ namespace SmithForge.Main.Converters
             @"<(\/?)(b|i|color)(?:=([^>]+))?>",
             RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
+        //public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
+        //{
+        //    string text = value as string;
+        //    if (string.IsNullOrEmpty(text))
+        //        return new Run("");
+
+        //    System.Diagnostics.Debug.WriteLine($"[Converter] Входной текст: '{text}'");
+
+        //    var matches = EmojiRegex.Matches(text);
+        //    System.Diagnostics.Debug.WriteLine($"[Converter] Найдено эмодзи: {matches.Count}");
+
+        //    double emojiSize = EmojiService.GetDefaultEmojiSize();
+        //    if (parameter != null)
+        //        double.TryParse(parameter.ToString(), out emojiSize);
+
+        //    var resultSpan = new Span();
+        //    ProcessTextWithTagsAndEmojis(text, resultSpan, emojiSize);
+
+        //    return resultSpan;
+        //}
         public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
         {
             string text = value as string;
             if (string.IsNullOrEmpty(text))
-                return new Run("");
+                return new Span();
 
             double emojiSize = EmojiService.GetDefaultEmojiSize();
             if (parameter != null)
                 double.TryParse(parameter.ToString(), out emojiSize);
 
             var resultSpan = new Span();
-            ProcessTextWithTagsAndEmojis(text, resultSpan, emojiSize);
 
+            // ✅ Проверяем, есть ли эмодзи
+            if (!EmojiRegex.IsMatch(text))
+            {
+                // Обычный текст
+                resultSpan.Inlines.Add(new Run(text) { Foreground = Brushes.White });
+                return resultSpan;
+            }
+
+            // Есть эмодзи — передаём emojiSize
+            ProcessTextWithTagsAndEmojis(text, resultSpan, emojiSize);
             return resultSpan;
         }
-
         private void ProcessTextWithTagsAndEmojis(string text, Span span, double emojiSize)
         {
             if (string.IsNullOrEmpty(text)) return;
 
-            // Объединяем оба regex для поиска тегов и эмодзи
+            // ✅ ИСПРАВЛЕННАЯ РЕГУЛЯРКА
             var combinedRegex = new Regex(
-                @"<(\/?)(b|i|color)(?:=([^>]+))?>|(:([a-z0-9]+(?:-[a-z0-9]+)*):|\[([^\]]+)\]|;;([^;]+);;|\{([^\}]+)\})",
+                @"<(\/?)(b|i|color)(?:=([^>]+))?>|:([^:]+):",
                 RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
             int lastIndex = 0;
@@ -74,7 +102,6 @@ namespace SmithForge.Main.Converters
 
                     if (isClosing)
                     {
-                        // Закрывающий тег
                         if (currentStyles.Count > 0 && currentStyles.Peek().TagName == tagName)
                         {
                             currentStyles.Pop();
@@ -82,7 +109,6 @@ namespace SmithForge.Main.Converters
                     }
                     else
                     {
-                        // Открывающий тег
                         string valueAttr = match.Groups[3].Success ? match.Groups[3].Value.Trim('"', '\'') : null;
                         var style = new TextStyle { TagName = tagName };
 
@@ -96,7 +122,8 @@ namespace SmithForge.Main.Converters
                 // Обрабатываем эмодзи
                 else
                 {
-                    string emojiText = match.Value;
+                    string emojiText = match.Value; // например ":hand_pink_waving:"
+                    System.Diagnostics.Debug.WriteLine($"[Converter] Обработка эмодзи: {emojiText}");
                     var emojiElement = CreateEmojiElementFromText(emojiText, emojiSize);
 
                     if (emojiElement != null)
@@ -178,22 +205,27 @@ namespace SmithForge.Main.Converters
         {
             try
             {
-                string source = EmojiService.DetectSource(emojiText);
+                //string code = emojiText.Trim(':');
+                //string normalizedCode = code.Replace('_', '-');
+                string normalizedCode = emojiText.Replace('_', '-');
 
-                if (source == "Unknown")
+
+                var element = EmojiService.CreateEmojiElement(normalizedCode, emojiSize, true);
+
+                if (element == null)
                 {
-                    System.Diagnostics.Debug.WriteLine($"[FormattedTextWithEmojiConverter] Неизвестный формат: {emojiText}");
-                    return null;
+                    System.Diagnostics.Debug.WriteLine($"[Converter] ❌ Эмодзи НЕ СОЗДАН: {normalizedCode}");
+                }
+                else
+                {
+                    System.Diagnostics.Debug.WriteLine($"[Converter] ✅ Эмодзи создан: {normalizedCode}");
                 }
 
-                string normalizedCode = EmojiService.NormalizeEmojiCode(emojiText, source);
-                System.Diagnostics.Debug.WriteLine($"[FormattedTextWithEmojiConverter] {emojiText} -> {source} -> {normalizedCode}");
-
-                return EmojiService.CreateEmojiElement(normalizedCode, emojiSize, true);
+                return element;
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"[FormattedTextWithEmojiConverter] Ошибка: {ex.Message}");
+                System.Diagnostics.Debug.WriteLine($"[Converter] Ошибка эмодзи: {ex.Message}");
                 return null;
             }
         }

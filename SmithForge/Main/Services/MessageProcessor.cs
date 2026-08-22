@@ -8,7 +8,7 @@ using System.Diagnostics;
 
 namespace SmithForge.Main.Services
 {
-    internal class MessageProcessor
+    public class MessageProcessor
     {
         private readonly AppSettings _settings;
         private string? _currentSessionId;
@@ -118,6 +118,7 @@ namespace SmithForge.Main.Services
         {
             Debug.WriteLine($"[MessageProcessor] === НАЧАЛО ОБРАБОТКИ ===");
             Debug.WriteLine($"[MessageProcessor] Сообщение: '{msg.Message}'");
+            Debug.WriteLine($"[MessageProcessor] Текущая сессия: '{_currentSessionId ?? "NULL"}'");
 
             if (msg == null) return;
 
@@ -127,8 +128,21 @@ namespace SmithForge.Main.Services
                 msg.Message = ReplaceShortcuts(msg.Message);
                 Debug.WriteLine($"[MessageProcessor] После замены сокращений: '{msg.Message}'");
 
-                var chater = ChaterStorage.UpdateFromMessage(msg, _settings);
-                msg.User = chater;
+                // Если пользователь уже установлен (из ProcessConnectorMessage), не ищем заново
+                // Иначе ищем/создаём по Login
+                if (msg.User == null)
+                {
+                    var tempChater = ChaterStorage.UpdateFromMessage(msg, _settings);
+                    msg.User = tempChater;
+                    Debug.WriteLine($"[MessageProcessor] Пользователь создан/загружен: {msg.User.Login}");
+                }
+                else
+                {
+                    Debug.WriteLine($"[MessageProcessor] Пользователь уже установлен: {msg.User.Login}");
+                }
+
+                // Теперь используем msg.User — он уже установлен
+                var chater = msg.User;
 
                 var commandsFound = ParseCommands(msg.Message);
                 Debug.WriteLine($"[MessageProcessor] Найдено команд: {commandsFound.Count}");
@@ -142,8 +156,13 @@ namespace SmithForge.Main.Services
                     KarmaService.AddExperience(chater, msg, _settings);
                 }
 
+                // ✅ ДОБАВЛЯЕМ: проверка сессии перед сохранением
+                Debug.WriteLine($"[MessageProcessor] Проверка сессии: _currentSessionId = '{_currentSessionId ?? "NULL"}'");
+
                 if (!string.IsNullOrEmpty(_currentSessionId))
                 {
+                    Debug.WriteLine($"[MessageProcessor] Сохраняем сообщение в сессию: {_currentSessionId}");
+
                     var logMessage = new ChatLogMessage
                     {
                         SessionId = _currentSessionId,
@@ -157,7 +176,12 @@ namespace SmithForge.Main.Services
                     DatabaseService.SaveChatMessage(logMessage);
                     msg.MessageNumber = logMessage.MessageNumber;
 
-                    Debug.WriteLine($"[Message] Стрим #{_currentSessionId}, Сообщение #{msg.MessageNumber} от {chater.EffectiveName}");
+                    Debug.WriteLine($"[Message] ✅ Стрим #{_currentSessionId}, Сообщение #{msg.MessageNumber} от {chater.EffectiveName}");
+                }
+                else
+                {
+                    Debug.WriteLine($"[MessageProcessor] ⚠️ СЕССИЯ НЕ УСТАНОВЛЕНА! Сообщение НЕ СОХРАНЕНО!");
+                    Debug.WriteLine($"[MessageProcessor] msg.MessageNumber остаётся: {msg.MessageNumber}");
                 }
 
                 if (!string.IsNullOrWhiteSpace(msg.Message) && msg.Message.Length >= _settings.MinMessageLength)
@@ -195,6 +219,8 @@ namespace SmithForge.Main.Services
             {
                 Debug.WriteLine($"[MessageProcessor] Ошибка обработки сообщения: {ex.Message}");
             }
+
+            Debug.WriteLine($"[MessageProcessor] === КОНЕЦ ОБРАБОТКИ ===");
         }
 
         private void ProcessCommands(Chater chater, CommonMessage msg, List<ChatCommandInfo> commandsFound)

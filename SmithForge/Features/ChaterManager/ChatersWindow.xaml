@@ -172,7 +172,7 @@
                                                                Foreground="{Binding PlatformColor}"
                                                                FontSize="11"
                                                                Margin="0,0,4,0"/>
-                                                    <TextBlock Text="{Binding OriginalName}" 
+                                                    <TextBlock Text="{Binding DisplayId}" 
                                                                FontSize="11"
                                                                Foreground="#333"
                                                                FontWeight="SemiBold"/>
@@ -366,7 +366,7 @@
                                                        Margin="0,0,4,0"/>
 
                                             <TextBlock Grid.Column="2" 
-                                                       Text="{Binding OriginalName}" 
+                                                       Text="{Binding ExternalId}" 
                                                        FontWeight="SemiBold" 
                                                        Foreground="#333"
                                                        FontSize="13"

@@ -1,5 +1,9 @@
 ﻿using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Microsoft.Extensions.Logging;
+using SmithForge.ChatEngine.Models;
+using SmithForge.ChatEngine.Services;
+using SmithForge.Features.ChatManager;
 using SmithForge.Features.ChatOverlay;
 using SmithForge.Features.ChatOverlayShorts;
 using SmithForge.Features.ImportantOverlay;
@@ -8,22 +12,52 @@ using SmithForge.Main.Models;
 using SmithForge.Main.Models.ChatModes;
 using SmithForge.Main.Services;
 using SmithForge.Main.Services.ChatCommands;
-using SmithForge.Main.Services.SmithForge.Main.Services;
+using SmithForge.Features.YouTubeManager.ViewModels;
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.Linq;
+using System.Net.Http;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
+using System.Windows.Controls;
 using System.Windows.Threading;
 
 namespace SmithForge.ViewModels
 {
-    internal partial class MainViewModel : ObservableObject
+    public partial class MainViewModel : ObservableObject
     {
+        // ✅ Интегрированный YouTube-менеджер
+        public YouTubeManagerViewModel YouTubeManager { get; } = new();
+        
+        [ObservableProperty]
+        private string _youTubeApiKey = string.Empty;
 
+        [ObservableProperty]
+        private string _youTubeChannelId = string.Empty;
+
+        [ObservableProperty]
+        private string _youTubeVideoId = string.Empty;
+
+        [ObservableProperty]
+        private string _youTubeChannelName = string.Empty;
+
+        [ObservableProperty]
+        private bool _isYouTubeConnected = false;
+
+        [ObservableProperty]
+        private string _youTubeStatus = "Не подключен";
+
+        [ObservableProperty]
+        private int _youTubeViewersCount = 0;
+
+        [ObservableProperty]
+        private ObservableCollection<YouTubeStreamInfo> _youTubeStreams = new();
+
+        [ObservableProperty]
+        private YouTubeStreamInfo? _selectedYouTubeStream;
 
         [ObservableProperty]
         private ImportantPlaybackMode _importantPlaybackMode = ImportantPlaybackMode.Auto;
@@ -58,18 +92,12 @@ namespace SmithForge.ViewModels
         public List<SmithForge.Main.Models.ChatDisplayModeInfo> AvailableModes { get; } = ChatDisplayModeFactory.GetAvailableModes();
 
         private readonly DashboardService _dashboardService = new();
-        private readonly MessageProcessor _processor;
-        private readonly ChatOverlayService _overlayService;
-        private readonly ChatOverlayShortsService _shortsService;
-        private readonly ImportantOverlayService _importantService;
-        private readonly StickersOverlayService _stickersService;
+        private readonly MessageHandlerService _messageHandler;
+        private readonly OverlayManagerService _overlayManager;
+        private readonly SettingsService _settingsService;
+        private readonly DialogService _dialogService;
         private readonly ExternalChatService _chatService = new();
         private CancellationTokenSource? _pollingcts;
-
-        [ObservableProperty]
-        [NotifyCanExecuteChangedFor(nameof(StartCommand))]
-        [NotifyCanExecuteChangedFor(nameof(StopCommand))]
-        private bool _isProcessRunning;
 
         [ObservableProperty]
         private bool _isOverlaySetupMode = true;
@@ -78,13 +106,18 @@ namespace SmithForge.ViewModels
         private bool _isOverlayHidden = false;
 
         [ObservableProperty]
+        [NotifyCanExecuteChangedFor(nameof(StartCommand))]
+        [NotifyCanExecuteChangedFor(nameof(StopCommand))]
+        private bool _isProcessRunning;
+
+        [ObservableProperty]
         private string _lastMessageText = "Ожидание сообщений...";
 
         [ObservableProperty]
         private AppSettings _settings;
 
         [ObservableProperty]
-        private StreamSession _currentSession;
+        private StreamSession? _currentSession;
 
         [ObservableProperty]
         private string _programPath;
@@ -100,10 +133,49 @@ namespace SmithForge.ViewModels
 
         public ObservableCollection<Chater> Users { get; } = new();
 
+        // ============================================================
+        // УПРАВЛЕНИЕ ЧАТАМИ
+        // ============================================================
+
+        [ObservableProperty]
+        private ObservableCollection<ChatConnection> _chats = new();
+
+        [ObservableProperty]
+        private int _connectedChatsCount;
+
+        [ObservableProperty]
+        private int _totalMessagesCount;
+
+        private ChatManagerViewModel _chatManager = new();
+        private ChatConnectionService _chatConnectionService = null!;
+        private StreamSessionManager _streamSessionManager = null!;
+
         public MainViewModel()
         {
             FolderManager.EnsureDirectoriesExist();
             Settings = ConfigService.Load();
+
+            // ✅ Инициализация оверлеев через сервис
+            _overlayManager = new OverlayManagerService(Settings);
+
+            // ✅ Инициализация сервиса настроек (ДО установки свойств!)
+            _settingsService = new SettingsService(Settings, _overlayManager);
+            
+            // ✅ Инициализация сервиса диалогов
+            _dialogService = new DialogService();
+
+            // ✅ Инициализация сервиса обработки сообщений
+            var processor = new MessageProcessor(Settings);
+            _messageHandler = new MessageHandlerService(processor, _overlayManager, _dashboardService);
+            _messageHandler.OnProcessed += OnMessageProcessed;
+
+            // ============================================================
+            // СИНХРОНИЗАЦИЯ НАСТРОЕК YOUTUBE ИЗ APP SETTINGS
+            // ============================================================
+            YouTubeApiKey = Settings.YouTube?.ApiKey ?? string.Empty;
+            YouTubeChannelId = Settings.YouTube?.ChannelId ?? string.Empty;
+            YouTubeVideoId = Settings.YouTube?.LastVideoId ?? string.Empty;
+
             _isOverlaySetupMode = Settings.IsOverlaySetupMode;
             _isOverlayHidden = Settings.IsOverlayHidden;
             _isStickersVisible = Settings.IsStickersVisible;
@@ -116,35 +188,19 @@ namespace SmithForge.ViewModels
 
             StickerManager.LoadPacks();
 
-            _overlayService = new ChatOverlayService();
-            _overlayService.Initialize(Settings.OverlayTop, Settings.OverlayLeft);
-            _overlayService.SetSetupMode(IsOverlaySetupMode);
-            _overlayService.SetDisplayMode(MainChatMode);
-            _overlayService.LoadPosition(Settings);
-
-            _shortsService = new ChatOverlayShortsService();
-            _shortsService.Initialize(
-                Settings.ShortsWindowTop,
-                Settings.ShortsWindowLeft,
-                Settings.ShortsWindowWidth,
-                Settings.ShortsWindowHeight,
-                IsOverlaySetupMode);
-            _shortsService.SetSetupMode(IsOverlaySetupMode);
-            _shortsService.SetDisplayMode(ShortsChatMode);
-            _shortsService.LoadPosition(Settings);
-
-            _importantService = new ImportantOverlayService(Settings);
-            _importantService.IsAutoSwitchingEnabled = IsAutoSwitchingEnabled;
-            _importantService.Initialize(
-                Settings.ImportantOverlayTop,
-                Settings.ImportantOverlayLeft,
-                Settings.ImportantOverlayWidth,
-                Settings.ImportantOverlayHeight,
-                IsOverlaySetupMode);
-            _importantService.SetSetupMode(IsOverlaySetupMode);
-            _importantService.SetDisplayMode(ImportantChatMode);
-            _importantService.LoadPosition(Settings);
-            _importantService.QueueCountChanged += (s, count) =>
+            _overlayManager.Initialize(
+                IsOverlaySetupMode,
+                IsOverlayHidden,
+                IsStickersVisible,
+                MainChatMode,
+                ShortsChatMode,
+                ImportantChatMode,
+                StickersChatMode,
+                ImportantPlaybackMode,
+                ImportantSoundVolume,
+                VoiceVolume,
+                StickerDisplayTime);
+            _overlayManager.ImportantQueueChanged += (s, count) =>
             {
                 Application.Current.Dispatcher.BeginInvoke(() =>
                 {
@@ -153,57 +209,21 @@ namespace SmithForge.ViewModels
                 });
             };
 
-            _stickersService = new StickersOverlayService();
-            _stickersService.Initialize(
-                Settings.StickersWindowTop,
-                Settings.StickersWindowLeft,
-                Settings.StickersWindowWidth,
-                Settings.StickersWindowHeight,
-                IsOverlaySetupMode);
-            _stickersService.SetSetupMode(IsOverlaySetupMode);
-            _stickersService.SetDisplayMode(StickersChatMode);
-            _stickersService.LoadPosition(Settings);
-
-            if (_isOverlayHidden)
-            {
-                _overlayService.SetHidden(true);
-                _shortsService.SetHidden(true);
-                _importantService.SetHidden(true);
-                _stickersService.SetHidden(true);
-            }
-
-            if (_isStickersVisible)
-            {
-                _stickersService.Show();
-            }
-
-            _processor = new MessageProcessor(Settings);
-            _processor.OnProcessed += OnMessageProcessed;
-
             ProgramPath = Settings.ProgramPath;
-            LastStreamNumber = DatabaseService.GetMaxStreamNumber();
-            var activeSession = DatabaseService.GetActiveSession();
 
-            if (activeSession != null)
+            // ✅ Инициализация менеджера сессий
+            _streamSessionManager = new StreamSessionManager();
+            
+            // Инициализируем CurrentSession из менеджера
+            CurrentSession = _streamSessionManager.CurrentSession;
+            LastStreamNumber = _streamSessionManager.LastStreamNumber;
+            
+            _streamSessionManager.SessionChanged += (s, session) =>
             {
-                CurrentSession = activeSession;
-            }
-            else
-            {
-                int nextNumber = LastStreamNumber + 1;
-                CurrentSession = new StreamSession
-                {
-                    Id = Guid.NewGuid().ToString(),
-                    Number = nextNumber,
-                    Title = "Новый эфир...",
-                    StartTime = DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
-                    EndTime = 0
-                };
-                DatabaseService.SaveSession(CurrentSession);
-                LastStreamNumber = nextNumber;
-            }
+                CurrentSession = session;
+                LastStreamNumber = _streamSessionManager.LastStreamNumber;
+            };
 
-            _processor.SetSession(CurrentSession.Id);
             LoadInitialData();
             _chatService.ProcessExited += (s, e) => OnProcessExited();
 
@@ -231,132 +251,60 @@ namespace SmithForge.ViewModels
                 Debug.WriteLine($"[MainViewModel] Стартовая синхронизация: в очереди {ImportantQueueCount} сообщений, переключаем режим на Manual");
                 ImportantPlaybackMode = ImportantPlaybackMode.Manual;
             }
+
+            // ============================================================
+            // ЗАГРУЗКА ЧАТОВ
+            // ============================================================
+
+            // ✅ Подписываемся на события YouTubeManager
+            YouTubeManager.MessageReceived += OnYouTubeManagerMessageReceived;
+
+            // ✅ Создаём ChatManagerViewModel с общей коллекцией
+            _chatManager = new ChatManagerViewModel(Chats, null);
+
+            // ✅ ЗАГРУЖАЕМ ЧАТЫ ИЗ ФАЙЛА (ЭТОГО НЕ ХВАТАЕТ!)
+            _chatManager.LoadChatsFromFile();
+
+            // ✅ Инициализация сервиса управления чатами
+            _chatConnectionService = new ChatConnectionService(_chatManager);
+            _chatConnectionService.MessageReceived += OnConnectorMessageReceived;
+
+            // ✅ Обновляем _chatManager с сервисом
+            _chatManager = new ChatManagerViewModel(Chats, _chatConnectionService);
+
+            LoadChats();
         }
 
-        partial void OnImportantPlaybackModeChanged(ImportantPlaybackMode value)
-        {
-            Settings.ImportantPlaybackMode = value;
-            ConfigService.Save(Settings);
-            Debug.WriteLine($"[MainVM] Режим: {(value == ImportantPlaybackMode.Auto ? "АВТО" : "РУЧНОЙ")}");
-        }
+        // ============================================================
+        // СИНХРОНИЗАЦИЯ НАСТРОЕК YOUTUBE - СОХРАНЕНИЕ ПРИ ИЗМЕНЕНИИ
+        // ============================================================
 
-        partial void OnImportantPlaybackHotkeyChanged(string value)
-        {
-            Settings.ImportantPlaybackHotkey = value;
-            ConfigService.Save(Settings);
-            Debug.WriteLine($"[MainVM] Горячая клавиша: {value}");
-        }
+        partial void OnYouTubeApiKeyChanged(string value) => _settingsService.SetYouTubeApiKey(value);
+        partial void OnYouTubeChannelIdChanged(string value) => _settingsService.SetYouTubeChannelId(value);
+        partial void OnYouTubeVideoIdChanged(string value) => _settingsService.SetYouTubeVideoId(value);
 
-        partial void OnIsAutoSwitchingEnabledChanged(bool value)
-        {
-            Debug.WriteLine($"[ReadingMode] Режим чтения: {(value ? "ВКЛ" : "ВЫКЛ")}");
+        // ============================================================
+        // ОСТАЛЬНЫЕ МЕТОДЫ
+        // ============================================================
 
-            // Обновляем свойство в ImportantOverlayService
-            _importantService.IsAutoSwitchingEnabled = value;
+        partial void OnImportantPlaybackModeChanged(ImportantPlaybackMode value) => _settingsService.SetImportantPlaybackMode(value);
+        partial void OnImportantPlaybackHotkeyChanged(string value) => _settingsService.SetImportantPlaybackHotkey(value);
+        
+        partial void OnIsAutoSwitchingEnabledChanged(bool value) => _settingsService.SetIsAutoSwitchingEnabled(value, ImportantQueueCount, ImportantPlaybackMode);
 
-            if (value)
-            {
-                if (ImportantQueueCount > 0 && ImportantPlaybackMode == ImportantPlaybackMode.Auto)
-                {
-                    ImportantPlaybackMode = ImportantPlaybackMode.Manual;
-                    Debug.WriteLine("[ReadingMode] Есть сообщения в очереди, переключено в РУЧНОЙ режим");
-                }
-                else if (ImportantQueueCount == 0 && ImportantPlaybackMode == ImportantPlaybackMode.Manual)
-                {
-                    ImportantPlaybackMode = ImportantPlaybackMode.Auto;
-                    Debug.WriteLine("[ReadingMode] Очередь пуста, переключено в АВТО режим");
-                }
-            }
-        }
-        public void UpdateImportantQueueCount(int count)
-        {
-            try
-            {
-                if (!Application.Current.Dispatcher.CheckAccess())
-                {
-                    Debug.WriteLine($"[MainViewModel] UpdateImportantQueueCount: перенаправление в UI поток");
-                    Application.Current.Dispatcher.BeginInvoke(() => UpdateImportantQueueCount(count));
-                    return;
-                }
+        partial void OnStickerDisplayTimeChanged(int value) => _settingsService.SetStickerDisplayTime(value);
+        partial void OnImportantSoundVolumeChanged(int value) => _settingsService.SetImportantSoundVolume(value);
+        partial void OnVoiceVolumeChanged(int value) => _settingsService.SetVoiceVolume(value);
 
-                ImportantQueueCount = count;
+        partial void OnMainChatModeChanged(ChatDisplayMode value) => _settingsService.SetMainChatMode(value);
+        partial void OnShortsChatModeChanged(ChatDisplayMode value) => _settingsService.SetShortsChatMode(value);
+        partial void OnImportantChatModeChanged(ChatDisplayMode value) => _settingsService.SetImportantChatMode(value);
+        partial void OnStickersChatModeChanged(ChatDisplayMode value) => _settingsService.SetStickersChatMode(value);
 
-                Debug.WriteLine($"[MainViewModel] ==============================================");
-                Debug.WriteLine($"[MainViewModel] UpdateImportantQueueCount ВЫЗВАН!");
-                Debug.WriteLine($"[MainViewModel] count = {count}");
-                Debug.WriteLine($"[MainViewModel] IsAutoSwitchingEnabled = {IsAutoSwitchingEnabled}");
-                Debug.WriteLine($"[MainViewModel] ImportantPlaybackMode (до) = {ImportantPlaybackMode}");
-                Debug.WriteLine($"[MainViewModel] ImportantPlaybackMode == Auto = {ImportantPlaybackMode == ImportantPlaybackMode.Auto}");
-                Debug.WriteLine($"[MainViewModel] ImportantPlaybackMode == Manual = {ImportantPlaybackMode == ImportantPlaybackMode.Manual}");
-                Debug.WriteLine($"[MainViewModel] _importantService?.IsPlaying = {_importantService?.IsPlaying}");
+        partial void OnIsOverlaySetupModeChanged(bool oldValue, bool newValue) => _settingsService.SetOverlaySetupMode(newValue, () => LastMessageText = "✅ Позиции окон сохранены");
+        partial void OnIsOverlayHiddenChanged(bool oldValue, bool newValue) => _settingsService.SetOverlayHidden(newValue);
+        partial void OnIsStickersVisibleChanged(bool oldValue, bool newValue) => _settingsService.SetStickersVisible(newValue);
 
-                if (IsAutoSwitchingEnabled)
-                {
-                    Debug.WriteLine("[MainViewModel] Режим чтения ВКЛ, проверяем условия");
-
-                    // Если в очереди есть сообщения И режим авто -> переключаем в ручной
-                    if (count > 0 && ImportantPlaybackMode == ImportantPlaybackMode.Auto)
-                    {
-                        Debug.WriteLine($"[ReadingMode] ✅ УСЛОВИЕ 1: count={count} > 0 и режим Auto");
-                        Debug.WriteLine($"[ReadingMode] Переключаем АВТО -> РУЧНОЙ");
-                        ImportantPlaybackMode = ImportantPlaybackMode.Manual;
-                        Debug.WriteLine($"[ReadingMode] Новый режим: {ImportantPlaybackMode}");
-                    }
-                    // Если очередь пуста И режим ручной -> переключаем в авто
-                    else if (count == 0 && ImportantPlaybackMode == ImportantPlaybackMode.Manual)
-                    {
-                        Debug.WriteLine($"[ReadingMode] ✅ УСЛОВИЕ 2: count={count} == 0 и режим Manual");
-                        Debug.WriteLine($"[ReadingMode] Переключаем РУЧНОЙ -> АВТО");
-                        ImportantPlaybackMode = ImportantPlaybackMode.Auto;
-                        Debug.WriteLine($"[ReadingMode] Новый режим: {ImportantPlaybackMode}");
-                    }
-                    else
-                    {
-                        Debug.WriteLine($"[ReadingMode] ❌ Условия НЕ выполнены:");
-                        Debug.WriteLine($"[ReadingMode]   count>0 = {count > 0}");
-                        Debug.WriteLine($"[ReadingMode]   count==0 = {count == 0}");
-                        Debug.WriteLine($"[ReadingMode]   isAuto = {ImportantPlaybackMode == ImportantPlaybackMode.Auto}");
-                        Debug.WriteLine($"[ReadingMode]   isManual = {ImportantPlaybackMode == ImportantPlaybackMode.Manual}");
-                    }
-                }
-                else
-                {
-                    Debug.WriteLine("[MainViewModel] Режим чтения ВЫКЛ, переключение не выполняется");
-                }
-
-                Debug.WriteLine($"[MainViewModel] ImportantPlaybackMode (после) = {ImportantPlaybackMode}");
-                Debug.WriteLine($"[MainViewModel] ==============================================");
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine($"[MainViewModel] UpdateImportantQueueCount Error: {ex.Message}");
-                Debug.WriteLine($"[MainViewModel] StackTrace: {ex.StackTrace}");
-            }
-        }
-        [RelayCommand]
-        private async Task PlayNextImportant()
-        {
-            if (ImportantPlaybackMode == ImportantPlaybackMode.Manual)
-            {
-                await _importantService.PlayNextFromQueueAsync();
-                ImportantQueueCount = _importantService.QueueSize;
-            }
-        }
-
-        partial void OnStickerDisplayTimeChanged(int value)
-        {
-            Settings.StickerDisplayTimeMs = value;
-            _stickersService.SetDisplayTime(value);
-            ConfigService.Save(Settings);
-        }
-
-        partial void OnImportantSoundVolumeChanged(int value)
-        {
-            Settings.ImportantSoundVolume = value;
-            ConfigService.Save(Settings);
-            VoiceService.SetImportantSoundVolume(value);
-            Debug.WriteLine($"[MainVM] Громкость звука важных сообщений: {value}%");
-        }
         public void SetImportantPlaybackMode(ImportantPlaybackMode mode)
         {
             if (!Application.Current.Dispatcher.CheckAccess())
@@ -371,12 +319,55 @@ namespace SmithForge.ViewModels
                 Debug.WriteLine($"[MainViewModel] Режим принудительно установлен: {mode}");
             }
         }
-        partial void OnVoiceVolumeChanged(int value)
+
+        // ============================================================
+        // ОБРАБОТКА СООБЩЕНИЙ ИЗ YouTubeManager
+        // ============================================================
+        
+        private void OnYouTubeManagerMessageReceived(object? sender, ChatMessage message)
         {
-            Settings.VoiceVolume = value;
-            ConfigService.Save(Settings);
-            VoiceService.SetVoiceVolume(value);
-            Debug.WriteLine($"[MainVM] Громкость голоса: {value}%");
+            try
+            {
+                var commonMsg = new CommonMessage
+                {
+                    Type = "youtube",
+                    Login = message.Author,
+                    Message = message.Text,
+                    Timestamp = message.Timestamp.Ticks
+                };
+                
+                var externalId = $"youtube:{message.Author}".ToLower();
+                commonMsg.User = ChaterStorage.GetByExternalId(externalId);
+                
+                if (commonMsg.User == null)
+                {
+                    commonMsg.User = new Chater
+                    {
+                        Id = Guid.NewGuid().ToString(),
+                        Login = message.Author,
+                        DisplayName = message.Author,
+                        FirstSeen = DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
+                        LastMessageTime = DateTimeOffset.UtcNow.ToUnixTimeSeconds()
+                    };
+                    
+                    commonMsg.User.Accounts.Add(new ExternalAccount
+                    {
+                        ExternalId = externalId,
+                        Platform = "youtube",
+                        OriginalName = message.Author
+                    });
+                    
+                    ChaterStorage.AddOrUpdate(commonMsg.User);
+                    DatabaseService.SaveChater(commonMsg.User);
+                }
+                
+                commonMsg.User.LastMessageTime = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+                _messageHandler.ProcessMessage(commonMsg.User, commonMsg, null!);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[YouTubeManager] Ошибка обработки сообщения: {ex.Message}");
+            }
         }
 
         private void LoadInitialData()
@@ -440,7 +431,7 @@ namespace SmithForge.ViewModels
                 Task.Run(async () =>
                 {
                     await Task.Delay(200);
-                    _importantService.ShowImportantMessage(chater, overlayMsg);
+                    _overlayManager.AddImportantMessage(chater, overlayMsg);
                 });
             }
             else if (isStickerAction)
@@ -449,46 +440,13 @@ namespace SmithForge.ViewModels
                 Task.Run(async () =>
                 {
                     await Task.Delay(200);
-                    _stickersService.ShowSticker(chater, overlayMsg);
+                    _overlayManager.AddStickerMessage(chater, overlayMsg);
                 });
             }
             else
             {
-                _overlayService.AddMessage(chater, overlayMsg);
-                _shortsService.AddMessage(chater, overlayMsg);
+                _overlayManager.AddMessage(chater, overlayMsg);
             }
-        }
-
-        private void EnsureSessionByNumber(int number)
-        {
-            if (number <= 0) return;
-
-            var existingSession = DatabaseService.GetSessionByNumber(number);
-
-            if (existingSession != null)
-            {
-                CurrentSession = existingSession;
-                CurrentSession.EndTime = 0;
-                Debug.WriteLine($"[Stream] Продолжаем стрим #{number}");
-            }
-            else
-            {
-                CurrentSession = new StreamSession
-                {
-                    Id = Guid.NewGuid().ToString(),
-                    Number = number,
-                    Title = $"Стрим #{number}",
-                    StartTime = DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
-                    EndTime = 0
-                };
-                DatabaseService.SaveSession(CurrentSession);
-                Debug.WriteLine($"[Stream] Создан новый стрим #{number}");
-            }
-
-            LastStreamNumber = number;
-            Settings.LastStreamNumber = number;
-            ConfigService.Save(Settings);
-            _processor.SetSession(CurrentSession.Id);
         }
 
         private void StartPolling()
@@ -499,37 +457,66 @@ namespace SmithForge.ViewModels
 
             _ = MessageService.StartListeningAsync(
                 $"ws://127.0.0.1:{Settings.NetworkPort}/chat/ws/stream",
-                msg => _processor.Process(msg),
+                msg => _messageHandler.ProcessExternalMessage(msg),
                 _pollingcts.Token,
                 () => IsProcessRunning);
         }
 
+        //[RelayCommand(CanExecute = nameof(CanStart))]
+        //private void Start()
+        //{
+        //    int requestedNumber = CurrentSession?.Number ?? 0;
+
+        //    if (requestedNumber > 0)
+        //    {
+        //        _streamSessionManager.EnsureSessionByNumber(requestedNumber, n =>
+        //        {
+        //            LastStreamNumber = n;
+        //            Settings.LastStreamNumber = n;
+        //            ConfigService.Save(Settings);
+        //        });
+        //    }
+
+        //    if (_chatService.TryAttachExisting() || SafeStart())
+        //    {
+        //        IsProcessRunning = true;
+        //        _streamSessionManager.SetStartTime();
+        //        StartPolling();
+        //    }
+        //}
         [RelayCommand(CanExecute = nameof(CanStart))]
         private void Start()
         {
+            Debug.WriteLine("[MainViewModel] Start() вызван");
+
             int requestedNumber = CurrentSession?.Number ?? 0;
 
             if (requestedNumber > 0)
             {
-                EnsureSessionByNumber(requestedNumber);
-            }
-            else if (CurrentSession == null)
-            {
-                int nextNumber = LastStreamNumber + 1;
-                EnsureSessionByNumber(nextNumber);
-            }
-
-            if (_chatService.TryAttachExisting() || SafeStart())
-            {
-                IsProcessRunning = true;
-
-                if (CurrentSession.StartTime == 0)
+                _streamSessionManager.EnsureSessionByNumber(requestedNumber, n =>
                 {
-                    CurrentSession.StartTime = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
-                }
-                DatabaseService.SaveSession(CurrentSession);
-                StartPolling();
+                    LastStreamNumber = n;
+                    Settings.LastStreamNumber = n;
+                    ConfigService.Save(Settings);
+                    Debug.WriteLine($"[MainViewModel] Установлен номер стрима: {n}");
+                });
             }
+
+            // ✅ Устанавливаем сессию в процессоре
+            if (_streamSessionManager.CurrentSession != null)
+            {
+                _messageHandler.SetSession(_streamSessionManager.CurrentSession.Id);
+                Debug.WriteLine($"[MainViewModel] Сессия установлена: {_streamSessionManager.CurrentSession.Id}");
+            }
+            else
+            {
+                Debug.WriteLine("[MainViewModel] ⚠️ CurrentSession == null, сессия НЕ установлена!");
+            }
+
+            IsProcessRunning = true;
+            _streamSessionManager.SetStartTime();
+
+            Debug.WriteLine($"[MainViewModel] Стрим #{_streamSessionManager.CurrentSession?.Number} запущен");
         }
 
         private bool SafeStart()
@@ -543,122 +530,56 @@ namespace SmithForge.ViewModels
         {
             _pollingcts?.Cancel();
             await _chatService.StopAsync();
-
-            if (CurrentSession != null)
-            {
-                CurrentSession.EndTime = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
-                DatabaseService.SaveSession(CurrentSession);
-            }
-
+            _streamSessionManager.SaveSessionEndTime();
             IsProcessRunning = false;
         }
 
         [RelayCommand]
         private void NextStream()
         {
-            string currentTitle = CurrentSession?.Title ?? "Без названия";
-
-            if (CurrentSession != null && CurrentSession.EndTime == 0)
+            _streamSessionManager.NextStream(CurrentSession?.Title ?? "Без названия", (number, title) =>
             {
-                CurrentSession.EndTime = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
-                DatabaseService.SaveSession(CurrentSession);
-                Debug.WriteLine($"[Stream] Завершен стрим #{CurrentSession.Number}");
-            }
-
-            int nextNumber = CurrentSession?.Number ?? LastStreamNumber + 1;
-            EnsureSessionByNumber(nextNumber);
-            CurrentSession.Title = currentTitle;
-            DatabaseService.SaveSession(CurrentSession);
+                LastStreamNumber = number;
+                Settings.LastStreamNumber = number;
+                ConfigService.Save(Settings);
+            });
         }
 
         [RelayCommand]
-        private void SaveSettings()
+        private void SaveSettings() => _settingsService.SaveSettings();
+
+        public void SaveOverlayPosition() => _overlayManager.SaveAllPositions(Settings);
+        public void SaveShortsPosition() => _overlayManager.SaveAllPositions(Settings);
+        public void SaveImportantPosition() => _overlayManager.SaveAllPositions(Settings);
+        public void SaveStickersPosition() => _overlayManager.SaveAllPositions(Settings);
+
+        // ============================================================
+        // УПРАВЛЕНИЕ ОЧЕРЕДЬЮ ВАЖНЫХ СООБЩЕНИЙ
+        // ============================================================
+
+        public void UpdateImportantQueueCount(int count)
         {
-            ConfigService.Save(Settings);
-            LastMessageText = "✅ Настройки сохранены";
+            _settingsService.UpdateImportantQueueCount(count, IsAutoSwitchingEnabled, ImportantPlaybackMode,
+                (c, mode) =>
+                {
+                    ImportantQueueCount = c;
+                    ImportantPlaybackMode = mode;
+                });
         }
-
-        partial void OnMainChatModeChanged(ChatDisplayMode value)
-        {
-            Settings.MainChatMode = value;
-            _overlayService.SetDisplayMode(value);
-            ConfigService.Save(Settings);
-            Debug.WriteLine($"[MainVM] Главный чат режим: {value}");
-        }
-
-        partial void OnShortsChatModeChanged(ChatDisplayMode value)
-        {
-            Settings.ShortsChatMode = value;
-            _shortsService.SetDisplayMode(value);
-            ConfigService.Save(Settings);
-            Debug.WriteLine($"[MainVM] Шорты режим: {value}");
-        }
-
-        partial void OnImportantChatModeChanged(ChatDisplayMode value)
-        {
-            Settings.ImportantChatMode = value;
-            _importantService.SetDisplayMode(value);
-            ConfigService.Save(Settings);
-            Debug.WriteLine($"[MainVM] Важные сообщения режим: {value}");
-        }
-
-        partial void OnStickersChatModeChanged(ChatDisplayMode value)
-        {
-            Settings.StickersChatMode = value;
-            _stickersService.SetDisplayMode(value);
-            ConfigService.Save(Settings);
-            Debug.WriteLine($"[MainVM] Стикеры режим: {value}");
-        }
-
-        partial void OnIsOverlaySetupModeChanged(bool oldValue, bool newValue)
-        {
-            Debug.WriteLine($"[MainVM] Режим настройки: {oldValue} -> {newValue}");
-
-            _overlayService.SetSetupMode(newValue);
-            _shortsService.SetSetupMode(newValue);
-            _importantService.SetSetupMode(newValue);
-            _stickersService.SetSetupMode(newValue);
-
-            if (!newValue)
-            {
-                _overlayService.SavePosition(Settings);
-                _shortsService.SavePosition(Settings);
-                _importantService.SavePosition(Settings);
-                _stickersService.SavePosition(Settings);
-                ConfigService.Save(Settings);
-                LastMessageText = "✅ Позиции окон сохранены";
-            }
-        }
-
-        partial void OnIsOverlayHiddenChanged(bool oldValue, bool newValue)
-        {
-            _overlayService.SetHidden(newValue);
-            _shortsService.SetHidden(newValue);
-            _importantService.SetHidden(newValue);
-            _stickersService.SetHidden(newValue);
-            Settings.IsOverlayHidden = newValue;
-            ConfigService.Save(Settings);
-        }
-
-        partial void OnIsStickersVisibleChanged(bool oldValue, bool newValue)
-        {
-            if (newValue)
-                _stickersService.Show();
-            else
-                _stickersService.Hide();
-
-            Settings.IsStickersVisible = newValue;
-            ConfigService.Save(Settings);
-        }
-
-        public void SaveOverlayPosition() => _overlayService.SavePosition(Settings);
-        public void SaveShortsPosition() => _shortsService.SavePosition(Settings);
-        public void SaveImportantPosition() => _importantService.SavePosition(Settings);
-        public void SaveStickersPosition() => _stickersService.SavePosition(Settings);
 
         private void OnProcessExited() => Application.Current.Dispatcher.Invoke(() => { IsProcessRunning = false; });
         private bool CanStart() => !IsProcessRunning;
         private bool CanStop() => IsProcessRunning;
+
+        [RelayCommand]
+        private async Task PlayNextImportant()
+        {
+            if (ImportantPlaybackMode == ImportantPlaybackMode.Manual)
+            {
+                await _overlayManager.PlayNextFromQueueAsync();
+                UpdateImportantQueueCount(_overlayManager.QueueSize);
+            }
+        }
 
         [RelayCommand]
         private void Launch()
@@ -679,16 +600,13 @@ namespace SmithForge.ViewModels
         [RelayCommand]
         private void ToggleShortsOverlay()
         {
-            _shortsService.Toggle();
+            _overlayManager.ToggleShorts();
         }
 
         [RelayCommand]
         private void ToggleImportantOverlay()
         {
-            if (_importantService.IsVisible)
-                _importantService.Hide();
-            else
-                _importantService.Show();
+            _overlayManager.ToggleImportant();
         }
 
         [RelayCommand]
@@ -700,7 +618,6 @@ namespace SmithForge.ViewModels
         [RelayCommand]
         private async Task AddKarmaToAll()
         {
-            // Запрос подтверждения
             var result = MessageBox.Show(
                 $"Начислить 10 кармы всем {Users.Count} зрителям, которые были в чате за текущий стрим?",
                 "Подтверждение",
@@ -714,11 +631,9 @@ namespace SmithForge.ViewModels
                 int count = 0;
                 foreach (var chater in Users)
                 {
-                    // Начисляем 10 кармы
                     chater.Karma += 10;
                     chater.TotalKarma += 10;
 
-                    // Обновляем в базе данных через UpdateChaterStats
                     DatabaseService.UpdateChaterStats(chater);
                     ChaterStorage.AddOrUpdate(chater);
                     count++;
@@ -727,7 +642,6 @@ namespace SmithForge.ViewModels
                 LastMessageText = $"✅ Начислено 10 кармы {count} зрителям!";
                 Debug.WriteLine($"[Karma] Начислено 10 кармы {count} пользователям");
 
-                // Обновляем список пользователей в UI
                 Application.Current.Dispatcher.Invoke(() =>
                 {
                     var temp = Users.ToList();
@@ -738,7 +652,6 @@ namespace SmithForge.ViewModels
                     }
                 });
 
-                // Воспроизводим звук уведомления
                 await VoiceService.PlayImportantSoundAsync();
             }
             catch (Exception ex)
@@ -748,5 +661,218 @@ namespace SmithForge.ViewModels
                 MessageBox.Show($"Ошибка: {ex.Message}", "Ошибка", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
+
+        // ============================================================
+        // YOUTUBE КОМАНДЫ
+        // ============================================================
+
+        [RelayCommand]
+        private async Task LoadYouTubeStreams()
+        {
+            // ✅ Делегируем YouTubeManager
+            await YouTubeManager.FindStreamsViaHtmlAsync();
+        }
+
+        [RelayCommand]
+        private async Task ConnectYouTubeChat()
+        {
+            // ✅ Делегируем YouTubeManager
+            await YouTubeManager.ConnectSelectedAsync();
+        }
+
+        [RelayCommand]
+        private void DisconnectYouTubeChat()
+        {
+            // ✅ Делегируем YouTubeManager
+            YouTubeManager.DisconnectAll();
+        }
+
+        [RelayCommand]
+        private async Task SendYouTubeMessage(string message)
+        {
+            if (string.IsNullOrWhiteSpace(message))
+                return;
+
+            Debug.WriteLine($"[YouTube] Отправка сообщения (не поддерживается): {message}");
+
+            await Application.Current.Dispatcher.InvokeAsync(() =>
+            {
+                MessageBox.Show("Отправка сообщений в YouTube чат не поддерживается через API.",
+                    "Информация", MessageBoxButton.OK, MessageBoxImage.Information);
+            });
+        }
+
+        // ============================================================
+        // КОМАНДЫ ДЛЯ ЧАТОВ С РЕАЛЬНЫМИ КОННЕКТОРАМИ
+        // ============================================================
+
+        [RelayCommand]
+        private async Task ConnectChat(ChatConnection? chat)
+        {
+            if (chat == null) return;
+
+            // Для ручного режима проверяем Video ID
+            if (chat.Platform.ToLower() == "youtube" &&
+                chat.PreferredMethod == YouTubeConnectionMethod.ManualVideoId)
+            {
+                if (!string.IsNullOrEmpty(chat.VideoId))
+                {
+                    if (chat.VideoId.Length != 11)
+                    {
+                        MessageBox.Show("Video ID должен содержать 11 символов!", "Ошибка", MessageBoxButton.OK, MessageBoxImage.Warning);
+                        return;
+                    }
+                }
+                else
+                {
+                    var videoId = await _dialogService.ShowVideoIdDialogAsync();
+                    if (string.IsNullOrEmpty(videoId))
+                    {
+                        chat.Status = "❌ Отменено";
+                        return;
+                    }
+                    chat.VideoId = videoId;
+                }
+            }
+
+            await _chatConnectionService.ConnectChat(chat, (name, connected, count) =>
+            {
+                chat.Status = name == chat.ChatName ? (connected ? "✅ Подключен" : "❌ Ошибка") : chat.Status;
+            });
+
+            UpdateStats();
+            _chatManager.SaveChatsToFile();
+        }
+
+        [RelayCommand]
+        private async Task DisconnectChat(ChatConnection? chat)
+        {
+            if (chat == null) return;
+
+            await _chatConnectionService.DisconnectChat(chat, () =>
+            {
+                UpdateStats();
+                _chatManager.SaveChatsToFile();
+            });
+        }
+
+        [RelayCommand]
+        private void RemoveChat(ChatConnection? chat)
+        {
+            if (chat == null) return;
+
+            _chatConnectionService.RemoveChat(chat, Chats,
+                () => UpdateStats(),
+                () => UpdateStats());
+        }
+
+        [RelayCommand]
+        private void ChangeMethod(ChatConnection? chat)
+        {
+            _chatConnectionService.ChangeMethod(chat);
+        }
+
+        public ChatConnectionService GetChatConnectionService() => _chatConnectionService;
+
+        [RelayCommand]
+        private async Task ConnectByVideoId(ChatConnection? chat)
+        {
+            if (chat == null) return;
+
+            if (string.IsNullOrEmpty(chat.VideoId) || chat.VideoId.Length != 11)
+            {
+                MessageBox.Show("Введите корректный Video ID (11 символов)!", "Ошибка", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            // Устанавливаем метод подключения на ManualVideoId
+            chat.PreferredMethod = YouTubeConnectionMethod.ManualVideoId;
+
+            await _chatConnectionService.ConnectChat(chat, (name, connected, count) =>
+            {
+                chat.Status = connected ? "✅ Подключен (Video ID)" : $"❌ Ошибка: {chat.LastConnectionError}";
+                UpdateStats();
+            });
+        }
+
+        // ============================================================
+        // ОБРАБОТКА СООБЩЕНИЙ ИЗ КОННЕКТОРОВ
+        // ============================================================
+
+        private void OnConnectorMessageReceived(object? sender, IncomingChatMessage message)
+        {
+            _messageHandler.ProcessConnectorMessage(sender, message);
+        }
+
+        // ============================================================
+        // ОБНОВЛЕНИЕ СТАТИСТИКИ
+        // ============================================================
+
+        private void UpdateStats()
+        {
+            ConnectedChatsCount = Chats.Count(c => c.IsConnected);
+            TotalMessagesCount = Chats.Sum(c => c.MessageCount);
+        }
+
+        // ============================================================
+        // ЗАГРУЗКА И ОБНОВЛЕНИЕ ЧАТОВ
+        // ============================================================
+
+        private void LoadChats()
+        {
+
+            // Подписываемся на события
+            foreach (var chat in Chats)
+            {
+                chat.ConnectRequested += OnChatConnectRequested;
+                chat.DisconnectRequested += OnChatDisconnectRequested;
+            }
+
+            Chats.CollectionChanged += (s, e) =>
+            {
+                if (e.NewItems != null)
+                {
+                    foreach (ChatConnection chat in e.NewItems)
+                    {
+                        chat.ConnectRequested += OnChatConnectRequested;
+                        chat.DisconnectRequested += OnChatDisconnectRequested;
+                    }
+                }
+                UpdateStats();
+            };
+
+            UpdateStats();
+        }
+
+        private async void OnChatConnectRequested(object? sender, EventArgs e)
+        {
+            if (sender is ChatConnection chat)
+            {
+                await ConnectChat(chat);
+            }
+        }
+
+        private async void OnChatDisconnectRequested(object? sender, EventArgs e)
+        {
+            if (sender is ChatConnection chat)
+            {
+                await DisconnectChat(chat);
+            }
+        }
+
+        public async Task RefreshChats()
+        {
+            foreach (var chat in Chats.Where(c => c.IsConnected).ToList())
+            {
+                await DisconnectChat(chat);
+            }
+
+            // Используем существующий _chatManager с общей коллекцией
+            // _chatManager = new ChatManagerViewModel(Chats, _chatConnectionService);
+            Chats.CollectionChanged += (s, e) => UpdateStats();
+            UpdateStats();
+        }
+
+        public ChatManagerViewModel GetChatManagerViewModel() => _chatManager;
     }
 }

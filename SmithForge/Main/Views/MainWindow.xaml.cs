@@ -1,4 +1,5 @@
 ﻿using SmithForge.Features.ChaterManager;
+using SmithForge.Features.ChatManager;
 using SmithForge.Main.Models;
 using SmithForge.Main.Services;
 using SmithForge.ViewModels;
@@ -311,6 +312,45 @@ namespace SmithForge.Main.Views
                     e.Handled = true;
                 }
             }
+        }
+
+        private void OpenYouTubeManager_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                // Создаем View и ViewModel
+                var view = new SmithForge.Features.YouTubeManager.Views.YouTubeManagerView();
+                var viewModel = new SmithForge.Features.YouTubeManager.ViewModels.YouTubeManagerViewModel();
+                view.DataContext = viewModel;
+
+                // Открываем в отдельном окне
+                var window = new Window
+                {
+                    Title = "YouTube Manager - Добавление чата",
+                    Content = view,
+                    Width = 900,
+                    Height = 700,
+                    Owner = this,
+                    WindowStartupLocation = WindowStartupLocation.CenterOwner,
+                    ShowInTaskbar = false
+                };
+                window.ShowDialog();
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Ошибка открытия YouTube Manager: {ex.Message}", "Ошибка",
+                                MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
+        private void OpenChatManager_Click(object sender, RoutedEventArgs e)
+        {
+            var vm = DataContext as MainViewModel;
+            var window = new ChatManagerWindow();
+            // Используем существующий _chatManager из MainViewModel
+            window.DataContext = vm.GetChatManagerViewModel();  // ← нужно добавить метод
+            window.Owner = this;
+            window.ShowDialog();
         }
     }
 }

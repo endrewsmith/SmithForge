@@ -26,6 +26,12 @@ namespace SmithForge.Main.Models
 
         [ObservableProperty] private bool _isRecentlySaved;
 
+        /// <summary>
+        /// Флаг, что DisplayName был установлен вручную (через UI или команду !nick)
+        /// Если true - автоматическое обновление из чата НЕ происходит
+        /// </summary>
+        [ObservableProperty] private bool _isDisplayNameCustom = false;
+
         public string EffectiveName => !string.IsNullOrWhiteSpace(DisplayName) ? DisplayName : Login;
 
         partial void OnDisplayNameChanging(string value)
@@ -176,6 +182,23 @@ namespace SmithForge.Main.Models
         [ObservableProperty] private string _externalId = string.Empty;
         [ObservableProperty] private string _platform = string.Empty;
         [ObservableProperty] private string _originalName = string.Empty;
+
+        /// <summary>
+        /// Отображаемый ID аккаунта (только ID, без префикса платформы и @)
+        /// Для YouTube: UCsf2sD1gJWus1OUrq2fGwlQ или smithch
+        /// </summary>
+        public string DisplayId
+        {
+            get
+            {
+                if (string.IsNullOrEmpty(ExternalId)) return string.Empty;
+                // Убираем префикс платформы (youtube:, tw:, gg:)
+                var colonIndex = ExternalId.IndexOf(':');
+                var id = colonIndex > 0 ? ExternalId.Substring(colonIndex + 1) : ExternalId;
+                // Убираем @ в начале, если есть
+                return id.TrimStart('@');
+            }
+        }
 
         public string DisplayName => $"{PlatformFullName}: {OriginalName}";
 

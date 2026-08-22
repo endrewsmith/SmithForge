@@ -6,12 +6,17 @@
         xmlns:local="clr-namespace:SmithForge.Features.Dashboard"
         xmlns:overlay="clr-namespace:SmithForge.Features.ChatOverlay"
         mc:Ignorable="d"
-        Title="DashboardWindow" Height="600" Width="450"
-        WindowStyle="None" AllowsTransparency="True" 
-        Topmost="False" ShowInTaskbar="True"
-        Visibility="Collapsed" ShowActivated="False"
-        ResizeMode="CanResizeWithGrip"
-        MouseLeftButtonDown="Window_MouseLeftButtonDown">
+        Title="📊 Dashboard"
+        Height="600" 
+        Width="450"
+        WindowStyle="SingleBorderWindow"
+        AllowsTransparency="False"
+        Topmost="False" 
+        ShowInTaskbar="True"
+        Visibility="Collapsed"
+        ShowActivated="True"
+        ResizeMode="CanResize"
+        Background="#232323">
 
     <Window.Resources>
         <overlay:RankToColorConverter x:Key="RankToColorConverter"/>
@@ -34,46 +39,65 @@
                 </Trigger>
             </Style.Triggers>
         </Style>
+
+        <!-- Стиль для скроллбара -->
+        <Style TargetType="{x:Type ScrollBar}">
+            <Setter Property="Width" Value="8"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="{x:Type ScrollBar}">
+                        <Grid>
+                            <Track x:Name="PART_Track" 
+                                   Grid.Row="1"
+                                   IsDirectionReversed="True">
+                                <Track.Thumb>
+                                    <Thumb>
+                                        <Thumb.Template>
+                                            <ControlTemplate TargetType="{x:Type Thumb}">
+                                                <Border Background="#555555" 
+                                                        CornerRadius="4"
+                                                        Height="40"/>
+                                            </ControlTemplate>
+                                        </Thumb.Template>
+                                    </Thumb>
+                                </Track.Thumb>
+                            </Track>
+                        </Grid>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Visibility" Value="Collapsed"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
     </Window.Resources>
 
     <Grid>
         <!-- Верхняя панель с заголовком и кнопками управления -->
-        <Border Height="55" VerticalAlignment="Top" Background="#333" 
-                MouseLeftButtonDown="Window_MouseLeftButtonDown">
+        <Border Height="45" VerticalAlignment="Top" Background="#333">
             <Grid>
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="30"/>
-                    <RowDefinition Height="25"/>
-                </Grid.RowDefinitions>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*"/>
                     <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
 
                 <!-- Заголовок -->
-                <TextBlock Grid.Row="0" Grid.Column="0" Text="📊 DASHBOARD" Foreground="White" 
-                           HorizontalAlignment="Center" VerticalAlignment="Center"/>
-
-                <!-- Кнопка закрытия -->
-                <Button Grid.Row="0" Grid.Column="1" 
-                        Content="✕" 
-                        Width="30" 
-                        Height="30"
-                        Background="Transparent"
-                        BorderThickness="0"
-                        Foreground="#999"
-                        FontSize="16"
-                        FontWeight="Bold"
-                        Cursor="Hand"
-                        Click="CloseButton_Click"
-                        ToolTip="Закрыть дашборд"
-                        Margin="0,0,5,0"/>
+                <TextBlock Grid.Column="0" 
+                           Text="📊 DASHBOARD" 
+                           Foreground="White" 
+                           HorizontalAlignment="Center" 
+                           VerticalAlignment="Center"
+                           FontWeight="Bold"/>
 
                 <!-- Панель кнопок управления -->
-                <StackPanel Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="2" 
+                <StackPanel Grid.Column="1" 
                             Orientation="Horizontal" 
-                            HorizontalAlignment="Center"
-                            VerticalAlignment="Center">
+                            HorizontalAlignment="Right"
+                            VerticalAlignment="Center"
+                            Margin="0,0,10,0">
 
                     <Button Style="{StaticResource ControlButtonStyle}"
                             Content="−"
@@ -97,6 +121,13 @@
                             Content="🗑"
                             Command="{Binding ClearMessagesCommand}"
                             ToolTip="Очистить все сообщения"/>
+
+                    <Button Style="{StaticResource ControlButtonStyle}"
+                            Content="✕"
+                            Command="{Binding CloseCommand}"
+                            ToolTip="Закрыть дашборд"
+                            Foreground="#FF6B6B"
+                            Margin="2,0,0,0"/>
                 </StackPanel>
             </Grid>
         </Border>
@@ -104,24 +135,23 @@
         <ScrollViewer x:Name="MainScrollViewer"
                       VerticalScrollBarVisibility="Visible" 
                       HorizontalScrollBarVisibility="Disabled"
-                      Background="#373737"
-                      Margin="0,55,0,0"
+                      Background="#232323"
+                      Margin="0,45,0,0"
                       Padding="0,10,0,0"
                       ScrollChanged="MainScrollViewer_ScrollChanged">
             <ItemsControl x:Name="MessagesList" 
                           ItemsSource="{Binding DisplayMessages}" 
-                          IsHitTestVisible="False"
+                          IsHitTestVisible="True"
                           Margin="10">
                 <ItemsControl.ItemsPanel>
                     <ItemsPanelTemplate>
                         <StackPanel VerticalAlignment="Bottom"/>
                     </ItemsPanelTemplate>
                 </ItemsControl.ItemsPanel>
-
                 <ItemsControl.ItemTemplate>
                     <DataTemplate>
                         <ContentControl Content="{Binding}" 
-                                        ContentTemplate="{Binding MessageSkin}"
+                                        ContentTemplate="{Binding DashboardMessageSkin}"
                                         Margin="0,2"/>
                     </DataTemplate>
                 </ItemsControl.ItemTemplate>
@@ -164,16 +194,5 @@
                 </ControlTemplate>
             </Button.Template>
         </Button>
-
-        <!-- Gripper -->
-        <Border Width="10" Height="10" 
-                HorizontalAlignment="Right" 
-                VerticalAlignment="Bottom" 
-                Background="#555" 
-                Opacity="0.5">
-            <TextBlock Text="⬊" Foreground="White" 
-                       HorizontalAlignment="Center" 
-                       VerticalAlignment="Center"/>
-        </Border>
     </Grid>
 </Window>
