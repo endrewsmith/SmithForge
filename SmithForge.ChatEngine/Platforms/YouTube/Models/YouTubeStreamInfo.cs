@@ -1,4 +1,4 @@
-﻿namespace SmithForge.ChatEngine.Models;
+﻿namespace SmithForge.ChatEngine.Platforms.YouTube.Models;
 
 public class YouTubeStreamInfo
 {

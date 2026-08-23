@@ -3,9 +3,9 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Text.Json;
 using System.Text.RegularExpressions;
-using SmithForge.ChatEngine.Models;
+using SmithForge.ChatEngine.Platforms.YouTube.Models;
 
-namespace SmithForge.ChatEngine.Services;
+namespace SmithForge.ChatEngine.Platforms.YouTube;
 
 public class YoutubeHtmlParser
 {

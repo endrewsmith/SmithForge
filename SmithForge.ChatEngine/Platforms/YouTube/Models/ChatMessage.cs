@@ -1,6 +1,7 @@
-﻿using System;
+﻿using SmithForge.ChatEngine.Core.Models;
+using System;
 
-namespace SmithForge.ChatEngine.Models
+namespace SmithForge.ChatEngine.Platforms.YouTube.Models
 {
     /// <summary>
     /// Сырые данные сообщения с платформы (YouTube, Twitch, GoodGame)

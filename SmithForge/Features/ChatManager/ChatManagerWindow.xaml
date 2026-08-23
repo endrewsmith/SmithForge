@@ -136,31 +136,30 @@
                                     <!-- Счетчик сообщений -->
                                     <TextBlock Grid.Column="2" Text="{Binding MessageCount}" Margin="10,0" Foreground="Gray"/>
 
-                                    <!-- Кнопка Connect/Disconnect -->
-                                    <Button Grid.Column="3" 
-                                            CommandParameter="{Binding}"
-                                            Margin="5,0"
-                                            Padding="8,3">
-                                        <Button.Style>
-                                            <Style TargetType="Button">
-                                                <Setter Property="Content" Value="🔌 Подключить"/>
-                                                <Setter Property="Background" Value="#4CAF50"/>
-                                                <Setter Property="Foreground" Value="White"/>
-                                                <Setter Property="BorderThickness" Value="0"/>
-                                                <Setter Property="Cursor" Value="Hand"/>
-                                                <Setter Property="Command" Value="{Binding DataContext.ConnectChatCommand, RelativeSource={RelativeSource AncestorType=Window}}"/>
-                                                <Style.Triggers>
-                                                    <DataTrigger Binding="{Binding IsConnected}" Value="True">
-                                                        <Setter Property="Content" Value="⏹ Отключить"/>
-                                                        <Setter Property="Background" Value="#FF6B6B"/>
-                                                        <Setter Property="Command" Value="{Binding DataContext.DisconnectChatCommand, RelativeSource={RelativeSource AncestorType=Window}}"/>
-                                                    </DataTrigger>
-                                                </Style.Triggers>
-                                            </Style>
-                                        </Button.Style>
-                                    </Button>
+                                <!-- Кнопка Connect/Disconnect -->
+                                <Button Grid.Column="3" 
+        Margin="5,0"
+        Padding="8,3"
+        Tag="{Binding}"
+        Click="OnConnectButtonClick">
+                                    <Button.Style>
+                                        <Style TargetType="Button">
+                                            <Setter Property="Content" Value="🔌 Подключить"/>
+                                            <Setter Property="Background" Value="#4CAF50"/>
+                                            <Setter Property="Foreground" Value="White"/>
+                                            <Setter Property="BorderThickness" Value="0"/>
+                                            <Setter Property="Cursor" Value="Hand"/>
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding IsConnected}" Value="True">
+                                                    <Setter Property="Content" Value="⏹ Отключить"/>
+                                                    <Setter Property="Background" Value="#FF6B6B"/>
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </Button.Style>
+                                </Button>
 
-                                    <!-- Кнопка изменения метода (только для YouTube) -->
+                                <!-- Кнопка изменения метода (только для YouTube) -->
                                     <Button Grid.Column="4" 
                                             Content="⚙️"
                                             Command="{Binding DataContext.ChangeMethodCommand, RelativeSource={RelativeSource AncestorType=Window}}"
@@ -217,7 +216,7 @@
                            Margin="0,0,0,10"/>
 
                 <!-- Платформа -->
-                <TextBlock Grid.Row="1" Grid.Column="0" Text="Платформа:" VerticalAlignment="Center"/>
+                <TextBlock Grid.Row="1" Grid.Column="0" Text="Платформа:" VerticalAlignment="Center" Foreground="White"/>
                 <ComboBox Grid.Row="1" Grid.Column="1" 
                           ItemsSource="{Binding AvailablePlatforms}"
                           SelectedValue="{Binding SelectedPlatform}"
@@ -234,14 +233,14 @@
                 </ComboBox>
 
                 <!-- Режим -->
-                <TextBlock Grid.Row="2" Grid.Column="0" Text="Режим:" VerticalAlignment="Center"/>
+                <TextBlock Grid.Row="2" Grid.Column="0" Text="Режим:" VerticalAlignment="Center" Foreground="White"/>
                 <ComboBox Grid.Row="2" Grid.Column="1" 
                           ItemsSource="{Binding AvailableModes}"
                           SelectedItem="{Binding SelectedMode}"
                           Margin="0,0,0,5"/>
 
                 <!-- Название чата -->
-                <TextBlock Grid.Row="3" Grid.Column="0" Text="Название:" VerticalAlignment="Center"/>
+                <TextBlock Grid.Row="3" Grid.Column="0" Text="Название:" VerticalAlignment="Center" Foreground="White"/>
                 <TextBox Grid.Row="3" Grid.Column="1" Text="{Binding ChatName}" 
                          Margin="0,0,0,5" 
                          ToolTip="Введите понятное название для чата"
@@ -277,7 +276,7 @@
                             <ColumnDefinition Width="*"/>
                         </Grid.ColumnDefinitions>
 
-                        <TextBlock Grid.Column="0" Text="API Key:" VerticalAlignment="Center"/>
+                        <TextBlock Grid.Column="0" Text="API Key:" VerticalAlignment="Center" Foreground="White"/>
                         <PasswordBox Grid.Column="1" x:Name="YouTubeApiKeyBox" 
                                       PasswordChanged="YouTubeApiKeyBox_PasswordChanged"/>
                     </Grid>
@@ -289,14 +288,18 @@
                             <ColumnDefinition Width="*"/>
                         </Grid.ColumnDefinitions>
 
-                        <TextBlock Grid.Column="0" Text="Channel ID:" VerticalAlignment="Center"/>
+                        <TextBlock Grid.Column="0" Text="Channel ID:" VerticalAlignment="Center" Foreground="White"/>
                         <TextBox Grid.Column="1" Text="{Binding YouTubeChannelId}"/>
                     </Grid>
                 </StackPanel>
 
                 <!-- ============ Twitch ============ -->
                 <StackPanel Grid.Row="4" Grid.ColumnSpan="2" 
-                            Visibility="{Binding SelectedPlatform, Converter={StaticResource PlatformToVisibilityConverter}, ConverterParameter='twitch'}">
+            Visibility="{Binding SelectedPlatform, Converter={StaticResource PlatformToVisibilityConverter}, ConverterParameter='twitch'}">
+
+                    <TextBlock Text="Для подключения к Twitch чату достаточно указать имя канала." 
+               FontSize="11" Foreground="#888" 
+               Margin="0,0,0,10" TextWrapping="Wrap"/>
 
                     <Grid Margin="0,5">
                         <Grid.ColumnDefinitions>
@@ -304,29 +307,9 @@
                             <ColumnDefinition Width="*"/>
                         </Grid.ColumnDefinitions>
 
-                        <TextBlock Grid.Column="0" Text="Имя канала:" VerticalAlignment="Center"/>
-                        <TextBox Grid.Column="1" Text="{Binding TwitchChannelName}"/>
-                    </Grid>
-
-                    <Grid Margin="0,5">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="120"/>
-                            <ColumnDefinition Width="*"/>
-                        </Grid.ColumnDefinitions>
-
-                        <TextBlock Grid.Column="0" Text="Client ID:" VerticalAlignment="Center"/>
-                        <TextBox Grid.Column="1" Text="{Binding TwitchClientId}"/>
-                    </Grid>
-
-                    <Grid Margin="0,5">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="120"/>
-                            <ColumnDefinition Width="*"/>
-                        </Grid.ColumnDefinitions>
-
-                        <TextBlock Grid.Column="0" Text="OAuth Token:" VerticalAlignment="Center"/>
-                        <PasswordBox Grid.Column="1" x:Name="TwitchOAuthBox" 
-                                     PasswordChanged="TwitchOAuthBox_PasswordChanged"/>
+                        <TextBlock Grid.Column="0" Text="Имя канала:" VerticalAlignment="Center" Foreground="White"/>
+                        <TextBox Grid.Column="1" Text="{Binding TwitchChannelName}" 
+                 ToolTip="Введите имя канала Twitch (например: forsen, xqc)"/>
                     </Grid>
                 </StackPanel>
 
@@ -340,7 +323,7 @@
                             <ColumnDefinition Width="*"/>
                         </Grid.ColumnDefinitions>
 
-                        <TextBlock Grid.Column="0" Text="ID канала:" VerticalAlignment="Center"/>
+                        <TextBlock Grid.Column="0" Text="ID канала:" VerticalAlignment="Center" Foreground="White"/>
                         <TextBox Grid.Column="1" Text="{Binding GoodGameChannelId}"/>
                     </Grid>
                 </StackPanel>

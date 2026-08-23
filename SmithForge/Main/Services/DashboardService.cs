@@ -10,10 +10,11 @@ namespace SmithForge.Main.Services
         private DashboardWindow? _window;
         private DashboardViewModel? _viewModel;
         private bool _isInitialized = false;
+        private bool _isClosed = false;  // ← Добавлен флаг
 
         public void Initialize()
         {
-            if (_isInitialized) return;
+            if (_isInitialized && !_isClosed) return;
 
             try
             {
@@ -24,7 +25,15 @@ namespace SmithForge.Main.Services
                     Visibility = Visibility.Collapsed // Окно скрыто по умолчанию
                 };
 
+                // ✅ Подписываемся на закрытие окна
+                _window.Closed += (s, e) =>
+                {
+                    _isClosed = true;
+                    _window = null;
+                };
+
                 _isInitialized = true;
+                _isClosed = false;
                 System.Diagnostics.Debug.WriteLine("[Dashboard] Сервис инициализирован");
             }
             catch (Exception ex)
@@ -41,7 +50,14 @@ namespace SmithForge.Main.Services
 
         public void Show()
         {
+            // ✅ Если окно было закрыто — пересоздаём
+            if (_isClosed || _window == null)
+            {
+                Initialize();
+            }
+
             if (_window == null) return;
+
             _window.Visibility = Visibility.Visible;
             _window.Topmost = true;
             System.Diagnostics.Debug.WriteLine("[Dashboard] Окно показано");

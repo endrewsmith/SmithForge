@@ -4,7 +4,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
 using System.Threading.Tasks;
-using SmithForge.ChatEngine.Models;
+using SmithForge.ChatEngine.Core.Models;
 using SmithForge.Main.Models;
 using SmithForge.Main.Services.ChatCommands;
 
@@ -128,6 +128,7 @@ namespace SmithForge.Main.Services
 
         public void ProcessConnectorMessage(object? sender, IncomingChatMessage message)
         {
+            Debug.WriteLine($"[MessageHandler] ProcessConnectorMessage: {message.UserName}: {message.Text}");
             Debug.WriteLine("═══════════════════════════════════════════════");
             Debug.WriteLine("[PATH] ProcessConnectorMessage");
             Debug.WriteLine($"   ConnectorId: {message.ConnectorId}");

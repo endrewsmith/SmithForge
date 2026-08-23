@@ -1,8 +1,9 @@
 ﻿using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.Logging;
-using SmithForge.ChatEngine.Models;
-using SmithForge.ChatEngine.Services;
+using SmithForge.ChatEngine.Core.Models;
+using SmithForge.ChatEngine.Platforms.YouTube;
+using SmithForge.ChatEngine.Platforms.YouTube.Models;
 using SmithForge.Features.YouTubeManager.Models;
 using System.Collections.ObjectModel;
 using System.ComponentModel;

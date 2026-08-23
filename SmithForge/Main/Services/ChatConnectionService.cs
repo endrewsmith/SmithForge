@@ -1,3 +1,10 @@
+using SmithForge.ChatEngine.Core.Interfaces;
+using SmithForge.ChatEngine.Core.Models;
+using SmithForge.ChatEngine.Platforms.GoodGame;
+using SmithForge.ChatEngine.Platforms.YouTube;
+using SmithForge.ChatEngine.Platforms.YouTube.Models;
+using SmithForge.Features.ChatManager;
+using SmithForge.Main.Models;
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
@@ -5,13 +12,8 @@ using System.Diagnostics;
 using System.Linq;
 using System.Threading.Tasks;
 using System.Windows;
-using SmithForge.ChatEngine.Core.Interfaces;
-using SmithForge.ChatEngine.Connectors;
-using SmithForge.ChatEngine.Models;
-using SmithForge.Features.ChatManager;
-using SmithForge.Main.Models;
+using EngineChatMode = SmithForge.ChatEngine.Core.Models.ChatMode;
 using MainChatMode = SmithForge.Main.Models.ChatMode;
-using EngineChatMode = SmithForge.ChatEngine.Models.ChatMode;
 
 namespace SmithForge.Main.Services;
 
@@ -187,8 +189,8 @@ public class ChatConnectionService
                         targetStream = streams.FirstOrDefault(s => s.IsShorts);
                         if (targetStream == null)
                         {
-                            Debug.WriteLine("⚠️ Shorts стрим не найден, используем обычный");
-                            targetStream = streams[0];
+                            Debug.WriteLine("⚠️ Shorts стрим не найден");
+                            throw new Exception("❌ Shorts стрим не найден. Стример ещё не запустил Shorts, или переключитесь на режим Normal.");
                         }
                     }
                     else // Normal
@@ -197,7 +199,8 @@ public class ChatConnectionService
                         if (targetStream == null)
                         {
                             Debug.WriteLine("⚠️ Обычный стрим не найден, используем первый");
-                            targetStream = streams[0];
+                            //targetStream = streams[0];
+                            throw new Exception("❌ Обычный стрим не найден. Стример ещё не в эфире, или переключитесь на режим Shorts.");
                         }
                     }
 
@@ -267,14 +270,67 @@ public class ChatConnectionService
 
     private async Task<IChatConnector> ConnectTwitchChatInternal(ChatConnection chat)
     {
-        await Task.Delay(100);
-        throw new NotImplementedException("Twitch коннектор еще не реализован");
+        try
+        {
+            if (string.IsNullOrEmpty(chat.ChannelId))
+            {
+                throw new Exception("Не указан канал Twitch");
+            }
+
+            // Используем TwitchConnector из ChatEngine
+            var connector = new SmithForge.ChatEngine.Platforms.Twitch.TwitchConnector(
+                logger: null,
+                channelName: chat.ChannelId,
+                botName: "justinfan12345",      // анонимный бот
+                botPassword: "",                 // без пароля
+                connectorId: $"{chat.ChatName}_{Guid.NewGuid():N}"
+            );
+
+            await connector.ConnectAsync();
+
+            chat.IsConnected = true;
+            chat.Status = $"✅ Подключен к #{chat.ChannelId}";
+
+            return connector;
+        }
+        catch (Exception ex)
+        {
+            chat.IsConnected = false;
+            chat.Status = $"❌ Ошибка: {ex.Message}";
+            chat.LastConnectionError = ex.Message;
+            throw;
+        }
     }
 
     private async Task<IChatConnector> ConnectGoodGameChatInternal(ChatConnection chat)
     {
-        await Task.Delay(100);
-        throw new NotImplementedException("GoodGame коннектор еще не реализован");
+        try
+        {
+            if (string.IsNullOrEmpty(chat.ChannelId))
+            {
+                throw new Exception("Не указан канал GoodGame");
+            }
+
+            var connector = new GgConnector(
+                logger: null,
+                channelName: chat.ChannelId,
+                connectorId: $"{chat.ChatName}_{Guid.NewGuid():N}"
+            );
+
+            await connector.ConnectAsync();
+
+            chat.IsConnected = true;
+            chat.Status = $"✅ Подключен к #{chat.ChannelId}";
+
+            return connector;
+        }
+        catch (Exception ex)
+        {
+            chat.IsConnected = false;
+            chat.Status = $"❌ Ошибка: {ex.Message}";
+            chat.LastConnectionError = ex.Message;
+            throw;
+        }
     }
 
     private async Task DisconnectChatInternal(ChatConnection chat)
@@ -318,6 +374,7 @@ public class ChatConnectionService
 
     private void OnConnectorMessageReceived(object? sender, IncomingChatMessage message, string chatName)
     {
+        Debug.WriteLine($"[ChatConnectionService] OnConnectorMessageReceived: {chatName} -> {message.UserName}: {message.Text}");
         // ✅ Добавляем имя чата в сообщение для дедупликации
         if (message != null)
         {
