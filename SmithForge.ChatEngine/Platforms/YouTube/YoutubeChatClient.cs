@@ -1,14 +1,16 @@
-﻿using System;
+﻿using SmithForge.ChatEngine.Core.Models;
+using SmithForge.ChatEngine.Platforms.YouTube.Models;
+using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Net.Http;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
-using SmithForge.ChatEngine.Core.Models;
-using SmithForge.ChatEngine.Platforms.YouTube.Models;
+using System.IO;
 
 namespace SmithForge.ChatEngine.Platforms.YouTube;
 
@@ -30,6 +32,10 @@ public class YoutubeChatClient
     private readonly ConcurrentDictionary<string, DateTime> _processedMessageCache = new();
     private const int CacheTtlSeconds = 60;
 
+    // ⭐ ДЕЛЕГАТЫ ДЛЯ СВЯЗИ С EmojiService
+    public static Func<string, bool>? CheckEmojiExists { get; set; }
+    public static Action<string, string>? RegisterEmojiInCache { get; set; }
+
     public event EventHandler<ChatMessage>? OnMessageReceived;
     public event EventHandler<string>? OnLog;
     public event EventHandler<string>? OnStatusChanged;
@@ -40,6 +46,13 @@ public class YoutubeChatClient
     {
         _httpClient = httpClient;
         _htmlParser = htmlParser;
+    }
+
+    // ⭐ РЕГИСТРАЦИЯ ДЕЛЕГАТОВ
+    public static void RegisterDelegates(Func<string, bool> checkExists, Action<string, string> register)
+    {
+        CheckEmojiExists = checkExists;
+        RegisterEmojiInCache = register;
     }
 
     public void SetChatMode(ChatMode mode)
@@ -286,17 +299,56 @@ public class YoutubeChatClient
                     }
                     else if (run.TryGetProperty("emoji", out var emoji))
                     {
-                        var accessibility = emoji.GetProperty("image").GetProperty("accessibility");
-                        var label = accessibility.GetProperty("accessibilityData").GetProperty("label").GetString();
-
-                        // ✅ Преобразуем в формат :code: для EmojiService
-                        if (!string.IsNullOrEmpty(label))
+                        try
                         {
-                            var code = label.ToLower()
-                                .Replace(" ", "_")
-                                .Replace("-", "_")
-                                .Replace(":", "");
-                            textBuilder.Append($":{code}:");
+                            var thumbnails = emoji.GetProperty("image").GetProperty("thumbnails");
+                            var url = thumbnails[0].GetProperty("url").GetString();
+
+                            string code = null;
+
+                            if (emoji.TryGetProperty("shortcuts", out var shortcuts))
+                            {
+                                var firstShortcut = shortcuts.EnumerateArray().FirstOrDefault();
+                                if (firstShortcut.ValueKind != JsonValueKind.Null)
+                                {
+                                    var shortcut = firstShortcut.GetString();
+                                    if (!string.IsNullOrEmpty(shortcut))
+                                    {
+                                        code = shortcut.Trim(':');
+                                    }
+                                }
+                            }
+
+                            if (string.IsNullOrEmpty(code))
+                            {
+                                var accessibility = emoji.GetProperty("image").GetProperty("accessibility");
+                                var label = accessibility.GetProperty("accessibilityData").GetProperty("label").GetString();
+
+                                code = label.ToLower()
+                                    .Replace(" ", "_")
+                                    .Replace(":", "");
+                            }
+
+                            if (!string.IsNullOrEmpty(code) && !string.IsNullOrEmpty(url))
+                            {
+                                _ = Task.Run(async () =>
+                                {
+                                    try
+                                    {
+                                        await DownloadEmojiAsync(url, code);
+                                    }
+                                    catch (Exception ex)
+                                    {
+                                        Log($"❌ Ошибка загрузки эмодзи {code}: {ex.Message}");
+                                    }
+                                });
+
+                                textBuilder.Append($":{code}:");
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            Log($"⚠️ Ошибка парсинга эмодзи: {ex.Message}");
                         }
                     }
                 }
@@ -360,16 +412,35 @@ public class YoutubeChatClient
                         }
                         else if (run.TryGetProperty("emoji", out var emoji))
                         {
-                            var accessibility = emoji.GetProperty("image").GetProperty("accessibility");
-                            var label = accessibility.GetProperty("accessibilityData").GetProperty("label").GetString();
-
-                            if (!string.IsNullOrEmpty(label))
+                            try
                             {
+                                var thumbnails = emoji.GetProperty("image").GetProperty("thumbnails");
+                                var url = thumbnails[0].GetProperty("url").GetString();
+
+                                var accessibility = emoji.GetProperty("image").GetProperty("accessibility");
+                                var label = accessibility.GetProperty("accessibilityData").GetProperty("label").GetString();
+
                                 var code = label.ToLower()
                                     .Replace(" ", "_")
-                                    .Replace("-", "_")
                                     .Replace(":", "");
+
+                                _ = Task.Run(async () =>
+                                {
+                                    try
+                                    {
+                                        await DownloadEmojiAsync(url, code);
+                                    }
+                                    catch (Exception ex)
+                                    {
+                                        Log($"❌ Ошибка загрузки эмодзи {code}: {ex.Message}");
+                                    }
+                                });
+
                                 textBuilder.Append($":{code}:");
+                            }
+                            catch (Exception ex)
+                            {
+                                Log($"⚠️ Ошибка парсинга эмодзи: {ex.Message}");
                             }
                         }
                     }
@@ -456,5 +527,60 @@ public class YoutubeChatClient
     private void Log(string message)
     {
         OnLog?.Invoke(this, $"[{DateTime.Now:HH:mm:ss}] {message}");
+    }
+
+    // ============================================================
+    // ⭐ ЛЕНИВАЯ ЗАГРУЗКА ЭМОДЗИ
+    // ============================================================
+
+    private async Task<string?> DownloadEmojiAsync(string url, string code)
+    {
+        try
+        {
+            var localPath = Path.Combine(
+                AppDomain.CurrentDomain.BaseDirectory,
+                "SF_Data", "Assets", "Emojis", "YouTube", "Images",
+                $"{code}.png");
+
+            var emojiCode = $":{code}:";
+
+            // ⭐ ПРОВЕРЯЕМ ТОЛЬКО ЧЕРЕЗ ДЕЛЕГАТ (глобальный кэш)
+            if (CheckEmojiExists?.Invoke(emojiCode) == true)
+            {
+                return localPath;
+            }
+
+            // Проверяем файл на диске
+            if (File.Exists(localPath))
+            {
+                RegisterEmojiInCache?.Invoke(emojiCode, localPath);
+                return localPath;
+            }
+
+            // Скачиваем
+            var directory = Path.GetDirectoryName(localPath);
+            if (!string.IsNullOrEmpty(directory) && !Directory.Exists(directory))
+                Directory.CreateDirectory(directory);
+
+            Debug.WriteLine($"[Emoji] ⬇️ Скачиваем: {code}");
+
+            using var client = new HttpClient();
+            client.Timeout = TimeSpan.FromSeconds(10);
+            client.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0");
+
+            var bytes = await client.GetByteArrayAsync(url);
+            await File.WriteAllBytesAsync(localPath, bytes);
+
+            // ⭐ ДОБАВЛЯЕМ В ГЛОБАЛЬНЫЙ КЭШ
+            RegisterEmojiInCache?.Invoke(emojiCode, localPath);
+
+            Debug.WriteLine($"[Emoji] ✅ Сохранён и добавлен в глобальный кэш: {code} ({bytes.Length} байт)");
+            return localPath;
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"[Emoji] ❌ Ошибка {code}: {ex.Message}");
+            return null;
+        }
     }
 }

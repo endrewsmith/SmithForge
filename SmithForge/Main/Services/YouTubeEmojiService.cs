@@ -35,7 +35,7 @@ namespace SmithForge.Main.Services
                 foreach (var file in files)
                 {
                     string fileName = Path.GetFileNameWithoutExtension(file);
-                    string emojiCode = $":{fileName.Replace('_', '-')}:";
+                    string emojiCode = $":{fileName}:";
                     _emojiPathMap[emojiCode] = file;
                 }
                 System.Diagnostics.Debug.WriteLine($"[YouTubeEmoji] Загружено {_emojiPathMap.Count} статичных эмодзи");
@@ -47,7 +47,7 @@ namespace SmithForge.Main.Services
                 foreach (var file in files)
                 {
                     string fileName = Path.GetFileNameWithoutExtension(file);
-                    string emojiCode = $":{fileName.Replace('_', '-')}:";
+                    string emojiCode = $":{fileName}:";
                     _animatedEmojiPathMap[emojiCode] = file;
                 }
                 System.Diagnostics.Debug.WriteLine($"[YouTubeEmoji] Загружено {_animatedEmojiPathMap.Count} анимированных эмодзи");

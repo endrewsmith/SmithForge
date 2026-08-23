@@ -1,6 +1,7 @@
 ﻿using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Documents;
+using System.Windows.Threading;
 
 namespace SmithForge.Main.Services
 {
@@ -31,33 +32,70 @@ namespace SmithForge.Main.Services
                 // Пытаемся найти родительский TextBlock
                 if (currentInline.Parent is TextBlock textBlock)
                 {
-                    // Находим индекс текущего элемента вручную
-                    int index = -1;
-                    int count = 0;
-                    foreach (var inline in textBlock.Inlines)
+                    // ✅ ОТКЛАДЫВАЕМ ИЗМЕНЕНИЕ ДО ЗАВЕРШЕНИЯ РЕНДЕРИНГА
+                    Application.Current.Dispatcher.BeginInvoke(new Action(() =>
                     {
-                        if (inline == currentInline)
+                        try
                         {
-                            index = count;
-                            break;
-                        }
-                        count++;
-                    }
+                            // Находим индекс текущего элемента вручную
+                            int index = -1;
+                            int count = 0;
+                            foreach (var inline in textBlock.Inlines)
+                            {
+                                if (inline == currentInline)
+                                {
+                                    index = count;
+                                    break;
+                                }
+                                count++;
+                            }
 
-                    if (index != -1)
-                    {
-                        // Удаляем всё, что идет ПОСЛЕ нашего элемента (старый текст сообщения)
-                        while (textBlock.Inlines.Count > index + 1)
-                        {
-                            textBlock.Inlines.Remove(textBlock.Inlines.LastInline);
-                        }
+                            if (index != -1)
+                            {
+                                // Удаляем всё, что идет ПОСЛЕ нашего элемента (старый текст сообщения)
+                                while (textBlock.Inlines.Count > index + 1)
+                                {
+                                    textBlock.Inlines.Remove(textBlock.Inlines.LastInline);
+                                }
 
-                        // Добавляем новый текст из конвертера в конец коллекции
-                        if (e.NewValue is Inline newInline)
-                        {
-                            textBlock.Inlines.Add(newInline);
+                                // Добавляем новый текст из конвертера в конец коллекции
+                                if (e.NewValue is Inline newInline)
+                                {
+                                    // Проверяем, не принадлежит ли newInline уже другому родителю
+                                    if (newInline.Parent == null)
+                                    {
+                                        textBlock.Inlines.Add(newInline);
+                                    }
+                                    else
+                                    {
+                                        // Если уже принадлежит, создаем клон (для Run)
+                                        if (newInline is Run run)
+                                        {
+                                            var newRun = new Run(run.Text)
+                                            {
+                                                Foreground = run.Foreground,
+                                                FontWeight = run.FontWeight,
+                                                FontStyle = run.FontStyle,
+                                                FontSize = run.FontSize,
+                                                FontFamily = run.FontFamily,
+                                                TextDecorations = run.TextDecorations
+                                            };
+                                            textBlock.Inlines.Add(newRun);
+                                        }
+                                        else
+                                        {
+                                            // Для других типов Inline просто добавляем
+                                            textBlock.Inlines.Add(newInline);
+                                        }
+                                    }
+                                }
+                            }
                         }
-                    }
+                        catch (Exception ex)
+                        {
+                            System.Diagnostics.Debug.WriteLine($"[TextBlockExtensions] Ошибка обновления Inlines: {ex.Message}");
+                        }
+                    }), DispatcherPriority.Background);
                 }
             }
         }

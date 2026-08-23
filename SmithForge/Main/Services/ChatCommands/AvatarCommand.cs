@@ -33,7 +33,7 @@ namespace SmithForge.Main.Services.ChatCommands
                 string fullArg = string.Join(":", info.Arguments);
                 Debug.WriteLine($"[AvatarCommand] Полный аргумент: {fullArg}");
 
-                // Формат: "yt:@username"
+                // Формат: "yt:UC..." или "yt:@username"
                 if (fullArg.Contains(':'))
                 {
                     int colonIndex = fullArg.IndexOf(':');
@@ -46,17 +46,36 @@ namespace SmithForge.Main.Services.ChatCommands
                 }
                 else
                 {
-                    Debug.WriteLine($"[AvatarCommand] Неверный формат. Используйте: !!ava или !!ava:yt:@username");
+                    Debug.WriteLine($"[AvatarCommand] Неверный формат. Используйте: !!ava или !!ava:yt:UC...");
                     return;
                 }
             }
 
-            // Если команда без аргументов (!!ava)
+            // ============ ЕСЛИ АРГУМЕНТОВ НЕТ ============
             if (string.IsNullOrEmpty(targetUsername))
             {
-                targetUsername = chater.Login;
                 platform = GetPlatformFromMessage(msg);
-                Debug.WriteLine($"[AvatarCommand] Без аргументов. Платформа: {platform}, пользователь: {targetUsername}");
+                Debug.WriteLine($"[AvatarCommand] Без аргументов. Платформа: {platform}");
+
+                // ✅ Ищем аккаунт пользователя на этой платформе
+                var account = chater.Accounts.FirstOrDefault(a =>
+                    string.Equals(a.Platform, platform, StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(a.Platform, GetPlatformShort(platform), StringComparison.OrdinalIgnoreCase));
+
+                if (account != null)
+                {
+                    // ✅ Извлекаем ID из ExternalId (формат: "platform:id")
+                    targetUsername = ExtractIdFromExternalId(account.ExternalId);
+                    Debug.WriteLine($"[AvatarCommand] Найден ID канала: {targetUsername} из ExternalId: {account.ExternalId}");
+                }
+                else
+                {
+                    // ❌ Если аккаунт не найден — используем Login (fallback)
+                    targetUsername = chater.Login;
+                    Debug.WriteLine($"[AvatarCommand] Аккаунт не найден, используем Login: {targetUsername}");
+                }
+
+                Debug.WriteLine($"[AvatarCommand] Итог - платформа: {platform}, пользователь: {targetUsername}");
             }
 
             // Проверка наличия платформы
@@ -72,6 +91,7 @@ namespace SmithForge.Main.Services.ChatCommands
             {
                 if (platform == "youtube" || platform == "yt")
                 {
+                    // ✅ Передаем Channel ID (UC...)
                     await LoadYouTubeAvatar(targetUsername, msg, chater);
                 }
                 else if (platform == "twitch" || platform == "tw")
@@ -90,55 +110,68 @@ namespace SmithForge.Main.Services.ChatCommands
             }
         }
 
-        private async Task LoadYouTubeAvatar(string username, CommonMessage msg, Chater caller)
+        /// <summary>
+        /// Извлекает ID из ExternalId (формат: "platform:id")
+        /// </summary>
+        private string ExtractIdFromExternalId(string externalId)
         {
-            Debug.WriteLine($"[AvatarCommand] Начинаем загрузку аватарки YouTube для {username}");
+            if (string.IsNullOrEmpty(externalId))
+                return string.Empty;
 
-            string avatarUrl = await YouTubeAvatarService.GetAvatarUrlByHandle(username);
+            var parts = externalId.Split(':');
+            return parts.Length > 1 ? parts[1] : externalId;
+        }
+
+        /// <summary>
+        /// Получает короткое имя платформы (youtube -> yt, twitch -> tw)
+        /// </summary>
+        private string GetPlatformShort(string platform)
+        {
+            return platform.ToLower() switch
+            {
+                "youtube" => "yt",
+                "twitch" => "tw",
+                "goodgame" => "gg",
+                _ => platform
+            };
+        }
+
+        private async Task LoadYouTubeAvatar(string channelId, CommonMessage msg, Chater caller)
+        {
+            Debug.WriteLine($"[AvatarCommand] Загрузка аватарки YouTube для канала: {channelId}");
+
+            // ✅ ИСПРАВЛЕНО: используем GetAvatarUrlByChannelId
+            string avatarUrl = await YouTubeAvatarService.GetAvatarUrlByChannelId(channelId);
+
             if (string.IsNullOrEmpty(avatarUrl))
             {
                 Debug.WriteLine($"[AvatarCommand] Не удалось получить URL аватарки");
+                msg.Message = "❌ Не удалось найти аватарку для этого канала";
+                msg.IsProcessedByCommand = true;
+                msg.ShouldChargeForCommand = false;
                 return;
             }
 
-            string tempAvatarPath = await YouTubeAvatarService.DownloadAvatarAsync(username, avatarUrl);
-            if (string.IsNullOrEmpty(tempAvatarPath))
+            string savedAvatarPath = await YouTubeAvatarService.DownloadAvatarAsync(caller.Id, avatarUrl);
+            if (string.IsNullOrEmpty(savedAvatarPath))
             {
                 Debug.WriteLine($"[AvatarCommand] Не удалось скачать аватарку");
+                msg.Message = "❌ Не удалось скачать аватарку";
+                msg.IsProcessedByCommand = true;
+                msg.ShouldChargeForCommand = false;
                 return;
             }
 
-            // ✅ Используем ID пользователя, который вызвал команду
-            string targetUid = caller.Id;
+            Debug.WriteLine($"[AvatarCommand] Аватар сохранён: {savedAvatarPath}");
 
-            Debug.WriteLine($"[AvatarCommand] Сохраняем аватар для пользователя: {caller.Login} (ID: {targetUid})");
-
-            // Сохраняем аватар в папку platform
-            string platformFolder = Path.Combine(
-                AppDomain.CurrentDomain.BaseDirectory,
-                "SF_Data", "Assets", "Avatars", "platform");
-            Directory.CreateDirectory(platformFolder);
-
-            string destPath = Path.Combine(platformFolder, $"{targetUid}.png");
-
-            if (File.Exists(destPath))
-                File.Delete(destPath);
-
-            File.Copy(tempAvatarPath, destPath, true);
-
-            Debug.WriteLine($"[AvatarCommand] Аватар сохранён: {destPath}");
-
-            // Обновляем AvatarFileName у вызвавшего пользователя
-            caller.AvatarFileName = $"{targetUid}.png";
+            // Обновляем данные пользователя
+            caller.AvatarFileName = $"{caller.Id}.png";
             ChaterStorage.AddOrUpdate(caller);
-
-            // Обновляем UI
             caller.RefreshAvatar();
 
-            // Удаляем временный файл
-            try { File.Delete(tempAvatarPath); } catch { }
-
             msg.IsProcessedByCommand = true;
+            msg.ShouldChargeForCommand = true;
+            msg.Message = "✅ Аватарка успешно загружена!";
             Debug.WriteLine($"[AvatarCommand] YouTube аватар УСПЕШНО ЗАГРУЖЕН для {caller.Login}");
         }
 

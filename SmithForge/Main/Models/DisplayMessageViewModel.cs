@@ -297,6 +297,9 @@ namespace SmithForge.Main.Models
             ShowTimestamp = false;
             SkipLayoutAnimation = false;
 
+            // ✅ ПОДПИСЫВАЕМСЯ НА ОБНОВЛЕНИЯ ПОЛЬЗОВАТЕЛЯ
+            ChaterStorage.OnChaterUpdated += OnChaterUpdated;
+
             // Инициализация команд - используем RelayCommand из SmithForge.Features.Dashboard
             Action1Command = new SmithForge.Features.Dashboard.RelayCommand(OpenProfile);
             Action2Command = new SmithForge.Features.Dashboard.RelayCommand(Action2);
@@ -388,6 +391,35 @@ namespace SmithForge.Main.Models
         {
             System.Diagnostics.Debug.WriteLine($"[Dashboard] Нажата кнопка 3 для сообщения #{MessageNumber}");
             MessageBox.Show($"Кнопка 3 - Сообщение #{MessageNumber}");
+        }
+
+        private void OnChaterUpdated(Chater updatedChater)
+        {
+            if (User?.Id == updatedChater.Id)
+            {
+                // Обновляем ссылку на пользователя
+                User = updatedChater;
+
+                // Уведомляем UI
+                OnPropertyChanged(nameof(User));
+                OnPropertyChanged(nameof(UserRank));
+                OnPropertyChanged(nameof(DisplayName));
+                OnPropertyChanged(nameof(MessageCount));
+                OnPropertyChanged(nameof(PlatformColor));
+
+                // Обновляем скин
+                _cachedSkin = null;
+                OnPropertyChanged(nameof(MessageSkin));
+
+                // Обновляем аватар
+                _cachedAvatarPath = null;
+                OnPropertyChanged(nameof(AvatarPath));
+            }
+        }
+
+        public void Dispose()
+        {
+            ChaterStorage.OnChaterUpdated -= OnChaterUpdated;
         }
     }
 }

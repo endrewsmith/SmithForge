@@ -277,6 +277,8 @@ public class YouTubeConnector : IChatConnector
 
         Debug.WriteLine($"[YouTubeConnector {_connectorId}] Получено сообщение: {message.Author}: {message.Text}");
 
+
+
         var incomingMessage = new IncomingChatMessage
         {
             Platform = ChannelType.YouTube,

@@ -200,7 +200,7 @@ namespace SmithForge.Main.Models
             }
         }
 
-        public string DisplayName => $"{PlatformFullName}: {OriginalName}";
+        public string DisplayName => $"{PlatformShort}: {OriginalName}";
 
         public string PlatformShort => Platform.ToLower() switch
         {

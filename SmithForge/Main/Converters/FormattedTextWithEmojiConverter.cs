@@ -205,20 +205,16 @@ namespace SmithForge.Main.Converters
         {
             try
             {
-                //string code = emojiText.Trim(':');
-                //string normalizedCode = code.Replace('_', '-');
-                string normalizedCode = emojiText.Replace('_', '-');
 
-
-                var element = EmojiService.CreateEmojiElement(normalizedCode, emojiSize, true);
+                var element = EmojiService.CreateEmojiElement(emojiText, emojiSize, true);
 
                 if (element == null)
                 {
-                    System.Diagnostics.Debug.WriteLine($"[Converter] ❌ Эмодзи НЕ СОЗДАН: {normalizedCode}");
+                    System.Diagnostics.Debug.WriteLine($"[Converter] ❌ Эмодзи НЕ СОЗДАН: {emojiText}");
                 }
                 else
                 {
-                    System.Diagnostics.Debug.WriteLine($"[Converter] ✅ Эмодзи создан: {normalizedCode}");
+                    System.Diagnostics.Debug.WriteLine($"[Converter] ✅ Эмодзи создан: {emojiText}");
                 }
 
                 return element;

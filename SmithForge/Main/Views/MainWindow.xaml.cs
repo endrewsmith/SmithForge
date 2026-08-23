@@ -1,4 +1,5 @@
-﻿using SmithForge.Features.ChaterManager;
+﻿using SmithForge.ChatEngine.Platforms.YouTube;
+using SmithForge.Features.ChaterManager;
 using SmithForge.Features.ChatManager;
 using SmithForge.Main.Models;
 using SmithForge.Main.Services;
@@ -96,6 +97,12 @@ namespace SmithForge.Main.Views
         public MainWindow()
         {
             InitializeComponent();
+
+            YoutubeChatClient.RegisterDelegates(
+    checkExists: (code) => EmojiService.EmojiExists(code),
+    register: (code, path) => EmojiService.AddEmojiToCache(code, path)
+);
+
             var vm = new SmithForge.ViewModels.MainViewModel();
             DataContext = vm;
             WindowStateService.Bind(this, vm.Settings);

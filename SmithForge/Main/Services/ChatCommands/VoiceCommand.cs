@@ -13,7 +13,7 @@ namespace SmithForge.Main.Services.ChatCommands
 
         public override string Description => "Пометить сообщение как важное (озвучивается)";
         public override int Cost => 5;
-        public override int MinRank => 0;
+        public override int MinRank => 1;
         public override int[] FreeForRanks => new[] { 5 };
 
         public override void Execute(ChatCommandInfo info, Chater chater, CommonMessage msg, AppSettings settings)
