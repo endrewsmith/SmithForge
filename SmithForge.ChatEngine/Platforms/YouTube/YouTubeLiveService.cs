@@ -2,14 +2,14 @@
 using Google.Apis.YouTube.v3;
 using Google.Apis.YouTube.v3.Data;
 using Microsoft.Extensions.Logging;
-using SmithForge.ChatEngine.Models;
+using SmithForge.ChatEngine.Platforms.YouTube.Models;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Net.Http;
 using System.Threading.Tasks;
 
-namespace SmithForge.ChatEngine.Services;
+namespace SmithForge.ChatEngine.Platforms.YouTube;
 
 public class YouTubeLiveService
 {

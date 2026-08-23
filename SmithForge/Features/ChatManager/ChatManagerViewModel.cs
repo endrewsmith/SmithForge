@@ -6,6 +6,7 @@ using SmithForge.Main.Services;
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.Diagnostics;
 using System.IO;
 using System.Text.Json;
 using System.Threading.Tasks;
@@ -226,8 +227,15 @@ namespace SmithForge.Features.ChatManager
         }
 
         [RelayCommand]
-        private async Task ConnectChat(ChatConnection? chat)
+        public async Task ConnectChat(ChatConnection? chat)
         {
+            Debug.WriteLine($"=========================================");
+            Debug.WriteLine($"[ConnectChat] ВЫЗВАН!");
+            Debug.WriteLine($"[ConnectChat] chat == null? {chat == null}");
+            Debug.WriteLine($"[ConnectChat] chat?.ChatName = {chat?.ChatName}");
+            Debug.WriteLine($"[ConnectChat] chat?.IsConnected = {chat?.IsConnected}");
+            Debug.WriteLine($"[ConnectChat] _chatConnectionService == null? {_chatConnectionService == null}");
+            Debug.WriteLine($"=========================================");
             if (chat == null) return;
 
             if (_chatConnectionService != null)
@@ -282,7 +290,7 @@ namespace SmithForge.Features.ChatManager
         }
 
         [RelayCommand]
-        private async Task DisconnectChat(ChatConnection? chat)
+        public async Task DisconnectChat(ChatConnection? chat)
         {
             if (chat == null) return;
 

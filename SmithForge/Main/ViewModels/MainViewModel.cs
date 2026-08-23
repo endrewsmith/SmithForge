@@ -1,18 +1,19 @@
 ﻿using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.Logging;
-using SmithForge.ChatEngine.Models;
-using SmithForge.ChatEngine.Services;
+using SmithForge.ChatEngine.Core.Models;
+using SmithForge.ChatEngine.Platforms.YouTube;
+using SmithForge.ChatEngine.Platforms.YouTube.Models;
 using SmithForge.Features.ChatManager;
 using SmithForge.Features.ChatOverlay;
 using SmithForge.Features.ChatOverlayShorts;
 using SmithForge.Features.ImportantOverlay;
 using SmithForge.Features.StickersOverlay;
+using SmithForge.Features.YouTubeManager.ViewModels;
 using SmithForge.Main.Models;
 using SmithForge.Main.Models.ChatModes;
 using SmithForge.Main.Services;
 using SmithForge.Main.Services.ChatCommands;
-using SmithForge.Features.YouTubeManager.ViewModels;
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
@@ -23,12 +24,14 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Input;
 using System.Windows.Threading;
 
 namespace SmithForge.ViewModels
 {
     public partial class MainViewModel : ObservableObject
     {
+
         // ✅ Интегрированный YouTube-менеджер
         public YouTubeManagerViewModel YouTubeManager { get; } = new();
         
@@ -154,6 +157,7 @@ namespace SmithForge.ViewModels
         {
             FolderManager.EnsureDirectoriesExist();
             Settings = ConfigService.Load();
+
 
             // ✅ Инициализация оверлеев через сервис
             _overlayManager = new OverlayManagerService(Settings);
@@ -513,6 +517,23 @@ namespace SmithForge.ViewModels
                 Debug.WriteLine("[MainViewModel] ⚠️ CurrentSession == null, сессия НЕ установлена!");
             }
 
+            // ✅ Подключаем все чаты из списка
+            Task.Run(async () =>
+            {
+                foreach (var chat in Chats.Where(c => !c.IsConnected))
+                {
+                    try
+                    {
+                        await ConnectChat(chat);
+                    }
+                    catch (Exception ex)
+                    {
+                        Debug.WriteLine($"[Start] Ошибка подключения {chat.ChatName}: {ex.Message}");
+                    }
+                }
+            });
+
+
             IsProcessRunning = true;
             _streamSessionManager.SetStartTime();
 
@@ -528,6 +549,9 @@ namespace SmithForge.ViewModels
         [RelayCommand(CanExecute = nameof(CanStop))]
         private async Task Stop()
         {
+
+            await StopAllChats();
+
             _pollingcts?.Cancel();
             await _chatService.StopAsync();
             _streamSessionManager.SaveSessionEndTime();
@@ -858,6 +882,67 @@ namespace SmithForge.ViewModels
             {
                 await DisconnectChat(chat);
             }
+        }
+
+        [RelayCommand]
+        private async Task StartAllChats()
+        {
+            Debug.WriteLine("[MainViewModel] StartAllChats() вызван");
+
+            var chatsToConnect = Chats.Where(c => !c.IsConnected).ToList();
+
+            if (chatsToConnect.Count == 0)
+            {
+                Debug.WriteLine("[MainViewModel] Все чаты уже подключены");
+                return;
+            }
+
+            Debug.WriteLine($"[MainViewModel] Подключаем {chatsToConnect.Count} чатов...");
+
+            foreach (var chat in chatsToConnect)
+            {
+                try
+                {
+                    Debug.WriteLine($"[MainViewModel] Подключаем: {chat.ChatName}");
+                    await ConnectChat(chat);
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine($"[MainViewModel] Ошибка подключения {chat.ChatName}: {ex.Message}");
+                }
+            }
+
+            Debug.WriteLine("[MainViewModel] Все чаты обработаны");
+        }
+        [RelayCommand]
+        private async Task StopAllChats()
+        {
+            Debug.WriteLine("[MainViewModel] StopAllChats() вызван");
+
+            var chatsToDisconnect = Chats.Where(c => c.IsConnected).ToList();
+
+            if (chatsToDisconnect.Count == 0)
+            {
+                Debug.WriteLine("[MainViewModel] Все чаты уже отключены");
+                return;
+            }
+
+            Debug.WriteLine($"[MainViewModel] Отключаем {chatsToDisconnect.Count} чатов...");
+
+            foreach (var chat in chatsToDisconnect)
+            {
+                try
+                {
+                    Debug.WriteLine($"[MainViewModel] Отключаем: {chat.ChatName}");
+                    await DisconnectChat(chat);
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine($"[MainViewModel] Ошибка отключения {chat.ChatName}: {ex.Message}");
+                }
+            }
+
+            Debug.WriteLine("[MainViewModel] Все чаты отключены");
         }
 
         public async Task RefreshChats()

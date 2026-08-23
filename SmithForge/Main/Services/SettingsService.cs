@@ -1,7 +1,7 @@
 using System;
 using System.Diagnostics;
 using System.Windows;
-using SmithForge.ChatEngine.Models;
+using SmithForge.ChatEngine.Core.Models;
 using SmithForge.Main.Models;
 
 namespace SmithForge.Main.Services;

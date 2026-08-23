@@ -1,7 +1,7 @@
 ﻿using System;
 using System.Threading;
 using System.Threading.Tasks;
-using SmithForge.ChatEngine.Models;
+using SmithForge.ChatEngine.Core.Models;
 
 namespace SmithForge.ChatEngine.Core.Interfaces;
 

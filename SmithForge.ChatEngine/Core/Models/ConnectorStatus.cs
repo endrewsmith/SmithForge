@@ -1,6 +1,6 @@
 ﻿using System;
 
-namespace SmithForge.ChatEngine.Models;
+namespace SmithForge.ChatEngine.Core.Models;
 
 /// <summary>
 /// Состояние подключения коннектора к чат-платформе

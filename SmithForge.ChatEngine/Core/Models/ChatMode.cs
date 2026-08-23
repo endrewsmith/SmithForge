@@ -1,4 +1,4 @@
-﻿namespace SmithForge.ChatEngine.Models
+﻿namespace SmithForge.ChatEngine.Core.Models
 {
     public enum ChatMode
     {

@@ -41,7 +41,8 @@ namespace SmithForge.Features.Dashboard
 
         private void CloseButton_Click(object sender, RoutedEventArgs e)
         {
-            this.Hide();
+            // ✅ Не закрываем, а скрываем
+            this.Visibility = Visibility.Collapsed;
         }
 
         private void MainScrollViewer_ScrollChanged(object sender, ScrollChangedEventArgs e)
@@ -56,6 +57,12 @@ namespace SmithForge.Features.Dashboard
             }
         }
 
-
+        // ✅ Добавлен обработчик закрытия
+        private void Window_Closing(object sender, System.ComponentModel.CancelEventArgs e)
+        {
+            // Отменяем закрытие, просто прячем окно
+            e.Cancel = true;
+            this.Visibility = Visibility.Collapsed;
+        }
     }
 }

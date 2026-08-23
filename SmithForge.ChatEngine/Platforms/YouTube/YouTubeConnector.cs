@@ -1,7 +1,7 @@
 ﻿using Microsoft.Extensions.Logging;
 using SmithForge.ChatEngine.Core.Interfaces;
-using SmithForge.ChatEngine.Models;
-using SmithForge.ChatEngine.Services;
+using SmithForge.ChatEngine.Core.Models;
+using SmithForge.ChatEngine.Platforms.YouTube.Models;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -9,7 +9,7 @@ using System.Net.Http;
 using System.Threading;
 using System.Threading.Tasks;
 
-namespace SmithForge.ChatEngine.Connectors;
+namespace SmithForge.ChatEngine.Platforms.YouTube;
 
 /// <summary>
 /// Коннектор для YouTube чата

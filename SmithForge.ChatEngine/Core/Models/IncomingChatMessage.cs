@@ -1,7 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 
-namespace SmithForge.ChatEngine.Models
+namespace SmithForge.ChatEngine.Core.Models
 {
     /// <summary>
     /// Универсальное сообщение для всех платформ
