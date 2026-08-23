@@ -1,8 +1,8 @@
-﻿// EmojiService.cs
-using SmithForge.Main.Models;
+﻿using SmithForge.Main.Models;
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Text.RegularExpressions;
 using System.Windows;
 using System.Windows.Controls;
@@ -15,12 +15,13 @@ namespace SmithForge.Main.Services
 {
     public static class EmojiService
     {
-        private static Dictionary<string, EmojiInfo> _emojiMap = new Dictionary<string, EmojiInfo>(StringComparer.OrdinalIgnoreCase);
-        private static Dictionary<string, BitmapImage> _imageCache = new Dictionary<string, BitmapImage>();
+        private static readonly Dictionary<string, EmojiInfo> _emojiMap = new Dictionary<string, EmojiInfo>(StringComparer.OrdinalIgnoreCase);
+        private static readonly Dictionary<string, BitmapImage> _imageCache = new Dictionary<string, BitmapImage>();
         private static Regex _globalEmojiRegex;
         private static bool _initialized = false;
         private static string _emojiRoot;
         private static EmojiConfig _config;
+        private static readonly object _regexLock = new object();
 
         public class EmojiInfo
         {
@@ -42,17 +43,9 @@ namespace SmithForge.Main.Services
 
             _config = EmojiConfigService.Load();
 
-            // Отладка: выводим загруженные источники
-            //System.Diagnostics.Debug.WriteLine($"[EmojiService] Загружено источников: {_config.Sources.Count}");
-            //foreach (var source in _config.Sources)
-            //{
-            //    System.Diagnostics.Debug.WriteLine($"[EmojiService] Источник: {source.Name}, Enabled: {source.Enabled}, Форматы: {string.Join(", ", source.Formats)}");
-            //}
-
             LoadAllEmojis();
             BuildGlobalRegex();
 
-            //System.Diagnostics.Debug.WriteLine($"[EmojiService] Загружено {_emojiMap.Count} эмодзи из {_config.Sources.Count} источников");
             _initialized = true;
         }
 
@@ -80,50 +73,29 @@ namespace SmithForge.Main.Services
 
                 LoadEmojisFromSource(sourcePath, source);
             }
-
-            // Выводим первые 20 ключей для проверки
-            //System.Diagnostics.Debug.WriteLine($"[EmojiService] Всего ключей: {_emojiMap.Count}");
-            //System.Diagnostics.Debug.WriteLine($"[EmojiService] Примеры ключей:");
-            foreach (var key in _emojiMap.Keys.Take(20))
-            {
-                System.Diagnostics.Debug.WriteLine($"[EmojiService]   - {key}");
-            }
         }
+
         private static void LoadEmojisFromSource(string sourcePath, EmojiSourceConfig source)
         {
             string imagesPath = Path.Combine(sourcePath, "Images");
             string animatedPath = Path.Combine(sourcePath, "Animated");
 
-            //System.Diagnostics.Debug.WriteLine($"[EmojiService] Загрузка из {source.Name}, папка: {sourcePath}");
-            //System.Diagnostics.Debug.WriteLine($"[EmojiService]   Images: {imagesPath}, существует: {Directory.Exists(imagesPath)}");
-            //System.Diagnostics.Debug.WriteLine($"[EmojiService]   Animated: {animatedPath}, существует: {Directory.Exists(animatedPath)}");
-
             if (Directory.Exists(imagesPath))
             {
                 var files = Directory.GetFiles(imagesPath, "*.png");
-                System.Diagnostics.Debug.WriteLine($"[EmojiService]   Найдено PNG: {files.Length}");
-
                 foreach (var file in files)
                 {
                     string fileName = Path.GetFileNameWithoutExtension(file);
-                    System.Diagnostics.Debug.WriteLine($"[EmojiService]     Добавляем: {fileName}");
                     AddEmoji(fileName, file, null, source);
                 }
-            }
-            else
-            {
-                System.Diagnostics.Debug.WriteLine($"[EmojiService]   Папка Images не существует: {imagesPath}");
             }
 
             if (Directory.Exists(animatedPath))
             {
                 var files = Directory.GetFiles(animatedPath, "*.gif");
-                System.Diagnostics.Debug.WriteLine($"[EmojiService]   Найдено GIF: {files.Length}");
-
                 foreach (var file in files)
                 {
                     string fileName = Path.GetFileNameWithoutExtension(file);
-                    System.Diagnostics.Debug.WriteLine($"[EmojiService]     Добавляем GIF: {fileName}");
                     AddEmoji(fileName, null, file, source);
                 }
             }
@@ -131,12 +103,9 @@ namespace SmithForge.Main.Services
 
         private static void AddEmoji(string fileName, string imagePath, string animatedPath, EmojiSourceConfig source)
         {
-            System.Diagnostics.Debug.WriteLine($"[EmojiService] AddEmoji: fileName={fileName}, source={source.Name}");
-
             foreach (var format in source.Formats)
             {
                 string emojiCode = format.Replace("{code}", fileName);
-                System.Diagnostics.Debug.WriteLine($"[EmojiService]   Формат: {format} -> код: {emojiCode}");
 
                 if (!_emojiMap.ContainsKey(emojiCode))
                 {
@@ -148,14 +117,10 @@ namespace SmithForge.Main.Services
                         SourceName = source.Name,
                         DisplayText = GetDisplayText(fileName, source.Name)
                     };
-                    System.Diagnostics.Debug.WriteLine($"[EmojiService]   ✅ Добавлен: {emojiCode}");
-                }
-                else
-                {
-                    System.Diagnostics.Debug.WriteLine($"[EmojiService]   ⚠️ Уже существует: {emojiCode}");
                 }
             }
         }
+
         private static string GetDisplayText(string fileName, string sourceName)
         {
             var displayMap = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
@@ -174,52 +139,57 @@ namespace SmithForge.Main.Services
 
         private static void BuildGlobalRegex()
         {
-            var patterns = new List<string>();
-
-            foreach (var source in _config.Sources)
+            lock (_regexLock)
             {
-                if (!source.Enabled) continue;
+                var patterns = new List<string>();
 
-                foreach (var format in source.Formats)
+                if (_config?.Sources != null)
                 {
-                    string pattern = Regex.Escape(format)
-                        .Replace("\\{code\\}", "([a-z0-9]+(?:-[a-z0-9]+)*)");
-                    patterns.Add(pattern);
-                }
-            }
+                    foreach (var source in _config.Sources)
+                    {
+                        if (!source.Enabled) continue;
 
-            if (patterns.Count > 0)
-            {
-                string combinedPattern = string.Join("|", patterns);
-                _globalEmojiRegex = new Regex(combinedPattern, RegexOptions.IgnoreCase | RegexOptions.Compiled);
+                        foreach (var format in source.Formats)
+                        {
+                            string pattern = Regex.Escape(format)
+                                .Replace("\\{code\\}", "([a-z0-9\\-_]+(?:-[a-z0-9\\-_]+)*)");
+                            patterns.Add(pattern);
+                        }
+                    }
+                }
+
+                var dynamicCodes = _emojiMap.Values
+                    .Where(e => e.SourceName == "YouTube")
+                    .Select(e => Regex.Escape(e.Code));
+
+                patterns.AddRange(dynamicCodes);
+
+                if (patterns.Count > 0)
+                {
+                    string combinedPattern = string.Join("|", patterns.Distinct());
+                    _globalEmojiRegex = new Regex(combinedPattern, RegexOptions.IgnoreCase | RegexOptions.Compiled);
+                }
             }
         }
 
         public static FrameworkElement CreateEmojiElement(string emojiCode, double size = 0, bool preferAnimated = true)
         {
-            System.Diagnostics.Debug.WriteLine($"[EmojiService] CreateEmojiElement: {emojiCode}");
-
-            if (!_emojiMap.TryGetValue(emojiCode, out var info))
+            if (_emojiMap.TryGetValue(emojiCode, out var info))
             {
-                System.Diagnostics.Debug.WriteLine($"[EmojiService] Эмодзи не найден в словаре: {emojiCode}");
-                return null;
+                return CreateEmojiFromInfo(info, size, preferAnimated);
             }
 
+            return null;
+        }
+
+        private static FrameworkElement CreateEmojiFromInfo(EmojiInfo info, double size, bool preferAnimated)
+        {
             double emojiSize = size > 0 ? size : _config.Settings.DefaultEmojiSize;
             bool useAnimated = preferAnimated && _config.Settings.PreferAnimated;
 
             string path = useAnimated && info.IsAnimated ? info.AnimatedPath : info.ImagePath;
-            if (string.IsNullOrEmpty(path))
-            {
-                System.Diagnostics.Debug.WriteLine($"[EmojiService] Путь к файлу пуст для {emojiCode}");
+            if (string.IsNullOrEmpty(path) || !File.Exists(path))
                 return null;
-            }
-
-            if (!File.Exists(path))
-            {
-                System.Diagnostics.Debug.WriteLine($"[EmojiService] Файл не существует: {path}");
-                return null;
-            }
 
             var image = new Image
             {
@@ -238,9 +208,8 @@ namespace SmithForge.Main.Services
                     AnimationBehavior.SetSourceUri(image, new Uri(path, UriKind.Absolute));
                     AnimationBehavior.SetAutoStart(image, true);
                 }
-                catch (Exception ex)
+                catch
                 {
-                    System.Diagnostics.Debug.WriteLine($"[EmojiService] GIF error {emojiCode}: {ex.Message}");
                     return null;
                 }
             }
@@ -269,15 +238,15 @@ namespace SmithForge.Main.Services
                         image.Source = bitmap;
                     }
                 }
-                catch (Exception ex)
+                catch
                 {
-                    System.Diagnostics.Debug.WriteLine($"[EmojiService] PNG error {emojiCode}: {ex.Message}");
                     return null;
                 }
             }
 
-            return image;  // ← ВАЖНО: возвращаем изображение в конце
+            return image;
         }
+
         public static List<string> ExtractEmojis(string text)
         {
             var emojis = new List<string>();
@@ -304,9 +273,7 @@ namespace SmithForge.Main.Services
             _emojiMap.TryGetValue(emojiCode, out var info);
             return info;
         }
-        /// <summary>
-        /// Определяет источник эмодзи по тексту (по формату из конфига)
-        /// </summary>
+
         public static string DetectSource(string emojiText)
         {
             if (!_initialized) Initialize();
@@ -317,28 +284,23 @@ namespace SmithForge.Main.Services
 
                 foreach (var format in source.Formats)
                 {
-                    // Получаем начало и конец формата
                     string[] parts = format.Split(new[] { "{code}" }, StringSplitOptions.None);
                     string prefix = parts[0];
                     string suffix = parts.Length > 1 ? parts[1] : "";
 
-                    // Проверяем, начинается и заканчивается ли текст соответствующими символами
                     bool matches = emojiText.StartsWith(prefix, StringComparison.Ordinal) &&
                                    emojiText.EndsWith(suffix, StringComparison.Ordinal);
 
-                    // Дополнительная проверка: после префикса не должно быть лишних символов до суффикса
                     if (matches && !string.IsNullOrEmpty(prefix))
                     {
                         string middle = emojiText.Substring(prefix.Length, emojiText.Length - prefix.Length - suffix.Length);
-                        // middle может содержать только буквы, цифры и дефисы
-                        if (System.Text.RegularExpressions.Regex.IsMatch(middle, @"^[a-z0-9\-]+$", System.Text.RegularExpressions.RegexOptions.IgnoreCase))
+                        if (Regex.IsMatch(middle, @"^[a-z0-9-_]+$", RegexOptions.IgnoreCase))
                         {
                             return source.Name;
                         }
                     }
                     else if (matches && string.IsNullOrEmpty(prefix))
                     {
-                        // Если нет префикса (формат {code})
                         return source.Name;
                     }
                 }
@@ -346,9 +308,7 @@ namespace SmithForge.Main.Services
 
             return "Unknown";
         }
-        /// <summary>
-        /// Нормализует код эмодзи для поиска в словаре
-        /// </summary>
+
         public static string NormalizeEmojiCode(string emojiText, string sourceName)
         {
             var source = _config.Sources.Find(s => s.Name == sourceName);
@@ -363,15 +323,14 @@ namespace SmithForge.Main.Services
                 if (emojiText.StartsWith(prefix, StringComparison.Ordinal) &&
                     emojiText.EndsWith(suffix, StringComparison.Ordinal))
                 {
-                    // Извлекаем код из середины
                     string code = emojiText.Substring(prefix.Length, emojiText.Length - prefix.Length - suffix.Length);
-                    // Возвращаем в формате, который используется в _emojiMap
                     return format.Replace("{code}", code);
                 }
             }
 
             return emojiText;
         }
+
         public static List<string> GetAllFormats()
         {
             if (!_initialized) Initialize();
@@ -384,16 +343,13 @@ namespace SmithForge.Main.Services
             }
             return formats;
         }
+
         public static string NormalizeEmojiCode(string emojiText)
         {
             string source = DetectSource(emojiText);
             return NormalizeEmojiCode(emojiText, source);
         }
 
-
-        /// <summary>
-        /// Преобразует текст с эмодзи в Span (для использования в TextBlock.Inlines)
-        /// </summary>
         public static Span ParseTextToSpan(string text, double emojiSize = 0)
         {
             var span = new Span();
@@ -444,6 +400,29 @@ namespace SmithForge.Main.Services
         {
             if (!_initialized) Initialize();
             return _config?.Settings?.DefaultEmojiSize ?? 14;
+        }
+
+        /// <summary>
+        /// Добавляет эмодзи в кэш (для ленивой загрузки из YouTube)
+        /// </summary>
+        public static void AddEmojiToCache(string code, string imagePath)
+        {
+            if (!_emojiMap.ContainsKey(code))
+            {
+                var fileName = code.Trim(':');
+                _emojiMap[code] = new EmojiInfo
+                {
+                    Code = code,
+                    ImagePath = imagePath,
+                    SourceName = "YouTube",
+                    DisplayText = GetDisplayText(fileName, "YouTube")
+                };
+
+                System.Diagnostics.Debug.WriteLine($"[EmojiService] ✅ Динамически добавлен: {code}");
+
+                // Пересобираем глобальный Regex, чтобы новый эмодзи начал парситься
+                BuildGlobalRegex();
+            }
         }
     }
 }

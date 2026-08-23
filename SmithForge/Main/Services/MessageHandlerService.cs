@@ -67,19 +67,32 @@ namespace SmithForge.Main.Services
                 Debug.WriteLine($"   - Текст: {msg.Message}");
                 Debug.WriteLine($"   - IsProcessedByCommand: {msg.IsProcessedByCommand}");
 
-                bool isStickerAction = commands != null && commands.Any(c =>
-                    c.Name.Equals("st", StringComparison.OrdinalIgnoreCase) ||
-                    c.Name.Equals("стикер", StringComparison.OrdinalIgnoreCase) ||
-                    c.Name.Equals("sticker", StringComparison.OrdinalIgnoreCase));
+                // ✅ ПРОВЕРЯЕМ РЕЗУЛЬТАТ ВЫПОЛНЕНИЯ КОМАНДЫ ПО НАЛИЧИЮ ТЕГОВ
+                bool isImportantAction = msg.Message.Contains("<important>") || msg.Message.Contains("</important>");
+                bool isStickerAction = msg.Message.Contains("<sticker");
+                bool isReactionAction = msg.Message.Contains("<like") || msg.Message.Contains("<dislike") || msg.Message.Contains("<nick");
 
-                bool isImportantAction = commands != null && commands.Any(c =>
-                    c.Name.Equals("important", StringComparison.OrdinalIgnoreCase) ||
-                    c.Name.Equals("важно", StringComparison.OrdinalIgnoreCase));
+                // ✅ Если команда была, но не выполнена (нет тегов) — пропускаем ВСЁ (и дашборд, и оверлей)
+                if (msg.IsProcessedByCommand && !isImportantAction && !isStickerAction && !isReactionAction)
+                {
+                    Debug.WriteLine($"[MessageHandler] ⏭ Команда не выполнена, сообщение НЕ отображается и НЕ озвучивается");
+                    return;
+                }
+
+                // ✅ Если сообщение пустое после обработки — пропускаем
+                if (string.IsNullOrWhiteSpace(msg.Message))
+                {
+                    Debug.WriteLine($"[MessageHandler] ⏭ Сообщение пустое, пропускаем");
+                    return;
+                }
 
                 string cleanUiMessage = msg.Message;
                 if (isImportantAction)
                 {
-                    cleanUiMessage = msg.Message.Replace("<important>", "").Replace("</important>", "").Trim();
+                    cleanUiMessage = msg.Message
+                        .Replace("<important>", "")
+                        .Replace("</important>", "")
+                        .Trim();
                 }
 
                 var overlayMsg = new CommonMessage
@@ -94,12 +107,13 @@ namespace SmithForge.Main.Services
                     DisplayTimeMs = msg.DisplayTimeMs
                 };
 
-                // ✅ ДОБАВЛЕНО: Отправляем сообщение в дашборд
+                // В дашборд показываем ВСЕ сообщения (включая невыполненные команды)
                 _dashboardService.AddMessage(chater, overlayMsg);
 
+                // В оверлеи отправляем ТОЛЬКО успешно выполненные команды
                 if (isImportantAction)
                 {
-                    Debug.WriteLine($"[Important] Сообщение от {chater.Login}");
+                    Debug.WriteLine($"[Important] ✅ Важное сообщение от {chater.Login}: {cleanUiMessage}");
                     Task.Run(async () =>
                     {
                         await Task.Delay(200);
@@ -108,15 +122,21 @@ namespace SmithForge.Main.Services
                 }
                 else if (isStickerAction)
                 {
-                    Debug.WriteLine($"[Stickers] Стикер от {chater.Login}");
+                    Debug.WriteLine($"[Stickers] ✅ Стикер от {chater.Login}");
                     Task.Run(async () =>
                     {
                         await Task.Delay(200);
                         _overlayManager.AddStickerMessage(chater, overlayMsg);
                     });
                 }
+                else if (isReactionAction)
+                {
+                    Debug.WriteLine($"[Reaction] Реакция от {chater.Login}: {msg.Message}");
+                    // Реакции НЕ показываем в оверлее
+                }
                 else
                 {
+                    // Обычные сообщения показываем в оверлее
                     _overlayManager.AddMessage(chater, overlayMsg);
                 }
             }
@@ -185,7 +205,7 @@ namespace SmithForge.Main.Services
                 };
 
                 // ✅ ГЛАВНЫЙ КЛЮЧ: ID канала (не меняется!)
-                var externalIdByChannelId = $"{message.Platform}:{message.UserId}".ToLower();
+                var externalIdByChannelId = $"{message.Platform}:{message.UserId}";
                 Debug.WriteLine($"[MessageHandler] Поиск по ID канала: '{externalIdByChannelId}'");
                 commonMsg.User = ChaterStorage.GetByExternalId(externalIdByChannelId);
 

@@ -39,13 +39,11 @@ namespace SmithForge.Main.Services
                 {
                     if (!string.IsNullOrEmpty(acc.ExternalId))
                     {
-                        Cache[acc.ExternalId.ToLower()] = master;
+                        // ✅ УБРАЛ .ToLower()
+                        Cache[acc.ExternalId] = master;
                     }
                 }
 
-                //Debug.WriteLine($"[ChaterStorage] Добавлен новый чаттер: {master.EffectiveName} (ID: {master.Id})");
-
-                // Уведомляем о новом чаттере
                 OnChaterUpdated?.Invoke(master);
                 return;
             }
@@ -58,7 +56,6 @@ namespace SmithForge.Main.Services
             {
                 master.DisplayName = chater.DisplayName;
                 wasUpdated = true;
-                //Debug.WriteLine($"[ChaterStorage] Обновлен DisplayName для {master.Login}: {chater.DisplayName}");
             }
 
             // ✅ Синхронизируем IsDisplayNameCustom
@@ -115,7 +112,8 @@ namespace SmithForge.Main.Services
                     master.Accounts.Add(acc);
                     if (!string.IsNullOrEmpty(acc.ExternalId))
                     {
-                        Cache[acc.ExternalId.ToLower()] = master;
+                        // ✅ УБРАЛ .ToLower()
+                        Cache[acc.ExternalId] = master;
                     }
                     wasUpdated = true;
                     Debug.WriteLine($"[ChaterStorage] Добавлен аккаунт {acc.Platform}:{acc.OriginalName}");
@@ -126,7 +124,6 @@ namespace SmithForge.Main.Services
             if (wasUpdated)
             {
                 OnChaterUpdated?.Invoke(master);
-                // НЕ сохраняем в БД автоматически - это должен делать вызывающий код
             }
         }
 
@@ -135,6 +132,8 @@ namespace SmithForge.Main.Services
         /// </summary>
         public static Chater UpdateFromMessage(CommonMessage msg, AppSettings settings)
         {
+            // ⚠️ Здесь для поиска используем ToLower() ТОЛЬКО ДЛЯ ПОИСКА
+            // Но при сохранении ExternalId должен быть в оригинальном регистре!
             string key = $"{msg.Type}:{msg.Login}".ToLower();
 
             // 1. Проверяем кэш
@@ -160,7 +159,7 @@ namespace SmithForge.Main.Services
             {
                 Id = Guid.NewGuid().ToString(),
                 Login = msg.Login,
-                DisplayName = msg.Login, // ✅ Исправлено: не пустая строка, а Login
+                DisplayName = msg.Login,
                 FirstSeen = DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
                 LastMessageTime = DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
                 MessageCount = 0,
@@ -168,15 +167,17 @@ namespace SmithForge.Main.Services
                 TotalKarma = 0,
                 Rank = 0,
                 AvatarFileName = "default.png",
-                IsDisplayNameCustom = false // Новые пользователи имеют авто-имя
+                IsDisplayNameCustom = false
             };
 
-            // Добавляем внешний аккаунт
+            // ✅ ВАЖНО: ExternalId сохраняем в ОРИГИНАЛЬНОМ регистре!
+            // Но для обратной совместимости с поиском по ToLower() 
+            // можно хранить в нижнем, но тогда OriginalName должен хранить оригинал
             newChater.Accounts.Add(new ExternalAccount
             {
-                ExternalId = key,
+                ExternalId = key,  // ⚠️ Здесь key в нижнем регистре для поиска
                 Platform = msg.Type,
-                OriginalName = msg.Login
+                OriginalName = msg.Login  // ✅ Оригинальный ID с правильным регистром
             });
 
             DatabaseService.SaveChater(newChater);
@@ -189,22 +190,18 @@ namespace SmithForge.Main.Services
 
         /// <summary>
         /// Миграция аккаунтов: обновляет короткие имена на ID каналов
-        /// Вызывается при загрузке пользователя из БД
         /// </summary>
         public static void MigrateAccounts(Chater chater)
         {
             foreach (var account in chater.Accounts.ToList())
             {
-                // Проверяем, что это YouTube/Twitch аккаунт с коротким именем
-                var isShortName = account.ExternalId.Contains(":@") || 
+                var isShortName = account.ExternalId.Contains(":@") ||
                                   account.ExternalId.Contains(":Smith") ||
                                   account.ExternalId.Contains(":smith");
 
                 if (isShortName && !account.ExternalId.Contains(":UC") && !account.ExternalId.Contains(":Twitch"))
                 {
                     // Это короткое имя — нужно заменить на ID канала
-                    // Но у нас нет ID канала, поэтому просто оставляем как есть
-                    // ID канала добавится при следующем сообщении через ProcessConnectorMessage
                 }
             }
         }
@@ -216,7 +213,8 @@ namespace SmithForge.Main.Services
         {
             if (string.IsNullOrEmpty(extId)) return;
 
-            if (Cache.TryRemove(extId.ToLower(), out var chater))
+            // ✅ УБРАЛ .ToLower()
+            if (Cache.TryRemove(extId, out var chater))
             {
                 _allChaters.TryRemove(chater.Id, out _);
 
@@ -224,7 +222,8 @@ namespace SmithForge.Main.Services
                 {
                     if (!string.IsNullOrEmpty(a.ExternalId))
                     {
-                        Cache.TryRemove(a.ExternalId.ToLower(), out _);
+                        // ✅ УБРАЛ .ToLower()
+                        Cache.TryRemove(a.ExternalId, out _);
                     }
                 }
 
@@ -241,7 +240,8 @@ namespace SmithForge.Main.Services
         {
             if (string.IsNullOrEmpty(extId)) return null;
 
-            Cache.TryGetValue(extId.ToLower(), out var chater);
+            // ✅ УБРАЛ .ToLower()
+            Cache.TryGetValue(extId, out var chater);
             return chater;
         }
 
@@ -275,8 +275,6 @@ namespace SmithForge.Main.Services
             {
                 AddOrUpdate(chater);
             }
-
-            //Debug.WriteLine($"[ChaterStorage] Загружено {allChaters.Count} чаттеров из БД");
         }
 
         /// <summary>
@@ -303,7 +301,8 @@ namespace SmithForge.Main.Services
                 {
                     if (!string.IsNullOrEmpty(a.ExternalId))
                     {
-                        Cache.TryRemove(a.ExternalId.ToLower(), out _);
+                        // ✅ УБРАЛ .ToLower()
+                        Cache.TryRemove(a.ExternalId, out _);
                     }
                 }
 

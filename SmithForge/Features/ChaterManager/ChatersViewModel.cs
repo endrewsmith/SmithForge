@@ -208,7 +208,7 @@ namespace SmithForge.Features.ChaterManager
             // Создаем новый внешний аккаунт
             var newAccount = new ExternalAccount
             {
-                ExternalId = $"{NewAccountPlatform}:{NewAccountLogin}".ToLower(),
+                ExternalId = $"{NewAccountPlatform}:{NewAccountLogin}",
                 Platform = NewAccountPlatform,
                 OriginalName = NewAccountLogin
             };
@@ -475,7 +475,7 @@ namespace SmithForge.Features.ChaterManager
                         // Создаём новый аккаунт (с новым ExternalId)
                         var newAcc = new ExternalAccount
                         {
-                            ExternalId = $"{acc.Platform}:{acc.OriginalName}".ToLower(),
+                            ExternalId = $"{acc.Platform}:{acc.OriginalName}",
                             Platform = acc.Platform,
                             OriginalName = acc.OriginalName
                         };
