@@ -61,7 +61,7 @@ namespace SmithForge.Features.Dashboard
         public ICommand IncreaseFontSizeCommand { get; }
         public ICommand DecreaseFontSizeCommand { get; }
         public ICommand ClearMessagesCommand { get; }
-
+        public ICommand CloseCommand { get; }
         public DashboardViewModel()
         {
             ChaterStorage.OnChaterUpdated += OnChaterUpdated;
@@ -70,8 +70,20 @@ namespace SmithForge.Features.Dashboard
             IncreaseFontSizeCommand = new RelayCommand(IncreaseFontSize);
             DecreaseFontSizeCommand = new RelayCommand(DecreaseFontSize);
             ClearMessagesCommand = new RelayCommand(ClearMessages);
-
+            CloseCommand = new RelayCommand(CloseDashboard);
             DashboardTemplate = LoadDashboardTemplate();
+        }
+
+        // ✅ Метод для закрытия дашборда
+        private void CloseDashboard()
+        {
+            // Находим окно и скрываем его
+            var window = Application.Current.Windows.OfType<DashboardWindow>().FirstOrDefault();
+            if (window != null)
+            {
+                window.Visibility = Visibility.Collapsed;
+                System.Diagnostics.Debug.WriteLine("[Dashboard] Окно скрыто через CloseCommand");
+            }
         }
         private void IncreaseFontSize()
         {

@@ -10,11 +10,10 @@ namespace SmithForge.Main.Services
         private DashboardWindow? _window;
         private DashboardViewModel? _viewModel;
         private bool _isInitialized = false;
-        private bool _isClosed = false;  // ← Добавлен флаг
 
         public void Initialize()
         {
-            if (_isInitialized && !_isClosed) return;
+            if (_isInitialized) return;
 
             try
             {
@@ -22,18 +21,22 @@ namespace SmithForge.Main.Services
                 _window = new DashboardWindow
                 {
                     DataContext = _viewModel,
-                    Visibility = Visibility.Collapsed // Окно скрыто по умолчанию
+                    Visibility = Visibility.Collapsed
                 };
 
                 // ✅ Подписываемся на закрытие окна
-                _window.Closed += (s, e) =>
+                _window.Closing += (s, e) =>
                 {
-                    _isClosed = true;
-                    _window = null;
+                    // Отменяем закрытие, просто прячем окно
+                    e.Cancel = true;
+                    _window.Visibility = Visibility.Collapsed;
+                    System.Diagnostics.Debug.WriteLine("[Dashboard] Окно скрыто через Closing");
                 };
 
+                // Показываем окно (оно будет скрыто)
+                _window.Show();
+
                 _isInitialized = true;
-                _isClosed = false;
                 System.Diagnostics.Debug.WriteLine("[Dashboard] Сервис инициализирован");
             }
             catch (Exception ex)
@@ -44,14 +47,19 @@ namespace SmithForge.Main.Services
 
         public void AddMessage(Chater user, CommonMessage msg)
         {
-            if (!_isInitialized || _viewModel == null) return;
+            if (!_isInitialized || _viewModel == null)
+            {
+                // Если сервис не инициализирован, инициализируем
+                Initialize();
+                if (_viewModel == null) return;
+            }
+
             _viewModel.AddMessage(user, msg);
         }
 
         public void Show()
         {
-            // ✅ Если окно было закрыто — пересоздаём
-            if (_isClosed || _window == null)
+            if (!_isInitialized)
             {
                 Initialize();
             }
@@ -60,6 +68,10 @@ namespace SmithForge.Main.Services
 
             _window.Visibility = Visibility.Visible;
             _window.Topmost = true;
+
+            // Обновляем список сообщений, если они есть
+            _window.InvalidateVisual();
+
             System.Diagnostics.Debug.WriteLine("[Dashboard] Окно показано");
         }
 
@@ -75,6 +87,6 @@ namespace SmithForge.Main.Services
             _viewModel?.ClearMessages();
         }
 
-        public bool IsVisible => _window?.Visibility == Visibility.Visible;
+        public bool IsVisible => _window != null && _window.Visibility == Visibility.Visible;
     }
 }

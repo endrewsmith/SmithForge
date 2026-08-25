@@ -489,7 +489,7 @@ namespace SmithForge.ViewModels
         //    }
         //}
         [RelayCommand(CanExecute = nameof(CanStart))]
-        private void Start()
+        private async Task Start()
         {
             Debug.WriteLine("[MainViewModel] Start() вызван");
 
@@ -517,22 +517,18 @@ namespace SmithForge.ViewModels
                 Debug.WriteLine("[MainViewModel] ⚠️ CurrentSession == null, сессия НЕ установлена!");
             }
 
-            // ✅ Подключаем все чаты из списка
-            Task.Run(async () =>
-            {
-                foreach (var chat in Chats.Where(c => !c.IsConnected))
-                {
-                    try
-                    {
-                        await ConnectChat(chat);
-                    }
-                    catch (Exception ex)
-                    {
-                        Debug.WriteLine($"[Start] Ошибка подключения {chat.ChatName}: {ex.Message}");
-                    }
-                }
-            });
+            // ✅ ПАРАЛЛЕЛЬНОЕ ПОДКЛЮЧЕНИЕ ВСЕХ ЧАТОВ
+            var chatsToConnect = Chats.Where(c => !c.IsConnected).ToList();
 
+            if (chatsToConnect.Any())
+            {
+                Debug.WriteLine($"[MainViewModel] Подключаем {chatsToConnect.Count} чатов параллельно...");
+
+                var connectTasks = chatsToConnect.Select(chat => ConnectChat(chat));
+                await Task.WhenAll(connectTasks);
+
+                Debug.WriteLine("[MainViewModel] Все чаты подключены (или попытки завершены)");
+            }
 
             IsProcessRunning = true;
             _streamSessionManager.SetStartTime();
@@ -615,6 +611,9 @@ namespace SmithForge.ViewModels
         [RelayCommand]
         private void ToggleDashboard()
         {
+            // ✅ Инициализируем сервис (один раз)
+            _dashboardService.Initialize();
+
             if (_dashboardService.IsVisible)
                 _dashboardService.Hide();
             else
@@ -759,10 +758,11 @@ namespace SmithForge.ViewModels
                 }
             }
 
+            // ✅ Добавляем ConfigureAwait(false) чтобы не блокировать UI поток
             await _chatConnectionService.ConnectChat(chat, (name, connected, count) =>
             {
                 chat.Status = name == chat.ChatName ? (connected ? "✅ Подключен" : "❌ Ошибка") : chat.Status;
-            });
+            }).ConfigureAwait(false);
 
             UpdateStats();
             _chatManager.SaveChatsToFile();
