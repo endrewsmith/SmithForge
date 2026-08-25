@@ -71,18 +71,43 @@ namespace SmithForge.Main.Converters
         {
             if (string.IsNullOrEmpty(text)) return;
 
-            // ✅ ИСПРАВЛЕННАЯ РЕГУЛЯРКА
-            var combinedRegex = new Regex(
-                @"<(\/?)(b|i|color)(?:=([^>]+))?>|:([^:]+):",
-                RegexOptions.IgnoreCase | RegexOptions.Compiled);
+            System.Diagnostics.Debug.WriteLine($"[Converter] 🔍 ВХОДНОЙ ТЕКСТ: '{text}'");
+
+            var patterns = new List<string>();
+            patterns.Add(@"<(\/?)(b|i|color)(?:=([^>]+))?>");
+
+            var config = EmojiConfigService.Load();
+
+            foreach (var source in config.Sources)
+            {
+                if (!source.Enabled) continue;
+                foreach (var format in source.Formats)
+                {
+                    string pattern = format
+                        .Replace("[", "\\[")
+                        .Replace("]", "\\]")
+                        .Replace("{code}", "([^\\]]+?)");  // ✅ НЕ ЖАДНЫЙ КВАНТИФИКАТОР!
+                    patterns.Add(pattern);
+                }
+            }
+
+            string combinedPattern = string.Join("|", patterns);
+            System.Diagnostics.Debug.WriteLine($"[Converter] 🔧 Итоговая регулярка: '{combinedPattern}'");
+
+            var combinedRegex = new Regex(combinedPattern, RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
             int lastIndex = 0;
             var currentStyles = new Stack<TextStyle>();
-            var matches = combinedRegex.Matches(text);
 
-            foreach (Match match in matches)
+            // ✅ ИСПОЛЬЗУЕМ Match В ЦИКЛЕ, А НЕ Matches
+            var match = combinedRegex.Match(text);
+            System.Diagnostics.Debug.WriteLine($"[Converter] 📊 Найдено совпадений (по одному):");
+
+            while (match.Success)
             {
-                // Добавляем обычный текст до тега/эмодзи
+                System.Diagnostics.Debug.WriteLine($"[Converter] 🎯 Совпадение: '{match.Value}' (Index: {match.Index}, Length: {match.Length})");
+
+                // Добавляем обычный текст до матча
                 if (match.Index > lastIndex)
                 {
                     string textPart = text.Substring(lastIndex, match.Index - lastIndex);
@@ -91,6 +116,7 @@ namespace SmithForge.Main.Converters
                         var run = new Run(textPart);
                         ApplyCurrentStyles(run, currentStyles);
                         span.Inlines.Add(run);
+                        System.Diagnostics.Debug.WriteLine($"[Converter] ➕ Добавлен текст: '{textPart}'");
                     }
                 }
 
@@ -119,26 +145,46 @@ namespace SmithForge.Main.Converters
                         currentStyles.Push(style);
                     }
                 }
-                // Обрабатываем эмодзи
                 else
                 {
-                    string emojiText = match.Value; // например ":hand_pink_waving:"
-                    System.Diagnostics.Debug.WriteLine($"[Converter] Обработка эмодзи: {emojiText}");
-                    var emojiElement = CreateEmojiElementFromText(emojiText, emojiSize);
+                    // Находим группу с кодом
+                    string code = null;
+                    string fullMatch = match.Value;
 
-                    if (emojiElement != null)
+                    for (int i = 4; i < match.Groups.Count; i++)
                     {
-                        span.Inlines.Add(new InlineUIContainer(emojiElement));
+                        if (!string.IsNullOrEmpty(match.Groups[i].Value))
+                        {
+                            code = match.Groups[i].Value;
+                            System.Diagnostics.Debug.WriteLine($"[Converter]   Найден код в группе {i}: '{code}'");
+                            break;
+                        }
                     }
-                    else
+
+                    if (!string.IsNullOrEmpty(code))
                     {
-                        var run = new Run(emojiText) { Foreground = Brushes.Gray };
-                        ApplyCurrentStyles(run, currentStyles);
-                        span.Inlines.Add(run);
+                        System.Diagnostics.Debug.WriteLine($"[Converter] 😀 Обработка эмодзи: '{fullMatch}' (код: '{code}')");
+                        var emojiElement = CreateEmojiElementFromText(fullMatch, emojiSize);
+
+                        if (emojiElement != null)
+                        {
+                            span.Inlines.Add(new InlineUIContainer(emojiElement));
+                            System.Diagnostics.Debug.WriteLine($"[Converter] ✅ Эмодзи добавлен: {fullMatch}");
+                        }
+                        else
+                        {
+                            var run = new Run(fullMatch) { Foreground = Brushes.Gray };
+                            ApplyCurrentStyles(run, currentStyles);
+                            span.Inlines.Add(run);
+                            System.Diagnostics.Debug.WriteLine($"[Converter] ❌ Эмодзи НЕ создан, добавлен как текст: {fullMatch}");
+                        }
                     }
                 }
 
                 lastIndex = match.Index + match.Length;
+
+                // ✅ Ищем следующий матч ПОСЛЕ текущего
+                match = match.NextMatch();
             }
 
             // Добавляем оставшийся текст
@@ -150,8 +196,11 @@ namespace SmithForge.Main.Converters
                     var run = new Run(remaining);
                     ApplyCurrentStyles(run, currentStyles);
                     span.Inlines.Add(run);
+                    System.Diagnostics.Debug.WriteLine($"[Converter] ➕ Добавлен остаток текста: '{remaining}'");
                 }
             }
+
+            System.Diagnostics.Debug.WriteLine($"[Converter] ✅ Готово, всего элементов в Span: {span.Inlines.Count}");
         }
 
         private void ApplyCurrentStyles(Run run, Stack<TextStyle> styles)
@@ -205,6 +254,12 @@ namespace SmithForge.Main.Converters
         {
             try
             {
+                // ✅ ВЫЗЫВАЕМ В UI ПОТОКЕ
+                if (!Application.Current.Dispatcher.CheckAccess())
+                {
+                    return Application.Current.Dispatcher.Invoke(() =>
+                        CreateEmojiElementFromText(emojiText, emojiSize));
+                }
 
                 var element = EmojiService.CreateEmojiElement(emojiText, emojiSize, true);
 

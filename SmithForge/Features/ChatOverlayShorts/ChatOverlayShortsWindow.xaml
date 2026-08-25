@@ -26,17 +26,27 @@
 
             <ItemsControl.ItemTemplate>
                 <DataTemplate>
-                    <!-- Добавляем контейнер с анимацией, но оставляем MessageSkin -->
-                    <Grid x:Name="MsgContainer" 
-              Opacity="{Binding Opacity, Mode=OneWay}">
-                        <Grid.LayoutTransform>
-                            <ScaleTransform ScaleY="{Binding ScaleY, Mode=OneWay}"/>
-                        </Grid.LayoutTransform>
+                    <!-- Добавляем ContentControl с анимацией как в обычном оверлее -->
+                    <ContentControl Content="{Binding}" 
+                        ContentTemplate="{Binding MessageSkin}"
+                        TextOptions.TextFormattingMode="Display"
+                        TextOptions.TextRenderingMode="ClearType"
+                        RenderOptions.EdgeMode="Aliased">
 
-                        <!-- Ваша существующая универсальная разметка -->
-                        <ContentControl Content="{Binding}" 
-                            ContentTemplate="{Binding MessageSkin}"/>
-                    </Grid>
+                        <ContentControl.Resources>
+                            <!-- ✅ ТА ЖЕ САМАЯ АНИМАЦИЯ FadeIn -->
+                            <Storyboard x:Key="FadeInStoryboard">
+                                <DoubleAnimation Storyboard.TargetProperty="Opacity" 
+                                     From="0" To="1" Duration="0:0:0.4"/>
+                            </Storyboard>
+                        </ContentControl.Resources>
+
+                        <ContentControl.Triggers>
+                            <EventTrigger RoutedEvent="Loaded">
+                                <BeginStoryboard Storyboard="{StaticResource FadeInStoryboard}"/>
+                            </EventTrigger>
+                        </ContentControl.Triggers>
+                    </ContentControl>
                 </DataTemplate>
             </ItemsControl.ItemTemplate>
         </ItemsControl>

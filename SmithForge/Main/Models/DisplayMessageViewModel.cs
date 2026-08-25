@@ -1,10 +1,15 @@
-﻿using CommunityToolkit.Mvvm.ComponentModel;
+﻿// Файл: DisplayMessageViewModel.cs (в основном проекте SmithForge)
+using CommunityToolkit.Mvvm.ComponentModel;
 using SmithForge.Main.Converters;
 using SmithForge.Main.Services;
+using System;
+using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Data;
+using System.Windows.Documents;
 using System.Windows.Input;
 using System.Windows.Media;
 
@@ -54,7 +59,6 @@ namespace SmithForge.Main.Models
         [ObservableProperty]
         private double _animationDuration = 400;
 
-        // НОВЫЕ СВОЙСТВА ДЛЯ УПРАВЛЕНИЯ ОТОБРАЖЕНИЕМ
         [ObservableProperty]
         private bool _showAvatar = true;
 
@@ -64,9 +68,12 @@ namespace SmithForge.Main.Models
         [ObservableProperty]
         private bool _showTimestamp = false;
 
-        // ДОБАВЛЕНО: Свойство для размера шрифта
         [ObservableProperty]
         private double _fontSize = 12;
+
+        // ⭐ ДОБАВЛЕНО: Кэшируемое свойство для отрендеренного текста
+        [ObservableProperty]
+        private object _formattedMessage;
 
         public ICommand Action1Command { get; }
         public ICommand Action2Command { get; }
@@ -79,31 +86,15 @@ namespace SmithForge.Main.Models
         public int UserRank => User?.Rank ?? 0;
         public string PlatformColor => User?.Accounts?.FirstOrDefault()?.PlatformColor ?? "#FFFFFF";
 
-        // ДОБАВЛЯЕМ КОНВЕРТЕР ДЛЯ ФОРМАТИРОВАНИЯ
         private static readonly FormattedTextWithEmojiConverter _formattedTextConverter = new();
-
-        // ДОБАВЛЯЕМ СВОЙСТВО ДЛЯ ФОРМАТИРОВАННОГО ТЕКСТА
-        public object FormattedMessage
-        {
-            get
-            {
-                try
-                {
-                    return _formattedTextConverter.Convert(MessageText, typeof(object), null, null);
-                }
-                catch (Exception ex)
-                {
-                    System.Diagnostics.Debug.WriteLine($"[FormattedMessage Error] {ex.Message}");
-                    return MessageText;
-                }
-            }
-        }
 
         private DataTemplate? _cachedSkin;
         private static DataTemplate? _emergencyTemplate;
         private static readonly object _emergencyLock = new object();
         private static DataTemplate? _cachedStickerTemplate;
         private static readonly object _stickerLock = new object();
+        private static DataTemplate? _cachedDashboardTemplate;
+        private static readonly object _dashboardLock = new object();
 
         public DataTemplate MessageSkin
         {
@@ -127,118 +118,53 @@ namespace SmithForge.Main.Models
             }
         }
 
-        private static DataTemplate? _cachedDashboardTemplate;
-        private static readonly object _dashboardLock = new object();
-
         public DataTemplate DashboardMessageSkin
         {
             get
             {
-                System.Diagnostics.Debug.WriteLine($"[Dashboard] DashboardMessageSkin вызван, _cachedDashboardTemplate = {(_cachedDashboardTemplate != null ? "есть" : "null")}");
-
-                if (_cachedDashboardTemplate != null)
-                {
-                    System.Diagnostics.Debug.WriteLine("[Dashboard] Возвращаем кэшированный шаблон дашборда");
-                    return _cachedDashboardTemplate;
-                }
+                if (_cachedDashboardTemplate != null) return _cachedDashboardTemplate;
 
                 lock (_dashboardLock)
                 {
-                    System.Diagnostics.Debug.WriteLine("[Dashboard] Вход в lock, проверяем еще раз");
-
-                    if (_cachedDashboardTemplate != null)
-                    {
-                        System.Diagnostics.Debug.WriteLine("[Dashboard] В lock: кэш уже есть, возвращаем");
-                        return _cachedDashboardTemplate;
-                    }
+                    if (_cachedDashboardTemplate != null) return _cachedDashboardTemplate;
 
                     try
                     {
-                        string dashboardPath = System.IO.Path.Combine(
+                        string dashboardPath = Path.Combine(
                             AppDomain.CurrentDomain.BaseDirectory,
                             "SF_Data", "Assets", "Skins", "Unique", "dashboard.xaml");
 
-                        System.Diagnostics.Debug.WriteLine($"[Dashboard] Ищем дашборд-шаблон по пути: {dashboardPath}");
-                        System.Diagnostics.Debug.WriteLine($"[Dashboard] Файл существует: {System.IO.File.Exists(dashboardPath)}");
-
-                        if (System.IO.File.Exists(dashboardPath))
+                        if (File.Exists(dashboardPath))
                         {
-                            System.Diagnostics.Debug.WriteLine("[Dashboard] Файл найден, загружаем ResourceDictionary");
-
-                            var resourceDict = new ResourceDictionary();
-                            resourceDict.Source = new Uri(dashboardPath, UriKind.Absolute);
-
-                            System.Diagnostics.Debug.WriteLine($"[Dashboard] ResourceDictionary загружен, ключи: {string.Join(", ", resourceDict.Keys.Cast<object>())}");
+                            var resourceDict = new ResourceDictionary { Source = new Uri(dashboardPath, UriKind.Absolute) };
 
                             if (resourceDict.Contains("ChatMessageTemplate"))
                             {
-                                System.Diagnostics.Debug.WriteLine("[Dashboard] Ключ 'ChatMessageTemplate' найден");
-
                                 var template = resourceDict["ChatMessageTemplate"] as DataTemplate;
                                 if (template != null)
                                 {
                                     _cachedDashboardTemplate = CreateSafeTemplate(template);
-                                    System.Diagnostics.Debug.WriteLine("[Dashboard] ✅ Дашборд-шаблон успешно загружен и закэширован");
                                     return _cachedDashboardTemplate;
                                 }
-                                else
-                                {
-                                    System.Diagnostics.Debug.WriteLine("[Dashboard] ❌ Шаблон 'DashboardMessageTemplate' имеет тип null");
-                                }
                             }
-                            else
-                            {
-                                System.Diagnostics.Debug.WriteLine("[Dashboard] ❌ Ключ 'DashboardMessageTemplate' не найден в ResourceDictionary");
-                                System.Diagnostics.Debug.WriteLine($"[Dashboard] Доступные ключи: {string.Join(", ", resourceDict.Keys.Cast<object>())}");
-                            }
-                        }
-                        else
-                        {
-                            System.Diagnostics.Debug.WriteLine($"[Dashboard] ❌ Файл не существует: {dashboardPath}");
                         }
                     }
                     catch (Exception ex)
                     {
-                        System.Diagnostics.Debug.WriteLine($"[Dashboard] ❌ Ошибка при загрузке дашборд-шаблона: {ex.Message}");
-                        System.Diagnostics.Debug.WriteLine($"[Dashboard] Stack trace: {ex.StackTrace}");
+                        System.Diagnostics.Debug.WriteLine($"[Dashboard] ❌ Ошибка дашборд-шаблона: {ex.Message}");
                     }
-
-                    // Если дашборд-шаблон не найден, используем обычный MessageSkin
-                    System.Diagnostics.Debug.WriteLine("[Dashboard] Дашборд-шаблон не найден, используем стандартный MessageSkin (по рангам)");
-                    _cachedDashboardTemplate = MessageSkin;
-                    System.Diagnostics.Debug.WriteLine("[Dashboard] Стандартный MessageSkin закэширован как fallback");
-                    return _cachedDashboardTemplate;
-                }
-            }
-        }
-
-        private DataTemplate GetStickerTemplate()
-        {
-            if (_cachedStickerTemplate != null) return _cachedStickerTemplate;
-            lock (_stickerLock)
-            {
-                if (_cachedStickerTemplate != null) return _cachedStickerTemplate;
-                try
-                {
-                    var template = SkinLoader.GetStickerTemplate();
-                    _cachedStickerTemplate = CreateSafeTemplate(template);
-                    return _cachedStickerTemplate;
-                }
-                catch
-                {
                     return GetEmergencyTemplate();
                 }
             }
         }
 
-        private DataTemplate CreateSafeTemplate(DataTemplate? originalTemplate)
+        private DataTemplate CreateSafeTemplate(DataTemplate originalTemplate)
         {
             try
             {
                 if (originalTemplate == null) return GetEmergencyTemplate();
                 var safeTemplate = new DataTemplate();
                 var borderFactory = new FrameworkElementFactory(typeof(Border));
-                borderFactory.SetValue(Border.BackgroundProperty, Brushes.Transparent);
                 borderFactory.SetValue(Border.CornerRadiusProperty, new CornerRadius(4));
                 borderFactory.SetValue(Border.PaddingProperty, new Thickness(0));
                 borderFactory.SetValue(Border.MarginProperty, new Thickness(0, 0, 0, 4));
@@ -269,7 +195,6 @@ namespace SmithForge.Main.Models
                     textBlock.SetBinding(TextBlock.TextProperty, new Binding("MessageText"));
                     textBlock.SetValue(TextBlock.ForegroundProperty, Brushes.White);
                     textBlock.SetValue(TextBlock.MarginProperty, new Thickness(5));
-                    // Привязываем FontSize к свойству FontSize
                     textBlock.SetBinding(TextBlock.FontSizeProperty, new Binding("FontSize"));
                     template.VisualTree = textBlock;
                     template.Seal();
@@ -283,10 +208,39 @@ namespace SmithForge.Main.Models
             }
         }
 
+        private DataTemplate GetStickerTemplate()
+        {
+            if (_cachedStickerTemplate != null) return _cachedStickerTemplate;
+            lock (_stickerLock)
+            {
+                if (_cachedStickerTemplate != null) return _cachedStickerTemplate;
+                try
+                {
+                    var template = new DataTemplate();
+                    var grid = new FrameworkElementFactory(typeof(Grid));
+                    var image = new FrameworkElementFactory(typeof(Image));
+                    image.SetBinding(Image.SourceProperty, new Binding("StickerPath"));
+                    image.SetValue(Image.WidthProperty, 120.0);
+                    image.SetValue(Image.HeightProperty, 120.0);
+                    grid.AppendChild(image);
+                    template.VisualTree = grid;
+                    template.Seal();
+                    _cachedStickerTemplate = template;
+                    return template;
+                }
+                catch
+                {
+                    return new DataTemplate();
+                }
+            }
+        }
+
+        // ========== КОНСТРУКТОРЫ ==========
+
         public DisplayMessageViewModel(Chater user, CommonMessage msg)
         {
             User = user;
-            MessageText = msg.Message;
+            MessageText = msg.Message; // ← Запись вызовет OnMessageTextChanged автоматически
             MessageNumber = msg.MessageNumber;
             Type = msg.Type;
             DisplayTimeMs = msg.DisplayTimeMs;
@@ -297,15 +251,12 @@ namespace SmithForge.Main.Models
             ShowTimestamp = false;
             SkipLayoutAnimation = false;
 
-            // ✅ ПОДПИСЫВАЕМСЯ НА ОБНОВЛЕНИЯ ПОЛЬЗОВАТЕЛЯ
-            ChaterStorage.OnChaterUpdated += OnChaterUpdated;
+            //ChaterStorage.OnChaterUpdated += OnChaterUpdated;
 
-            // Инициализация команд - используем RelayCommand из SmithForge.Features.Dashboard
             Action1Command = new SmithForge.Features.Dashboard.RelayCommand(OpenProfile);
             Action2Command = new SmithForge.Features.Dashboard.RelayCommand(Action2);
             Action3Command = new SmithForge.Features.Dashboard.RelayCommand(Action3);
         }
-
 
         public DisplayMessageViewModel(Chater user, CommonMessage msg, string stickerPath) : this(user, msg)
         {
@@ -316,6 +267,8 @@ namespace SmithForge.Main.Models
             : this(user, new CommonMessage { Message = text, MessageNumber = messageNumber, Type = type })
         {
         }
+
+        // ========== ЧАСТИЧНЫЕ МЕТОДЫ ИЗМЕНЕНИЯ СВОЙСТВ ==========
 
         partial void OnUserChanged(Chater value)
         {
@@ -329,14 +282,31 @@ namespace SmithForge.Main.Models
             OnPropertyChanged(nameof(AvatarPath));
         }
 
+        // ⭐ ИСПРАВЛЕНО: Теперь конвертер вызывается строго ОДИН раз при получении текста!
         partial void OnMessageTextChanged(string value)
         {
-            OnPropertyChanged(nameof(FormattedMessage));
+            try
+            {
+                if (string.IsNullOrEmpty(value))
+                {
+                    FormattedMessage = string.Empty;
+                    return;
+                }
+
+                // Генерируем Span со смайлами один раз и намертво сохраняем в кэш свойства
+                FormattedMessage = _formattedTextConverter.Convert(value, typeof(object), null, null);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[FormattedMessage Cache Error] {ex.Message}");
+                FormattedMessage = value;
+            }
         }
 
         public void UpdateMessageCount() => OnPropertyChanged(nameof(MessageCount));
 
         private string? _cachedAvatarPath;
+
         public string? AvatarPath
         {
             get
@@ -346,14 +316,14 @@ namespace SmithForge.Main.Models
 
                 string avatarPath = User.FullAvatarPath;
 
-                if (!string.IsNullOrEmpty(avatarPath) && System.IO.File.Exists(avatarPath))
+                if (!string.IsNullOrEmpty(avatarPath) && File.Exists(avatarPath))
                 {
                     _cachedAvatarPath = avatarPath;
                     return _cachedAvatarPath;
                 }
 
-                string basePath = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "SF_Data", "Assets", "Avatars", "Default");
-                _cachedAvatarPath = System.IO.Path.Combine(basePath, "unknown.png");
+                string basePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "SF_Data", "Assets", "Avatars", "Default");
+                _cachedAvatarPath = Path.Combine(basePath, "unknown.png");
                 return _cachedAvatarPath;
             }
         }
@@ -362,15 +332,8 @@ namespace SmithForge.Main.Models
         {
             try
             {
-                System.Diagnostics.Debug.WriteLine($"[Dashboard] Открытие профиля для {DisplayName} (ID: {User?.Id})");
+                if (User == null) return;
 
-                if (User == null)
-                {
-                    System.Diagnostics.Debug.WriteLine("[Dashboard] Ошибка: User = null");
-                    return;
-                }
-
-                // Открываем окно профиля
                 var profileWindow = new SmithForge.Features.ChaterProfile.ChaterProfileWindow(User);
                 profileWindow.Owner = Application.Current.MainWindow;
                 profileWindow.ShowDialog();
@@ -381,45 +344,44 @@ namespace SmithForge.Main.Models
             }
         }
 
-        private void Action2()
-        {
-            System.Diagnostics.Debug.WriteLine($"[Dashboard] Нажата кнопка 2 для сообщения #{MessageNumber}");
-            MessageBox.Show($"Кнопка 2 - Сообщение #{MessageNumber}");
-        }
+        private void Action2() => MessageBox.Show($"Кнопка 2 - Сообщение #{MessageNumber}");
+        private void Action3() => MessageBox.Show($"Кнопка 3 - Сообщение #{MessageNumber}");
 
-        private void Action3()
-        {
-            System.Diagnostics.Debug.WriteLine($"[Dashboard] Нажата кнопка 3 для сообщения #{MessageNumber}");
-            MessageBox.Show($"Кнопка 3 - Сообщение #{MessageNumber}");
-        }
+        //private void OnChaterUpdated(Chater updatedChater)
+        //{
+        //    if (User?.Id == updatedChater.Id)
+        //    {
+        //        User = updatedChater;
+        //        OnPropertyChanged(nameof(User));
+        //        OnPropertyChanged(nameof(UserRank));
+        //        OnPropertyChanged(nameof(DisplayName));
+        //        OnPropertyChanged(nameof(MessageCount));
+        //        OnPropertyChanged(nameof(PlatformColor));
 
-        private void OnChaterUpdated(Chater updatedChater)
-        {
-            if (User?.Id == updatedChater.Id)
-            {
-                // Обновляем ссылку на пользователя
-                User = updatedChater;
+        //        _cachedSkin = null;
+        //        OnPropertyChanged(nameof(MessageSkin));
 
-                // Уведомляем UI
-                OnPropertyChanged(nameof(User));
-                OnPropertyChanged(nameof(UserRank));
-                OnPropertyChanged(nameof(DisplayName));
-                OnPropertyChanged(nameof(MessageCount));
-                OnPropertyChanged(nameof(PlatformColor));
+        //        _cachedAvatarPath = null;
+        //        OnPropertyChanged(nameof(AvatarPath));
 
-                // Обновляем скин
-                _cachedSkin = null;
-                OnPropertyChanged(nameof(MessageSkin));
+        //        // ✅ Если обновился пользователь — пересоздаём форматированный текст (ранг влияет на цвет)
+        //        if (!string.IsNullOrEmpty(MessageText))
+        //        {
+        //            try
+        //            {
+        //                FormattedMessage = _formattedTextConverter.Convert(MessageText, typeof(object), null, null);
+        //            }
+        //            catch (Exception ex)
+        //            {
+        //                System.Diagnostics.Debug.WriteLine($"[FormattedMessage Rebuild Error] {ex.Message}");
+        //            }
+        //        }
+        //    }
+        //}
 
-                // Обновляем аватар
-                _cachedAvatarPath = null;
-                OnPropertyChanged(nameof(AvatarPath));
-            }
-        }
-
-        public void Dispose()
-        {
-            ChaterStorage.OnChaterUpdated -= OnChaterUpdated;
-        }
+        //public void Dispose()
+        //{
+        //    ChaterStorage.OnChaterUpdated -= OnChaterUpdated;
+        //}
     }
 }

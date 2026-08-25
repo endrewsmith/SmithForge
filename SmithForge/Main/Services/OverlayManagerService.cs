@@ -168,8 +168,11 @@ public class OverlayManagerService
 
     public void AddMessage(Chater user, CommonMessage msg)
     {
-        _overlay?.AddMessage(user, msg);
-        _shorts?.AddMessage(user, msg);
+        // Отправляем параллельно
+        Parallel.Invoke(
+            () => _overlay?.AddMessage(user, msg),
+            () => _shorts?.AddMessage(user, msg)
+        );
     }
 
     public void AddImportantMessage(Chater user, CommonMessage msg)

@@ -15,7 +15,6 @@ namespace SmithForge.Features.Dashboard
 
         private void DashboardWindow_Loaded(object sender, RoutedEventArgs e)
         {
-            // Подписываемся на изменение AutoScrollEnabled
             if (DataContext is DashboardViewModel viewModel)
             {
                 viewModel.PropertyChanged += (s, args) =>
@@ -26,7 +25,6 @@ namespace SmithForge.Features.Dashboard
                     }
                 };
 
-                // Начальное состояние кнопки
                 ScrollToBottomButton.Visibility = viewModel.AutoScrollEnabled ? Visibility.Collapsed : Visibility.Visible;
             }
         }
@@ -41,8 +39,9 @@ namespace SmithForge.Features.Dashboard
 
         private void CloseButton_Click(object sender, RoutedEventArgs e)
         {
-            // ✅ Не закрываем, а скрываем
+            // ✅ Просто скрываем окно
             this.Visibility = Visibility.Collapsed;
+            System.Diagnostics.Debug.WriteLine("[Dashboard] Окно скрыто через CloseButton");
         }
 
         private void MainScrollViewer_ScrollChanged(object sender, ScrollChangedEventArgs e)
@@ -55,14 +54,6 @@ namespace SmithForge.Features.Dashboard
                     viewModel.OnScrollChanged(scrollViewer.VerticalOffset, scrollViewer.ScrollableHeight);
                 }
             }
-        }
-
-        // ✅ Добавлен обработчик закрытия
-        private void Window_Closing(object sender, System.ComponentModel.CancelEventArgs e)
-        {
-            // Отменяем закрытие, просто прячем окно
-            e.Cancel = true;
-            this.Visibility = Visibility.Collapsed;
         }
     }
 }

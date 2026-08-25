@@ -9,7 +9,7 @@ using System.Windows.Controls;
 using System.Windows.Documents;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
-using XamlAnimatedGif;
+using AnimatedImage.Wpf;
 
 namespace SmithForge.Main.Services
 {
@@ -172,18 +172,113 @@ namespace SmithForge.Main.Services
             }
         }
 
+        /// <summary>
+        /// Создает элемент эмодзи с проверкой STA-потока
+        /// </summary>
         public static FrameworkElement CreateEmojiElement(string emojiCode, double size = 0, bool preferAnimated = true)
         {
-            if (_emojiMap.TryGetValue(emojiCode, out var info))
+            // ✅ ПРОВЕРЯЕМ, ЧТО МЫ В UI ПОТОКЕ
+            if (!Application.Current.Dispatcher.CheckAccess())
             {
-                return CreateEmojiFromInfo(info, size, preferAnimated);
+                return Application.Current.Dispatcher.Invoke(() =>
+                    CreateEmojiElement(emojiCode, size, preferAnimated));
             }
 
-            return null;
+            System.Diagnostics.Debug.WriteLine($"[EmojiService] 🔍 Поиск эмодзи: '{emojiCode}' (длина: {emojiCode?.Length ?? 0})");
+            System.Diagnostics.Debug.WriteLine($"[EmojiService] 📊 Всего в кэше: {_emojiMap.Count}");
+
+            if (_emojiMap.TryGetValue(emojiCode, out var info))
+            {
+                System.Diagnostics.Debug.WriteLine($"[EmojiService] ✅ НАЙДЕН: '{emojiCode}' -> {Path.GetFileName(info.ImagePath)} ({info.SourceName})");
+                var result = CreateEmojiFromInfo(info, size, preferAnimated);
+                if (result != null)
+                {
+                    System.Diagnostics.Debug.WriteLine($"[EmojiService] ✅ Элемент создан: {emojiCode}");
+                }
+                else
+                {
+                    System.Diagnostics.Debug.WriteLine($"[EmojiService] ❌ Не удалось создать элемент: {emojiCode}");
+                }
+                return result;
+            }
+            else
+            {
+                System.Diagnostics.Debug.WriteLine($"[EmojiService] ❌ НЕ НАЙДЕН В КЭШЕ: '{emojiCode}'");
+
+                // ✅ Проверяем, есть ли файл на диске (может быть скачан, но не добавлен в кэш)
+                string fileName = emojiCode
+                    .Trim('[', ']', ':', ';', '{', '}')
+                    .Trim();
+
+                // Очищаем от недопустимых символов
+                foreach (var c in Path.GetInvalidFileNameChars())
+                {
+                    fileName = fileName.Replace(c.ToString(), "");
+                }
+
+                var diskPath = Path.Combine(
+                    AppDomain.CurrentDomain.BaseDirectory,
+                    "SF_Data", "Assets", "Emojis", "Twitch", "Images",
+                    $"{fileName}.png");
+
+                bool fileExists = File.Exists(diskPath);
+                System.Diagnostics.Debug.WriteLine($"[EmojiService] 📁 Файл на диске: {fileExists} -> {Path.GetFileName(diskPath)}");
+
+                if (fileExists)
+                {
+                    // ✅ Если файл есть — добавляем в кэш и возвращаем элемент
+                    System.Diagnostics.Debug.WriteLine($"[EmojiService] 🔄 Восстанавливаем в кэш: {emojiCode} -> {fileName}.png");
+
+                    // Определяем источник (Twitch или YouTube)
+                    string sourceName = emojiCode.Contains(":") ? "YouTube" : "Twitch";
+
+                    _emojiMap[emojiCode] = new EmojiInfo
+                    {
+                        Code = emojiCode,
+                        ImagePath = diskPath,
+                        SourceName = sourceName,
+                        DisplayText = GetDisplayText(fileName, sourceName)
+                    };
+
+                    // Повторно ищем и создаём элемент
+                    if (_emojiMap.TryGetValue(emojiCode, out var newInfo))
+                    {
+                        System.Diagnostics.Debug.WriteLine($"[EmojiService] ✅ Восстановлен: {emojiCode}");
+                        return CreateEmojiFromInfo(newInfo, size, preferAnimated);
+                    }
+                }
+                else
+                {
+                    System.Diagnostics.Debug.WriteLine($"[EmojiService] ❌ Файла нет на диске: {fileName}.png");
+                }
+
+                // Выводим все ключи для отладки (первые 10)
+                var keys = _emojiMap.Keys.Take(10).ToList();
+                System.Diagnostics.Debug.WriteLine($"[EmojiService] 📋 Первые 10 ключей в кэше:");
+                foreach (var key in keys)
+                {
+                    System.Diagnostics.Debug.WriteLine($"[EmojiService]   - '{key}'");
+                }
+                if (_emojiMap.Count > 10)
+                {
+                    System.Diagnostics.Debug.WriteLine($"[EmojiService]   ... и еще {_emojiMap.Count - 10} ключей");
+                }
+
+                return null;
+            }
         }
 
+        /// <summary>
+        /// Создает элемент из EmojiInfo с проверкой STA-потока
+        /// </summary>
         private static FrameworkElement CreateEmojiFromInfo(EmojiInfo info, double size, bool preferAnimated)
         {
+            if (!Application.Current.Dispatcher.CheckAccess())
+            {
+                return Application.Current.Dispatcher.Invoke(() =>
+                    CreateEmojiFromInfo(info, size, preferAnimated));
+            }
+
             double emojiSize = size > 0 ? size : _config.Settings.DefaultEmojiSize;
             bool useAnimated = preferAnimated && _config.Settings.PreferAnimated;
 
@@ -201,51 +296,52 @@ namespace SmithForge.Main.Services
                 ToolTip = info.Code
             };
 
+            // ─── 1. ЕСЛИ ЭТО КЛАССИЧЕСКИЙ .GIF ───
             if (path.EndsWith(".gif", StringComparison.OrdinalIgnoreCase))
             {
                 try
                 {
-                    AnimationBehavior.SetSourceUri(image, new Uri(path, UriKind.Absolute));
-                    AnimationBehavior.SetAutoStart(image, true);
+                    XamlAnimatedGif.AnimationBehavior.SetSourceUri(image, new Uri(path, UriKind.Absolute));
+                    XamlAnimatedGif.AnimationBehavior.SetAutoStart(image, true);
+                    XamlAnimatedGif.AnimationBehavior.SetRepeatBehavior(image, System.Windows.Media.Animation.RepeatBehavior.Forever);
+                    return image;
                 }
-                catch
+                catch (Exception ex)
                 {
+                    System.Diagnostics.Debug.WriteLine($"[EmojiService] Ошибка XamlAnimatedGif: {ex.Message}");
                     return null;
                 }
             }
-            else
+
+            // ─── 2. ЕСЛИ ЭТО .PNG (СТАТИЧНЫЙ ИЛИ АНИМИРОВАННЫЙ APNG) ───
+            try
             {
-                try
-                {
-                    if (_config.Settings.CacheImages && _imageCache.TryGetValue(path, out var cached))
-                    {
-                        image.Source = cached;
-                    }
-                    else
-                    {
-                        var bitmap = new BitmapImage();
-                        bitmap.BeginInit();
-                        bitmap.UriSource = new Uri(path, UriKind.Absolute);
-                        bitmap.DecodePixelWidth = (int)emojiSize;
-                        bitmap.DecodePixelHeight = (int)emojiSize;
-                        bitmap.CacheOption = BitmapCacheOption.OnLoad;
-                        bitmap.EndInit();
-                        bitmap.Freeze();
+                var bitmap = new BitmapImage();
+                bitmap.BeginInit();
+                bitmap.UriSource = new Uri(path, UriKind.Absolute);
+                bitmap.DecodePixelWidth = (int)emojiSize;
+                bitmap.DecodePixelHeight = (int)emojiSize;
+                bitmap.CacheOption = BitmapCacheOption.OnLoad;
+                bitmap.EndInit();
 
-                        if (_config.Settings.CacheImages)
-                            _imageCache[path] = bitmap;
+                // Если файл статический — замораживаем для ультра-быстрого рендера через GPU.
+                // Новые анимированные PNG замораживать нельзя, библиотека WpfAnimatedPng сама ими управляет.
 
-                        image.Source = bitmap;
-                    }
-                }
-                catch
-                {
-                    return null;
-                }
+                // Передаем картинку специализированному движку APNG
+                ImageBehavior.SetAnimatedSource(image, bitmap);
+                ImageBehavior.SetAutoStart(image, true);
+                ImageBehavior.SetRepeatBehavior(image, System.Windows.Media.Animation.RepeatBehavior.Forever);
+
+                System.Diagnostics.Debug.WriteLine($"[EmojiService] ✅ PNG/APNG успешно обработан: {Path.GetFileName(path)}");
+                return image;
             }
-
-            return image;
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[EmojiService] ❌ Ошибка загрузки PNG: {ex.Message}");
+                return null;
+            }
         }
+
 
         public static List<string> ExtractEmojis(string text)
         {
@@ -421,6 +517,50 @@ namespace SmithForge.Main.Services
                 System.Diagnostics.Debug.WriteLine($"[EmojiService] ✅ Динамически добавлен: {code}");
 
                 // Пересобираем глобальный Regex, чтобы новый эмодзи начал парситься
+                BuildGlobalRegex();
+            }
+        }
+
+        public static void AddEmojiToCache(string code, string imagePath, string sourceName)
+        {
+            if (!_emojiMap.ContainsKey(code))
+            {
+                // ✅ Находим источник по имени
+                var source = _config.Sources.FirstOrDefault(s => s.Name == sourceName);
+
+                string fileName = code;
+
+                if (source != null && source.Formats.Count > 0)
+                {
+                    // ✅ Берем первый формат и вырезаем обертку
+                    string format = source.Formats[0];
+
+                    // Удаляем обертку из кода
+                    string prefix = format.Split(new[] { "{code}" }, StringSplitOptions.None)[0];
+                    string suffix = format.Split(new[] { "{code}" }, StringSplitOptions.None).Length > 1
+                        ? format.Split(new[] { "{code}" }, StringSplitOptions.None)[1]
+                        : "";
+
+                    if (code.StartsWith(prefix) && code.EndsWith(suffix))
+                    {
+                        fileName = code.Substring(prefix.Length, code.Length - prefix.Length - suffix.Length);
+                    }
+                }
+                else
+                {
+                    // Fallback если источник не найден
+                    fileName = code.Trim('[', ']', ':', ';', '{', '}').Trim();
+                }
+
+                _emojiMap[code] = new EmojiInfo
+                {
+                    Code = code,
+                    ImagePath = imagePath,
+                    SourceName = sourceName,
+                    DisplayText = GetDisplayText(fileName, sourceName)
+                };
+
+                System.Diagnostics.Debug.WriteLine($"[EmojiService] ✅ Добавлен: {code} -> {Path.GetFileName(imagePath)} ({sourceName})");
                 BuildGlobalRegex();
             }
         }
