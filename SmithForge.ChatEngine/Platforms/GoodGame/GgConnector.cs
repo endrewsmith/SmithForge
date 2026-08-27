@@ -138,6 +138,12 @@ namespace SmithForge.ChatEngine.Platforms.GoodGame
 
         private void OnMessageReceived(object? sender, GgMessage message)
         {
+            Debug.WriteLine($"[GgConnector] ====== ПОЛУЧЕНО СООБЩЕНИЕ ОТ GOODGAME ======");
+            Debug.WriteLine($"[GgConnector] Author: {message.Author}");
+            Debug.WriteLine($"[GgConnector] Text: {message.Text}");
+            Debug.WriteLine($"[GgConnector] UserId: {message.UserId}");
+            Debug.WriteLine("=====================================================");
+
             Debug.WriteLine($"[GgConnector] OnMessageReceived: {message?.Author}: {message?.Text}");
 
             if (message == null) return;

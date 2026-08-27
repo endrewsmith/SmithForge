@@ -136,6 +136,11 @@ namespace SmithForge.ViewModels
 
         public ObservableCollection<Chater> Users { get; } = new();
 
+
+        // ✅ ДОБАВИТЬ:
+        private WebServerService? _webServer;
+        private bool _isWebServerRunning = false;
+
         // ============================================================
         // УПРАВЛЕНИЕ ЧАТАМИ
         // ============================================================
@@ -159,6 +164,11 @@ namespace SmithForge.ViewModels
             Settings = ConfigService.Load();
 
 
+            // ✅ ПРИНУДИТЕЛЬНО УСТАНАВЛИВАЕМ ПОРТ 10881 И СОХРАНЯЕМ
+            Settings.NetworkPort = 10881;
+            ConfigService.Save(Settings);
+
+
             // ✅ Инициализация оверлеев через сервис
             _overlayManager = new OverlayManagerService(Settings);
 
@@ -168,9 +178,13 @@ namespace SmithForge.ViewModels
             // ✅ Инициализация сервиса диалогов
             _dialogService = new DialogService();
 
+            _webServer = new WebServerService((int)Settings.NetworkPort);
+            _webServer.MessageAdded += OnWebMessageAdded;
+            Task.Run(async () => await StartWebServerAsync());
+
             // ✅ Инициализация сервиса обработки сообщений
             var processor = new MessageProcessor(Settings);
-            _messageHandler = new MessageHandlerService(processor, _overlayManager, _dashboardService);
+            _messageHandler = new MessageHandlerService(processor, _overlayManager, _dashboardService, _webServer);
             _messageHandler.OnProcessed += OnMessageProcessed;
 
             // ============================================================
@@ -395,6 +409,10 @@ namespace SmithForge.ViewModels
                 });
             }
 
+
+
+
+
             Debug.WriteLine($"[MainViewModel] Получено сообщение от {chater.Login}:");
             Debug.WriteLine($"   - Оригинальный номер: {msg.MessageNumber}");
             Debug.WriteLine($"   - Текст: {uiMessage}");
@@ -427,6 +445,13 @@ namespace SmithForge.ViewModels
                 DisplayTimeMs = msg.DisplayTimeMs
             };
 
+
+            //Debug.WriteLine($"[WebServer] ПЕРЕД ВЫЗОВОМ AddMessageToWebOverlay для {chater.Login}");
+            //// Добавляем сообщение в веб-оверлей для OBS
+            //AddMessageToWebOverlay(chater, overlayMsg);
+            //Debug.WriteLine($"[WebServer] ПОСЛЕ ВЫЗОВА AddMessageToWebOverlay для {chater.Login}");
+
+
             _dashboardService.AddMessage(chater, overlayMsg);
 
             if (isImportantAction)
@@ -451,6 +476,8 @@ namespace SmithForge.ViewModels
             {
                 _overlayManager.AddMessage(chater, overlayMsg);
             }
+
+
         }
 
         private void StartPolling()
@@ -493,6 +520,15 @@ namespace SmithForge.ViewModels
         {
             Debug.WriteLine("[MainViewModel] Start() вызван");
 
+            // ✅ СНАЧАЛА ЗАПУСКАЕМ ВЕБ-СЕРВЕР
+            if (_webServer != null && !_isWebServerRunning)
+            {
+                Debug.WriteLine("[MainViewModel] Запуск веб-сервера...");
+                await StartWebServerAsync();
+                Debug.WriteLine($"[WebServer] Запущен на http://localhost:{Settings.NetworkPort}/");
+            }
+
+            // ✅ ТЕПЕРЬ ВСЁ ОСТАЛЬНОЕ
             int requestedNumber = CurrentSession?.Number ?? 0;
 
             if (requestedNumber > 0)
@@ -517,16 +553,14 @@ namespace SmithForge.ViewModels
                 Debug.WriteLine("[MainViewModel] ⚠️ CurrentSession == null, сессия НЕ установлена!");
             }
 
-            // ✅ ПАРАЛЛЕЛЬНОЕ ПОДКЛЮЧЕНИЕ ВСЕХ ЧАТОВ
+            // ✅ ПОДКЛЮЧАЕМ ЧАТЫ
             var chatsToConnect = Chats.Where(c => !c.IsConnected).ToList();
 
             if (chatsToConnect.Any())
             {
                 Debug.WriteLine($"[MainViewModel] Подключаем {chatsToConnect.Count} чатов параллельно...");
-
                 var connectTasks = chatsToConnect.Select(chat => ConnectChat(chat));
                 await Task.WhenAll(connectTasks);
-
                 Debug.WriteLine("[MainViewModel] Все чаты подключены (или попытки завершены)");
             }
 
@@ -959,5 +993,70 @@ namespace SmithForge.ViewModels
         }
 
         public ChatManagerViewModel GetChatManagerViewModel() => _chatManager;
+
+
+        // ============================================================
+        // ВЕБ-СЕРВЕР ДЛЯ OBS
+        // ============================================================
+
+        private async Task StartWebServerAsync()
+        {
+            try
+            {
+                await _webServer!.StartAsync();
+                _isWebServerRunning = true;
+                Debug.WriteLine($"[WebServer] Запущен на http://localhost:{Settings.NetworkPort}/");
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[WebServer] Ошибка запуска: {ex.Message}");
+            }
+        }
+
+        private void OnWebMessageAdded(object? sender, DisplayMessageViewModel msg)
+        {
+            // Здесь можно добавить дополнительную логику при получении сообщения
+        }
+
+        //private void AddMessageToWebOverlay(Chater chater, CommonMessage msg)
+        //{
+
+        //    // ✅ ПОКАЗЫВАЕМ ОКНО ДЛЯ ПРОВЕРКИ
+        //    Application.Current.Dispatcher.Invoke(() =>
+        //    {
+        //        MessageBox.Show($"AddMessageToWebOverlay вызван! _webServer={_webServer != null}, _isWebServerRunning={_isWebServerRunning}");
+        //    });
+
+        //    Debug.WriteLine($"[WebServer] AddMessageToWebOverlay ВЫЗВАН! _webServer={_webServer != null}, _isWebServerRunning={_isWebServerRunning}");
+
+        //    if (_webServer == null || !_isWebServerRunning)
+        //    {
+        //        Debug.WriteLine($"[WebServer] НЕ ДОБАВЛЕНО: _webServer={_webServer != null}, _isWebServerRunning={_isWebServerRunning}");
+        //        return;
+        //    }
+
+        //    var displayMsg = new DisplayMessageViewModel(chater, msg);
+        //    _webServer.AddMessage(displayMsg);
+        //    Debug.WriteLine($"[WebServer] ✅ ДОБАВЛЕНО сообщение: {chater.EffectiveName}: {msg.Message}");
+        //}
+
+        [RelayCommand]
+        private void OpenOverlayUrl()
+        {
+            var url = $"http://localhost:{Settings.NetworkPort}/";
+            try
+            {
+                Process.Start(new ProcessStartInfo(url) { UseShellExecute = true });
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[WebServer] Ошибка открытия URL: {ex.Message}");
+                MessageBox.Show($"Не удалось открыть браузер: {ex.Message}", "Ошибка",
+                                MessageBoxButton.OK, MessageBoxImage.Warning);
+            }
+        }
     }
+
+
+
 }
