@@ -1,0 +1,626 @@
+﻿<!DOCTYPE html>
+<html>
+<head>
+    <link href="https://googleapis.com" rel="stylesheet">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SmithForge Chat Overlay</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            background: transparent;
+            font-family: 'Segoe UI', Arial, sans-serif;
+            overflow: hidden;
+        }
+
+        #chat-container {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            max-height: 100vh;
+            overflow: hidden;
+            padding: 10px;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .message.rank-0 {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px;
+            padding: 6px 12px;
+            border-radius: 5px;
+            background: #000000;
+            border: 1px solid #757575;
+            animation: fadeIn 0.3s ease-in;
+            box-sizing: border-box;
+            width: 100%;
+        }
+
+            .message.rank-0 .msg-body {
+                display: flex;
+                align-items: center;
+                gap: 4px;
+                flex: 1;
+                min-width: 0;
+                flex-wrap: wrap;
+            }
+
+            .message.rank-0 .name {
+                font-family: 'Spectral SC', serif;
+                color: #999999;
+                font-weight: bold;
+                text-transform: uppercase;
+                white-space: nowrap;
+            }
+
+            .message.rank-0 .colon {
+                color: #FFFFFF;
+                font-family: 'Spectral SC', serif;
+            }
+
+            .message.rank-0 .text {
+                font-family: 'Spectral SC', serif;
+                color: #FFFFFF;
+                text-transform: uppercase;
+                word-break: break-word;
+            }
+
+            .message.rank-0 .rank {
+                color: #FFD700;
+            }
+
+            .message.rank-0 .avatar {
+                width: 28px;
+                height: 28px;
+                border-radius: 50%;
+                flex-shrink: 0;
+                background: #444;
+                object-fit: cover;
+            }
+
+            .message.rank-0 .timestamp {
+                font-size: 10px;
+                opacity: 0.4;
+                flex-shrink: 0;
+                margin-left: auto;
+            }
+
+        .rank-0-indicator-box {
+            display: flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            flex-shrink: 0 !important;
+            width: 16px !important;
+            height: 24px !important;
+            opacity: 0;
+            animation: panelTimeline 4.5s ease-in-out forwards !important;
+        }
+
+        @keyframes panelTimeline {
+            0% {
+                opacity: 0;
+                transform: scale(0.8);
+            }
+
+            10% {
+                opacity: 1;
+                transform: scale(1);
+            }
+
+            85% {
+                opacity: 1;
+                transform: scale(1);
+            }
+
+            100% {
+                opacity: 0;
+                transform: scale(0.8);
+            }
+        }
+
+        .rank-0-indicator-box .step-panel {
+            display: flex !important;
+            flex-direction: column-reverse !important;
+            gap: 1px !important;
+        }
+
+        .rank-0-indicator-box .step-dash {
+            height: 1.0px !important;
+            width: 5px !important;
+            opacity: 0.0 !important;
+            transition: opacity 0.35s ease-out !important;
+        }
+
+            .rank-0-indicator-box .step-dash.active {
+                opacity: 1 !important;
+            }
+
+        .rank-0-indicator-box .dash-1 {
+            background-color: #FFFF00 !important;
+        }
+
+        .rank-0-indicator-box .dash-2 {
+            background-color: #FFEA00 !important;
+        }
+
+        .rank-0-indicator-box .dash-3 {
+            background-color: #FFD700 !important;
+        }
+
+        .rank-0-indicator-box .dash-4 {
+            background-color: #FFC84D !important;
+        }
+
+        .rank-0-indicator-box .dash-5 {
+            background-color: #FFB347 !important;
+        }
+
+        .rank-0-indicator-box .dash-6 {
+            background-color: #FFA500 !important;
+        }
+
+        .rank-0-indicator-box .dash-7 {
+            background-color: #FF8C00 !important;
+        }
+
+        .rank-0-indicator-box .dash-8 {
+            background-color: #FF7F50 !important;
+        }
+
+        .rank-0-indicator-box .dash-9 {
+            background-color: #FF6347 !important;
+        }
+
+        .rank-0-indicator-box .dash-10 {
+            background-color: #FF4500 !important;
+        }
+
+        .rank-0-indicator-box .rank-star {
+            position: absolute !important;
+            font-size: 16px !important;
+            color: #FFD700 !important;
+            opacity: 0;
+            transform: scale(0);
+            transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+
+            .rank-0-indicator-box .rank-star.active {
+                opacity: 1 !important;
+                transform: scale(1) !important;
+                animation: starPulse 1.5s ease-in-out infinite;
+            }
+
+        @keyframes starPulse {
+            0%, 100% {
+                transform: scale(1);
+            }
+
+            50% {
+                transform: scale(1.2);
+            }
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(-10px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        /* Взрыв */
+        .rank-0-indicator-box .rank-star.explode {
+            animation: starExplode 1s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards !important;
+        }
+
+        @keyframes starExplode {
+            0% {
+                opacity: 0;
+                transform: scale(0) rotate(0deg);
+            }
+
+            20% {
+                opacity: 1;
+                transform: scale(2) rotate(180deg);
+                text-shadow: 0 0 50px #FFD700;
+            }
+
+            40% {
+                transform: scale(1.5) rotate(360deg);
+            }
+
+            60% {
+                transform: scale(2.2) rotate(540deg);
+                text-shadow: 0 0 40px #FFD700;
+            }
+
+            80% {
+                transform: scale(1.2) rotate(720deg);
+            }
+
+            100% {
+                opacity: 1;
+                transform: scale(1) rotate(720deg);
+            }
+        }
+
+        /* Супернова */
+        .rank-0-indicator-box .rank-star.supernova {
+            animation: supernova 1.2s ease-out forwards !important;
+        }
+
+        @keyframes supernova {
+            0% {
+                opacity: 0;
+                transform: scale(0) rotate(-30deg);
+                filter: blur(0px);
+            }
+
+            15% {
+                opacity: 1;
+                transform: scale(3) rotate(30deg);
+                filter: blur(10px);
+                text-shadow: 0 0 100px #FFD700;
+            }
+
+            30% {
+                transform: scale(2) rotate(-30deg);
+                filter: blur(5px);
+            }
+
+            50% {
+                transform: scale(3.5) rotate(60deg);
+                filter: blur(15px);
+                text-shadow: 0 0 120px #FFD700;
+            }
+
+            70% {
+                transform: scale(1.5) rotate(-60deg);
+                filter: blur(3px);
+            }
+
+            100% {
+                transform: scale(1) rotate(0deg);
+                filter: blur(0px);
+                opacity: 1;
+            }
+        }
+
+        /* Фейерверк */
+        .rank-0-indicator-box .rank-star.firework {
+            animation: firework 1.5s ease-out forwards !important;
+        }
+
+        @keyframes firework {
+            0% {
+                opacity: 0;
+                transform: scale(0) rotate(0deg);
+            }
+
+            20% {
+                opacity: 1;
+                transform: scale(3) rotate(180deg);
+                text-shadow: 0 0 80px #FFD700;
+                color: #FF4500;
+            }
+
+            40% {
+                transform: scale(2) rotate(360deg);
+                color: #FFD700;
+            }
+
+            60% {
+                transform: scale(4) rotate(540deg);
+                text-shadow: 0 0 100px #FFD700;
+                color: #FF4500;
+            }
+
+            80% {
+                transform: scale(1.5) rotate(720deg);
+                color: #FFD700;
+            }
+
+            100% {
+                transform: scale(1) rotate(720deg);
+                opacity: 1;
+                color: #FFD700;
+            }
+        }
+
+        /* Радуга */
+        .rank-0-indicator-box .rank-star.rainbow {
+            animation: rainbow 2s ease-out forwards !important;
+        }
+
+        @keyframes rainbow {
+            0% {
+                opacity: 0;
+                transform: scale(0) rotate(-45deg);
+                color: #FF0000;
+            }
+
+            15% {
+                opacity: 1;
+                transform: scale(3) rotate(45deg);
+                color: #FF4500;
+            }
+
+            30% {
+                transform: scale(1.5) rotate(-45deg);
+                color: #FFFF00;
+            }
+
+            45% {
+                transform: scale(2.5) rotate(45deg);
+                color: #00FF00;
+            }
+
+            60% {
+                transform: scale(1.2) rotate(-45deg);
+                color: #00BFFF;
+            }
+
+            75% {
+                transform: scale(2) rotate(45deg);
+                color: #8B00FF;
+            }
+
+            100% {
+                transform: scale(1) rotate(0deg);
+                color: #FFD700;
+                opacity: 1;
+            }
+        }
+        /* Скрытие элементов */
+        .hidden {
+            display: none !important;
+        }
+
+    </style>
+</head>
+<body>
+    <div id="chat-container"></div>
+    <script>
+        const chatContainer = document.getElementById('chat-container');
+        const loadedCss = new Set();
+
+        function connectSSE() {
+        if (window.currentEventSource) {
+        window.currentEventSource.close();
+        }
+        const eventSource = new EventSource('/stream');
+        window.currentEventSource = eventSource;
+        eventSource.onmessage = function(event) {
+        try {
+        const data = JSON.parse(event.data);
+        if (data.type === 'ping') return;
+        addMessage(data);
+        } catch (e) {
+        console.error('Parse error:', e);
+        }
+        };
+        eventSource.onerror = function(event) {
+        console.error('SSE error:', event);
+        };
+        }
+
+        function getDefaultTemplate() {
+        return '<div class="message rank-0">' +
+        '  <div class="msg-body">' +
+        '    <span class="name">{displayName}</span>' +
+        '    <span class="colon"> : </span>' +
+        '    <span class="text">{formattedMessage}</span>' +
+        '  </div>' +
+        '</div>';
+        }
+
+
+        function updateRank0Indicator(stepPanel, starElement, count) {
+    while (stepPanel.firstChild) {
+        stepPanel.removeChild(stepPanel.firstChild);
+    }
+    
+    if (starElement) {
+        starElement.classList.remove('active', 'pop', 'explode', 'supernova', 'firework', 'rainbow', 'space-boom');
+        starElement.style.display = 'none';
+        starElement.style.opacity = '0';
+        starElement.style.transform = 'scale(0)';
+        starElement.style.filter = 'none';
+        starElement.style.textShadow = 'none';
+    }
+    
+    const indicatorBox = stepPanel.closest('.rank-0-indicator-box');
+    if (indicatorBox) {
+        indicatorBox.style.animation = 'none';
+        void indicatorBox.offsetHeight;
+        indicatorBox.style.animation = 'panelTimeline 4.5s ease-in-out forwards';
+    }
+    
+    if (count < 10) {
+        stepPanel.style.display = 'flex';
+        stepPanel.style.opacity = '1';
+        
+        for (let i = 1; i <= 10; i++) {
+            const dash = document.createElement('div');
+            dash.className = `step-dash dash-${i}`;
+            stepPanel.appendChild(dash);
+        }
+        
+        const allDashes = stepPanel.querySelectorAll('.step-dash');
+        
+        for (let i = 0; i < count; i++) {
+            setTimeout(() => {
+                allDashes[i].classList.add('active');
+            }, 300 + (i * 120));
+        }
+        
+    } else {
+        // count >= 10 
+        stepPanel.style.display = 'flex';
+        stepPanel.style.opacity = '1';
+        
+        for (let i = 1; i <= 10; i++) {
+            const dash = document.createElement('div');
+            dash.className = `step-dash dash-${i}`;
+            stepPanel.appendChild(dash);
+        }
+        
+        const allDashes = stepPanel.querySelectorAll('.step-dash');
+        
+        for (let i = 0; i < 10; i++) {
+            setTimeout(() => {
+                allDashes[i].classList.add('active');
+            }, 300 + (i * 120));
+        }
+        
+        setTimeout(() => {
+            stepPanel.style.transition = 'opacity 0.5s ease-out';
+            stepPanel.style.opacity = '0';
+            
+            setTimeout(() => {
+                stepPanel.style.display = 'none';
+                
+                if (starElement) {
+                    starElement.style.display = 'block';
+                    starElement.style.opacity = '0';
+                    starElement.style.transform = 'scale(0)';
+                    
+                    // Выбираем случайный эффект
+                    const effects = ['explode', 'supernova', 'firework', 'rainbow', 'space-boom'];
+                    const randomEffect = 'space-boom';
+                    
+                    requestAnimationFrame(() => {
+                        starElement.style.transition = 'none';
+                        starElement.style.opacity = '0';
+                        starElement.style.transform = 'scale(0)';
+                        
+                        requestAnimationFrame(() => {
+                            starElement.classList.add(randomEffect);
+                            starElement.style.display = 'block';
+                            
+                            setTimeout(() => {
+                                starElement.classList.remove(randomEffect);
+                                starElement.classList.add('active');
+                            }, 1800);
+                        });
+                    });
+                }
+            }, 500);
+        }, 3000);
+    }
+}
+
+       function addMessage(data) {
+    if (data.rankClass && data.rankCss && !loadedCss.has(data.rankClass)) {
+        loadRankCss(data.rankClass, data.rankCss);
+        loadedCss.add(data.rankClass);
+    }
+    
+    var html = data.rankTemplate || getDefaultTemplate();
+    const msgText = data.formattedMessage || data.messageText || '';
+    
+    // Продвинутая подстановка прозрачной Base64 заглушки, если аватар отсутствует
+    const transparentPixel = "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7";
+    const avatarUrl = (data.avatarPath && data.avatarPath.trim() !== '' && data.avatarPath !== '{avatarPath}') 
+        ? '/avatar/' + data.avatarPath.split('/').pop() 
+        : transparentPixel;
+    
+    html = html
+        .replace(/{displayName}/g, data.displayName || 'Unknown')
+        .replace(/{formattedMessage}/g, msgText)
+        .replace(/{avatarPath}/g, avatarUrl)
+        .replace(/{rankDisplay}/g, data.rankDisplay || '')
+        .replace(/{timestamp}/g, data.timestamp || '')
+        .replace(/{userRank}/g, data.userRank || 0)
+        .replace(/{karmaKey}/g, data.karmaKey || '')
+        .replace(/{karma}/g, data.karma || '')
+        .replace(/{platform}/g, data.platform || 'twitch')
+        .replace(/{messageNumber}/g, data.messageNumber !== undefined ? data.messageNumber : '')
+        .replace(/{likes}/g, data.likes || 0)
+        .replace(/{dislikes}/g, data.dislikes || 0);
+
+    const tempDiv = document.createElement('div');
+    tempDiv.innerHTML = html.trim();
+    const messageDiv = tempDiv.firstElementChild;
+    if (!messageDiv) return;
+    
+    if (!messageDiv.classList.contains('message')) {
+        messageDiv.classList.add('message');
+    }
+    
+            // Скрытие лайков/дизлайков при 0
+            const likePanel = messageDiv.querySelector('.like-panel, .likes-panel, [class*="like-panel"]');
+            const dislikePanel = messageDiv.querySelector('.dislike-panel, .dislikes-panel, [class*="dislike-panel"]');
+
+    if (likePanel && (Number(data.likes) || 0) === 0) {
+        likePanel.classList.add('hidden');
+    }
+    if (dislikePanel && (Number(data.dislikes) || 0) === 0) {
+        dislikePanel.classList.add('hidden');
+    }
+        const userRank = Number(data.userRank) || 0;
+        if (userRank === 0) {
+        if (!messageDiv.classList.contains('rank-0')) {
+        messageDiv.classList.add('rank-0');
+        }
+        let indicatorBox = messageDiv.querySelector('.rank-0-indicator-box');
+        if (!indicatorBox) {
+        indicatorBox = document.createElement('div');
+        indicatorBox.className = 'rank-0-indicator-box';
+        const stepPanel = document.createElement('div');
+        stepPanel.className = 'step-panel';
+        const star = document.createElement('span');
+        star.className = 'rank-star';
+        star.textContent = '★';
+        star.style.display = 'none';
+        indicatorBox.appendChild(stepPanel);
+        indicatorBox.appendChild(star);
+        messageDiv.appendChild(indicatorBox);
+        }
+        const stepPanel = indicatorBox.querySelector('.step-panel');
+        const starElement = indicatorBox.querySelector('.rank-star');
+        const count = Number(data.messageCount) || 0;
+        if (stepPanel) {
+        updateRank0Indicator(stepPanel, starElement, count);
+        }
+        }
+        const nameElement = messageDiv.querySelector('.name');
+        if (nameElement && data.platform && userRank > 0) {
+        const platform = data.platform.toLowerCase();
+        if (platform === 'tw' || platform === 'twitch') nameElement.style.setProperty('color', '#b483fb', 'important');
+        else if (platform === 'yt' || platform === 'youtube') nameElement.style.setProperty('color', '#e87c7c', 'important');
+        else if (platform === 'gg' || platform === 'goodgame') nameElement.style.setProperty('color', '#7faeef', 'important');
+        }
+        chatContainer.appendChild(messageDiv);
+        while (chatContainer.children.length > 50) {
+        chatContainer.removeChild(chatContainer.firstChild);
+        }
+        chatContainer.scrollTop = chatContainer.scrollHeight;
+        }
+
+        function loadRankCss(className, cssContent) {
+        const styleId = 'rank-style-' + className;
+        if (document.getElementById(styleId)) return;
+        const style = document.createElement('style');
+        style.id = styleId;
+        style.textContent = cssContent;
+        document.head.appendChild(style);
+        }
+
+        connectSSE();
+    </script>
+</body>
+</html>

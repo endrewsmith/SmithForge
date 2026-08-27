@@ -75,6 +75,9 @@ namespace SmithForge.Main.Models
         [ObservableProperty]
         private object _formattedMessage;
 
+        // ✅ ДОБАВЬТЕ ЭТО СВОЙСТВО
+        public string Id { get; } = Guid.NewGuid().ToString();
+
         public ICommand Action1Command { get; }
         public ICommand Action2Command { get; }
         public ICommand Action3Command { get; }

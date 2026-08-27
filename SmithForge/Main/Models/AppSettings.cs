@@ -10,6 +10,7 @@ namespace SmithForge.Main.Models
     // === ОСНОВНОЙ КЛАСС НАСТРОЕК ===
     public partial class AppSettings : ObservableObject
     {
+
         private static readonly string ConfigPath = Path.Combine(
             AppDomain.CurrentDomain.BaseDirectory,
             "SF_Data",
@@ -38,7 +39,7 @@ namespace SmithForge.Main.Models
         public double WindowHeight { get; set; } = 600;
 
         // === Сетевые настройки ===
-        public double NetworkPort { get; set; } = 10880;
+        public double NetworkPort { get; set; } = 10881;
         public string ProgramPath { get; set; } = string.Empty;
         public int LastStreamNumber { get; set; } = 0;
         public int MinMessageLength { get; set; } = 1;

@@ -12,6 +12,8 @@ namespace SmithForge.Main.Services
 {
     public class MessageHandlerService
     {
+
+        private readonly WebServerService? _webServer;
         private readonly MessageProcessor _processor;
         private readonly OverlayManagerService _overlayManager;
         private readonly DashboardService _dashboardService; // ← ДОБАВЛЕНО
@@ -25,11 +27,13 @@ namespace SmithForge.Main.Services
         public MessageHandlerService(
             MessageProcessor processor,
             OverlayManagerService overlayManager,
-            DashboardService dashboardService) // ← ДОБАВЛЕНО
+            DashboardService dashboardService,
+            WebServerService? webServer = null)  // ← ДОБАВИТЬ
         {
             _processor = processor;
             _overlayManager = overlayManager;
-            _dashboardService = dashboardService; // ← ДОБАВЛЕНО
+            _dashboardService = dashboardService;
+            _webServer = webServer;  // ← ДОБАВИТЬ
             _processor.OnProcessed += OnMessageProcessed;
         }
 
@@ -110,6 +114,16 @@ namespace SmithForge.Main.Services
                 // В дашборд показываем ВСЕ сообщения (включая невыполненные команды)
                 _dashboardService.AddMessage(chater, overlayMsg);
 
+                // ✅ ДОБАВЛЯЕМ В ВЕБ-ОВЕРЛЕЙ
+                if (_webServer != null)
+                {
+                    var displayMsg = new DisplayMessageViewModel(chater, overlayMsg);
+                    _webServer.AddMessage(displayMsg);
+                    Debug.WriteLine($"[WebServer] ✅ ДОБАВЛЕНО сообщение из MessageHandlerService: {chater.EffectiveName}: {msg.Message}");
+                }
+
+
+
                 // В оверлеи отправляем ТОЛЬКО успешно выполненные команды
                 if (isImportantAction)
                 {
@@ -144,6 +158,8 @@ namespace SmithForge.Main.Services
             {
                 Debug.WriteLine($"[MessageHandler] Ошибка обработки: {ex.Message}");
             }
+
+
         }
 
         public void ProcessConnectorMessage(object? sender, IncomingChatMessage message)
