@@ -350,6 +350,12 @@ namespace SmithForge.Main.Models
         private void Action2() => MessageBox.Show($"Кнопка 2 - Сообщение #{MessageNumber}");
         private void Action3() => MessageBox.Show($"Кнопка 3 - Сообщение #{MessageNumber}");
 
+        public void RefreshAvatar()
+        {
+            _cachedAvatarPath = null;
+            OnPropertyChanged(nameof(AvatarPath));
+        }
+
         //private void OnChaterUpdated(Chater updatedChater)
         //{
         //    if (User?.Id == updatedChater.Id)

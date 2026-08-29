@@ -6,6 +6,38 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>SmithForge Chat Overlay</title>
     <style>
+
+        /* Общие стили для эмодзи */
+        .emoji {
+            display: inline-block;
+            vertical-align: middle;
+            margin: 0 2px;
+            image-rendering: auto;
+        }
+
+        /* YouTube эмодзи - стандартный размер 20px */
+        .youtube-emoji {
+            width: 16px;
+            height: 16px;
+        }
+
+        /* Twitch эмодзи - чуть крупнее */
+        .twitch-emoji {
+            width: 16px;
+            height: 16px;
+        }
+
+        /* Для больших YouTube эмодзи (опционально) */
+        .youtube-emoji-lg {
+            width: 16px;
+            height: 16px;
+        }
+
+        /* Для маленьких YouTube эмодзи (опционально) */
+        .youtube-emoji-sm {
+            width: 16px;
+            height: 16px;
+        }
         * {
             margin: 0;
             padding: 0;
@@ -398,24 +430,64 @@
         const loadedCss = new Set();
 
         function connectSSE() {
-        if (window.currentEventSource) {
+    if (window.currentEventSource) {
         window.currentEventSource.close();
-        }
-        const eventSource = new EventSource('/stream');
-        window.currentEventSource = eventSource;
-        eventSource.onmessage = function(event) {
+    }
+    const eventSource = new EventSource('/stream');
+    window.currentEventSource = eventSource;
+    
+    eventSource.onmessage = function(event) {
         try {
-        const data = JSON.parse(event.data);
-        if (data.type === 'ping') return;
-        addMessage(data);
+            const data = JSON.parse(event.data);
+            
+            if (data.type === 'ping') return;
+            
+            if (data.type === 'avatar_update') {
+                console.log('🔄 Обновление аватарки для:', data.displayName);
+                // ✅ НЕ ВЫХОДИМ, а ОБНОВЛЯЕМ существующее сообщение
+                updateAvatar(data);
+                return;
+            }
+            
+            // Обычное сообщение
+            addMessage(data);
+            
         } catch (e) {
-        console.error('Parse error:', e);
+            console.error('Parse error:', e);
         }
-        };
-        eventSource.onerror = function(event) {
+    };
+    
+    eventSource.onerror = function(event) {
         console.error('SSE error:', event);
-        };
+    };
+}
+
+function updateAvatar(data) {
+    console.log(`🔄 Обновление аватарки для ${data.displayName}`);
+    console.log(`🔄 Новый путь: ${data.avatarPath}`);
+    
+    // Находим ВСЕ сообщения этого пользователя
+    const elements = document.querySelectorAll(`[data-user-id="${data.userId}"]`);
+    console.log(`Найдено элементов: ${elements.length}`);
+    
+    if (elements.length === 0) {
+        console.log('⚠️ Нет сообщений для обновления аватарки');
+        // ✅ Если нет сообщений - СОЗДАЁМ временное (например, системное)
+        return;
+    }
+    
+    elements.forEach(el => {
+        const avatar = el.querySelector('.avatar');
+        if (avatar) {
+            const timestamp = Date.now();
+            const avatarUrl = data.avatarPath + '?t=' + timestamp;
+            avatar.src = avatarUrl;
+            console.log(`✅ Аватар обновлён: ${avatarUrl}`);
         }
+    });
+}
+
+
 
         function getDefaultTemplate() {
         return '<div class="message rank-0">' +
@@ -556,6 +628,11 @@
     tempDiv.innerHTML = html.trim();
     const messageDiv = tempDiv.firstElementChild;
     if (!messageDiv) return;
+
+            // ✅ ДОБАВЛЯЕМ data-user-id ДЛЯ ВСЕХ СООБЩЕНИЙ
+    if (data.userId) {
+        messageDiv.setAttribute('data-user-id', data.userId);
+    }
     
     if (!messageDiv.classList.contains('message')) {
         messageDiv.classList.add('message');

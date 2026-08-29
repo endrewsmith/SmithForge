@@ -4,6 +4,8 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 using System.Diagnostics;
+using System.IO;
+using System.Threading.Tasks;
 
 namespace SmithForge.Main.Services
 {
@@ -307,6 +309,44 @@ namespace SmithForge.Main.Services
                 }
 
                 Debug.WriteLine($"[ChaterStorage] Удален чаттер по ID: {chater.EffectiveName} (ID: {chater.Id})");
+            }
+        }
+
+        /// <summary>
+        /// Уведомить всех подписчиков об изменении чаттера
+        /// </summary>
+        public static void NotifyChaterUpdated(Chater chater)
+        {
+            if (chater == null) return;
+
+            Debug.WriteLine($"[ChaterStorage] NotifyChaterUpdated вызван для {chater.EffectiveName}");
+
+            // 1. Вызываем событие для локальных оверлеев
+            OnChaterUpdated?.Invoke(chater);
+
+            // 2. ✅ Отправляем обновление в веб-оверлей
+            SendWebOverlayUpdate(chater);
+        }
+
+        private static void SendWebOverlayUpdate(Chater chater)
+        {
+            try
+            {
+                var webServer = WebServerService.Instance;
+                if (webServer == null)
+                {
+                    Debug.WriteLine("[ChaterStorage] WebServerService.Instance = null, пропускаем");
+                    return;
+                }
+
+                // ✅ Отправляем обновление через специальный метод
+                webServer.SendAvatarUpdateOnly(chater);
+
+                Debug.WriteLine($"[ChaterStorage] ✅ Отправлено обновление в веб-оверлей для {chater.EffectiveName}");
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[ChaterStorage] Ошибка отправки обновления в веб-оверлей: {ex.Message}");
             }
         }
     }

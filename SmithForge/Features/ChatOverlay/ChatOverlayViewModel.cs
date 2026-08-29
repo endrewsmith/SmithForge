@@ -120,14 +120,34 @@ namespace SmithForge.Features.ChatOverlay
 
         private void OnChaterUpdated(Chater updatedChater)
         {
-            Application.Current.Dispatcher.Invoke(() =>
+            if (!Application.Current.Dispatcher.CheckAccess())
             {
-                foreach (var msg in DisplayMessages.Where(m => m.User?.Id == updatedChater.Id))
+                Application.Current.Dispatcher.Invoke(() => OnChaterUpdated(updatedChater));
+                return;
+            }
+
+            try
+            {
+                var messagesToUpdate = DisplayMessages.Where(m => m.User?.Id == updatedChater.Id).ToList();
+
+                foreach (var msg in messagesToUpdate)
                 {
                     msg.User = updatedChater;
                     msg.UpdateMessageCount();
+
+                    // ✅ Принудительно обновляем аватарку (вызываем метод внутри DisplayMessageViewModel)
+                    msg.RefreshAvatar();
                 }
-            });
+
+                if (messagesToUpdate.Any())
+                {
+                    System.Diagnostics.Debug.WriteLine($"[ChatOverlay] Обновлено {messagesToUpdate.Count} сообщений для {updatedChater.EffectiveName}");
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[ChatOverlay] Ошибка обновления: {ex.Message}");
+            }
         }
 
         public void ClearMessages()

@@ -75,18 +75,29 @@ namespace SmithForge.Main.Models
         private string GetAvatarPath()
         {
             string basePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "SF_Data", "Assets", "Avatars");
+            string[] extensions = { ".png", ".jpg", ".jpeg", ".gif" };
 
             // 1. Custom
-            string customPath = Path.Combine(basePath, "custom", $"{Id}.png");
-            Debug.WriteLine($"[Chater] Проверка custom: {customPath}, exists={File.Exists(customPath)}");
-            if (File.Exists(customPath))
-                return customPath;
+            foreach (var ext in extensions)
+            {
+                string customPath = Path.Combine(basePath, "custom", $"{Id}{ext}");
+                if (File.Exists(customPath))
+                {
+                    Debug.WriteLine($"[Chater] Найдена custom аватарка: {customPath}");
+                    return customPath;
+                }
+            }
 
             // 2. Platform
-            string platformPath = Path.Combine(basePath, "platform", $"{Id}.png");
-            Debug.WriteLine($"[Chater] Проверка platform: {platformPath}, exists={File.Exists(platformPath)}");
-            if (File.Exists(platformPath))
-                return platformPath;
+            foreach (var ext in extensions)
+            {
+                string platformPath = Path.Combine(basePath, "platform", $"{Id}{ext}");
+                if (File.Exists(platformPath))
+                {
+                    Debug.WriteLine($"[Chater] Найдена platform аватарка: {platformPath}");
+                    return platformPath;
+                }
+            }
 
             // 3. Default по рангу
             string rankPath = Path.Combine(basePath, "default", $"rank{Rank}.png");
