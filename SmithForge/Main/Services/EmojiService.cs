@@ -158,8 +158,9 @@ namespace SmithForge.Main.Services
                     }
                 }
 
+                // ✅ ИСПРАВЛЕНО: фильтруем null значения
                 var dynamicCodes = _emojiMap.Values
-                    .Where(e => e.SourceName == "YouTube")
+                    .Where(e => e != null && e.SourceName == "YouTube")  // ← Добавлена проверка на null
                     .Select(e => Regex.Escape(e.Code));
 
                 patterns.AddRange(dynamicCodes);

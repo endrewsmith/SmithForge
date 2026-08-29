@@ -24,15 +24,165 @@ namespace SmithForge.Main.Services
         private readonly Dictionary<int, string> _rankTemplates = new();
 
         public event EventHandler<DisplayMessageViewModel>? MessageAdded;
+        public event EventHandler<string> RawSsePayloadReady; // Событие для отправки готового JSON в стрим
 
+        public static WebServerService? Instance { get; private set; }
         public WebServerService(int port = 10881)
         {
             _port = port;
+            Instance = this;
             _baseDirectory = Path.Combine(
                 AppDomain.CurrentDomain.BaseDirectory,
                 "SF_Data", "WebOverlay");
         }
+        /// <summary>
+        /// Отправить обновление чаттера в веб-оверлей
+        /// </summary>
+        public void SendChaterUpdate(Chater chater, DisplayMessageViewModel msgVm)
+        {
+            try
+            {
+                if (chater == null) return;
 
+                // ✅ Проверяем, что аватарка существует
+                if (string.IsNullOrEmpty(msgVm.AvatarPath) || !File.Exists(msgVm.AvatarPath))
+                {
+                    Debug.WriteLine($"[WebServer] ⚠️ Аватарка не найдена для {chater.EffectiveName}");
+                    return;
+                }
+
+                Debug.WriteLine($"[WebServer] SendChaterUpdate вызван для {chater.EffectiveName}");
+                Debug.WriteLine($"[WebServer] AvatarPath: {msgVm.AvatarPath}");
+
+                // ✅ Отправляем через событие ТОЛЬКО если есть текст сообщения
+                // Если это обновление аватарки (пустое сообщение) - пропускаем
+                if (!string.IsNullOrEmpty(msgVm.MessageText))
+                {
+                    MessageAdded?.Invoke(this, msgVm);
+                    Debug.WriteLine($"[WebServer] ✅ Отправлено обновление для {chater.EffectiveName}");
+                }
+                else
+                {
+                    // ✅ Для обновления аватарки отправляем специальное SSE-событие
+                    SendAvatarUpdateOnly(chater);
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[WebServer] Ошибка в SendChaterUpdate: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// Отправить только обновление аватарки (без создания сообщения)
+        /// </summary>
+        public void SendAvatarUpdateOnly(Chater chater)
+        {
+            if (chater == null) return;
+
+            try
+            {
+                string avatarPath = chater.FullAvatarPath;
+                if (string.IsNullOrEmpty(avatarPath) || !File.Exists(avatarPath))
+                {
+                    Debug.WriteLine($"[WebServer] ⚠️ Аватарка не найдена для {chater.EffectiveName}");
+                    return;
+                }
+
+                Debug.WriteLine($"[WebServer] Отправка обновления аватарки для {chater.EffectiveName}");
+
+                // Получаем CSS асинхронно или из кэша (если переписали по прошлым советам)
+                // Так как метод синхронный, используем .GetAwaiter().GetResult() для Task-метода
+                var rankCss = GetRankCssContent(chater.Rank).GetAwaiter().GetResult();
+
+                var updateData = new
+                {
+                    type = "avatar_update", // Фронтенд поймет, что это НЕ сообщение
+                    userId = chater.Id,
+                    displayName = chater.EffectiveName,
+                    messageText = "", // Текста нет
+                    avatarPath = avatarPath,
+                    userRank = chater.Rank,
+                    rankDisplay = GetRankDisplay(chater.Rank),
+                    rankClass = GetRankClass(chater.Rank),
+                    rankCss = rankCss,
+                    rankTemplate = GetRankTemplate(chater.Rank),
+                    karmaKey = chater.KarmaKeyDisplay,
+                    karma = chater.KarmaDisplay,
+                    messageCount = chater.MessageCount,
+                    timestamp = DateTime.Now.ToString("HH:mm:ss")
+                };
+
+                var json = System.Text.Json.JsonSerializer.Serialize(updateData);
+                var data = $"data: {json}\n\n";
+
+                // ✅ Вместо MessageAdded вызываем специализированное событие со строкой данных
+                RawSsePayloadReady?.Invoke(this, data);
+
+                Debug.WriteLine($"[WebServer] ✅ Отправлено обновление аватарки для {chater.EffectiveName}");
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[WebServer] Ошибка отправки обновления аватарки: {ex.Message}");
+            }
+        }
+
+
+        /// <summary>
+        /// Отправить обновление аватарки в веб-оверлей
+        /// </summary>
+        /// <summary>
+        /// Отправить обновление аватарки в веб-оверлей
+        /// </summary>
+        public void SendAvatarUpdate(Chater chater, DisplayMessageViewModel msgVm)
+        {
+            if (chater == null) return;
+
+            try
+            {
+                Debug.WriteLine($"[WebServer] Отправка обновления аватарки для {chater.EffectiveName}");
+
+                // ✅ Проверяем, что аватарка существует
+                if (string.IsNullOrEmpty(msgVm.AvatarPath) || !File.Exists(msgVm.AvatarPath))
+                {
+                    Debug.WriteLine($"[WebServer] ⚠️ Аватарка не найдена: {msgVm.AvatarPath}");
+                    return;
+                }
+
+                // ✅ НЕ вызываем MessageAdded для пустых сообщений
+                // Вместо этого отправляем SSE событие напрямую через MessageAdded с типом avatar_update
+                // Но для этого нужно, чтобы в JavaScript обрабатывался этот тип
+
+                // ✅ Отправляем через SSE напрямую, используя существующий механизм
+                // Создаём сообщение с текстом-маркером, который JavaScript обработает как обновление
+                var tempMsg = new DisplayMessageViewModel(chater, new CommonMessage
+                {
+                    Message = "🔄",  // ← Специальный маркер для обновления
+                    Type = "avatar_update",
+                    MessageNumber = 0
+                });
+                tempMsg.RefreshAvatar();
+
+                // ✅ Теперь добавляем в историю и отправляем
+                // Добавляем с маркером, но потом JavaScript скроет его
+                lock (_lockObject)
+                {
+                    _messages.Add(tempMsg);
+                    if (_messages.Count > 100)
+                    {
+                        _messages.RemoveAt(0);
+                    }
+                }
+
+                MessageAdded?.Invoke(this, tempMsg);
+
+                Debug.WriteLine($"[WebServer] ✅ Отправлено обновление аватарки для {chater.EffectiveName}");
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[WebServer] Ошибка отправки обновления аватарки: {ex.Message}");
+            }
+        }
         public async Task StartAsync()
         {
             if (_isRunning) return;
@@ -258,20 +408,32 @@ namespace SmithForge.Main.Services
             try
             {
                 var fileName = Path.GetFileName(context.Request.Url?.AbsolutePath);
-                var code = $"[{fileName}]";
 
-                var emojiInfo = EmojiService.GetEmojiInfo(code);
-                if (emojiInfo == null || string.IsNullOrEmpty(emojiInfo.ImagePath) || !File.Exists(emojiInfo.ImagePath))
+                // Проверяем несколько папок
+                string[] searchPaths = new[]
                 {
-                    context.Response.StatusCode = 404;
-                    context.Response.Close();
-                    return;
-                }
+            Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "SF_Data", "Assets", "Emojis", "YouTube", "Images", fileName),
+            Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "SF_Data", "Assets", "Emojis", "Twitch", "Images", fileName),
+            Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "SF_Data", "Assets", "Emojis", fileName),
+            Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Avatars", "Emojis", fileName),
+            Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Emojis", fileName)
+        };
 
-                var bytes = await File.ReadAllBytesAsync(emojiInfo.ImagePath);
-                context.Response.ContentType = "image/png";
-                context.Response.ContentLength64 = bytes.Length;
-                await context.Response.OutputStream.WriteAsync(bytes);
+                string emojiPath = searchPaths.FirstOrDefault(File.Exists);
+
+                if (emojiPath != null)
+                {
+                    var bytes = await File.ReadAllBytesAsync(emojiPath);
+                    context.Response.ContentType = "image/png";
+                    context.Response.ContentLength64 = bytes.Length;
+                    await context.Response.OutputStream.WriteAsync(bytes);
+                    Debug.WriteLine($"[WebServer] ✅ Эмодзи отправлен: {fileName}");
+                }
+                else
+                {
+                    Debug.WriteLine($"[WebServer] ❌ Эмодзи не найден: {fileName}");
+                    context.Response.StatusCode = 404;
+                }
                 context.Response.Close();
             }
             catch (Exception ex)
@@ -362,7 +524,71 @@ namespace SmithForge.Main.Services
                 response.Close();
             }
         }
+        private string GetFormattedMessageForWeb(string text)
+        {
+            if (string.IsNullOrEmpty(text))
+                return string.Empty;
 
+            // ✅ 1. YouTube эмодзи :code:
+            var emojiRegex = new Regex(@":([a-zA-Z0-9_-]+):");
+            text = emojiRegex.Replace(text, match =>
+            {
+                string emojiCode = match.Groups[1].Value;
+                string fullCode = $":{emojiCode}:";
+
+                // Проверяем через EmojiService
+                if (EmojiService.EmojiExists(fullCode))
+                {
+                    var emojiInfo = EmojiService.GetEmojiInfo(fullCode);
+                    if (emojiInfo != null && !string.IsNullOrEmpty(emojiInfo.ImagePath))
+                    {
+                        return $"<img src='/emoji/{emojiCode}.png' class='emoji youtube-emoji' alt='{emojiCode}' title='{emojiCode}' />";
+                    }
+                }
+
+                // Проверяем файл напрямую
+                string emojiPath = Path.Combine(
+                    AppDomain.CurrentDomain.BaseDirectory,
+                    "SF_Data", "Assets", "Emojis", "YouTube", "Images",
+                    $"{emojiCode}.png");
+
+                if (File.Exists(emojiPath))
+                {
+                    return $"<img src='/emoji/{emojiCode}.png' class='emoji youtube-emoji' alt='{emojiCode}' title='{emojiCode}' />";
+                }
+
+                return match.Value;
+            });
+
+            // ✅ 2. Twitch эмодзи [code]
+            var twitchRegex = new Regex(@"\[([^\]]+)\]");
+            text = twitchRegex.Replace(text, match =>
+            {
+                string emojiCode = match.Groups[1].Value;
+                string fullCode = $"[{emojiCode}]";
+
+                if (EmojiService.EmojiExists(fullCode))
+                {
+                    var emojiInfo = EmojiService.GetEmojiInfo(fullCode);
+                    if (emojiInfo != null && !string.IsNullOrEmpty(emojiInfo.ImagePath))
+                    {
+                        return $"<img src='/emoji/{emojiCode}.png' class='emoji twitch-emoji' alt='{emojiCode}' title='{emojiCode}' />";
+                    }
+                }
+
+                return match.Value;
+            });
+
+            // ✅ 3. HTML теги
+            text = Regex.Replace(text, @"\[b\](.*?)\[/b\]", "<b>$1</b>");
+            text = Regex.Replace(text, @"\[i\](.*?)\[/i\]", "<i>$1</i>");
+            text = Regex.Replace(text, @"\[color=(.*?)\](.*?)\[/color\]", "<span style='color:$1'>$2</span>");
+
+            // ✅ 4. Заменяем переносы строк
+            text = text.Replace("\n", "<br>");
+
+            return text;
+        }
         private async Task HandleStreamRequestAsync(HttpListenerContext context)
         {
             Debug.WriteLine("[WebServer] HandleStreamRequestAsync НАЧАЛО!");
@@ -392,15 +618,19 @@ namespace SmithForge.Main.Services
                 {
                     try
                     {
+                        // ✅ Конвертируем эмодзи в HTML
+                        string formattedText = GetFormattedMessageForWeb(msg.MessageText);
+
                         var rankTemplate = GetRankTemplate(msg.UserRank);
                         var rankCss = await GetRankCssContent(msg.UserRank);
 
                         var json = JsonSerializer.Serialize(new
                         {
+                            type = "chat_message",
                             id = msg.Id,
                             displayName = msg.DisplayName,
-                            messageText = msg.MessageText,
-                            formattedMessage = GetFormattedMessage(msg),
+                            messageText = formattedText,
+                            formattedMessage = formattedText,
                             userRank = msg.UserRank,
                             rankDisplay = GetRankDisplay(msg.UserRank),
                             rankClass = GetRankClass(msg.UserRank),
@@ -408,16 +638,12 @@ namespace SmithForge.Main.Services
                             rankTemplate = rankTemplate,
                             avatarPath = msg.AvatarPath,
                             timestamp = DateTime.Now.ToString("HH:mm:ss"),
-
-                            // Данные для кастомных шаблонов (Ранг 1+)
                             karmaKey = msg.User?.KarmaKeyDisplay ?? "",
                             karma = msg.User?.KarmaDisplay ?? "",
                             messageNumber = msg.MessageNumber,
                             messageCount = msg.MessageCount,
                             likes = msg.Likes,
                             dislikes = msg.Dislikes,
-
-                            // Передаем платформу в нижнем регистре для CSS-триггеров (tw, twitch, yt, youtube, gg)
                             platform = msg.Type?.ToLower() ?? "twitch"
                         });
 
@@ -425,8 +651,6 @@ namespace SmithForge.Main.Services
                         var buffer = Encoding.UTF8.GetBytes(data);
                         await response.OutputStream.WriteAsync(buffer);
                         await response.OutputStream.FlushAsync();
-
-                        Debug.WriteLine($"[WebServer] Отправлено сообщение: {msg.DisplayName}: {msg.MessageText}");
                     }
                     catch (Exception ex)
                     {
@@ -434,23 +658,29 @@ namespace SmithForge.Main.Services
                     }
                 }
 
-                // БЕЗОПАСНЫЙ обработчик новых сообщений без async void
-                EventHandler<DisplayMessageViewModel> handler = (s, msg) =>
+                // ✅ Обработчик для обычных сообщений
+                EventHandler<DisplayMessageViewModel> messageHandler = (s, msg) =>
                 {
-                    // Переносим выполнение в фоновый поток пула, чтобы избежать Deadlock в основном приложении
+                    if (string.IsNullOrEmpty(msg.MessageText))
+                        return;
+
                     Task.Run(async () =>
                     {
                         try
                         {
+                            // ✅ Конвертируем эмодзи в HTML
+                            string formattedText = GetFormattedMessageForWeb(msg.MessageText);
+
                             var rankTemplate = GetRankTemplate(msg.UserRank);
                             var rankCss = await GetRankCssContent(msg.UserRank);
 
                             var json = JsonSerializer.Serialize(new
                             {
+                                type = "chat_message",
                                 id = msg.Id,
                                 displayName = msg.DisplayName,
-                                messageText = msg.MessageText,
-                                formattedMessage = GetFormattedMessage(msg),
+                                messageText = formattedText,
+                                formattedMessage = formattedText,
                                 userRank = msg.UserRank,
                                 rankDisplay = GetRankDisplay(msg.UserRank),
                                 rankClass = GetRankClass(msg.UserRank),
@@ -458,47 +688,68 @@ namespace SmithForge.Main.Services
                                 rankTemplate = rankTemplate,
                                 avatarPath = msg.AvatarPath,
                                 timestamp = DateTime.Now.ToString("HH:mm:ss"),
-
-                                // Добавляем эти поля и сюда, чтобы новые сообщения отображали карму
                                 karmaKey = msg.User?.KarmaKeyDisplay ?? "",
                                 karma = msg.User?.KarmaDisplay ?? "",
                                 messageNumber = msg.MessageNumber,
                                 messageCount = msg.MessageCount,
                                 likes = msg.Likes,
                                 dislikes = msg.Dislikes,
-
                                 platform = msg.Type?.ToLower() ?? "twitch"
                             });
 
                             var data = $"data: {json}\n\n";
                             var buffer = Encoding.UTF8.GetBytes(data);
 
-                            // Синхронизируем доступ к потоку записи
                             lock (response.OutputStream)
                             {
                                 response.OutputStream.Write(buffer);
                                 response.OutputStream.Flush();
                             }
 
-                            Debug.WriteLine($"[WebServer] SSE отправлено новое сообщение: {msg.DisplayName}: {msg.MessageText}");
+                            Debug.WriteLine($"[WebServer] SSE отправлено сообщение: {msg.DisplayName}: {msg.MessageText}");
                         }
                         catch (Exception ex)
                         {
-                            Debug.WriteLine($"[WebServer] Клиент отключился при попытке отправки: {ex.Message}");
+                            Debug.WriteLine($"[WebServer] Ошибка отправки: {ex.Message}");
                             connectionTaskSource.TrySetResult(true);
                         }
                     });
                 };
 
-                MessageAdded += handler;
+                // ✅ Обработчик для обновлений аватарки
+                EventHandler<string> avatarUpdateHandler = (s, rawData) =>
+                {
+                    Task.Run(async () =>
+                    {
+                        try
+                        {
+                            var buffer = Encoding.UTF8.GetBytes(rawData);
 
-                // Подписываемся на отмену через токен сервера
+                            lock (response.OutputStream)
+                            {
+                                response.OutputStream.Write(buffer);
+                                response.OutputStream.Flush();
+                            }
+
+                            Debug.WriteLine($"[WebServer] SSE отправлено обновление аватарки");
+                        }
+                        catch (Exception ex)
+                        {
+                            Debug.WriteLine($"[WebServer] Ошибка отправки обновления аватарки: {ex.Message}");
+                            connectionTaskSource.TrySetResult(true);
+                        }
+                    });
+                };
+
+                MessageAdded += messageHandler;
+                RawSsePayloadReady += avatarUpdateHandler;
+
                 using var registration = _cts?.Token.Register(() => connectionTaskSource.TrySetResult(true));
 
-                // Безопасно ждём отключения клиента, не блокируя потоки
                 await connectionTaskSource.Task;
 
-                MessageAdded -= handler;
+                MessageAdded -= messageHandler;
+                RawSsePayloadReady -= avatarUpdateHandler;
             }
             catch (Exception ex)
             {
@@ -510,7 +761,6 @@ namespace SmithForge.Main.Services
                 Debug.WriteLine("[WebServer] HandleStreamRequestAsync ЗАВЕРШЕН");
             }
         }
-
 
         private async Task HandleApiRequestAsync(HttpListenerContext context)
         {
@@ -549,6 +799,13 @@ namespace SmithForge.Main.Services
             if (string.IsNullOrEmpty(msg.DisplayName) || msg.DisplayName == "Unknown")
             {
                 Debug.WriteLine($"[WebServer] ⏭ Пропущено Unknown");
+                return;
+            }
+
+            // ✅ ЕСЛИ ТЕКСТ ПУСТОЙ - ПРОСТО ВЫХОДИМ, НЕ ВЫЗЫВАЕМ MessageAdded
+            if (string.IsNullOrEmpty(msg.MessageText))
+            {
+                Debug.WriteLine($"[WebServer] ⏭ Пропущено сообщение с пустым текстом");
                 return;
             }
 
@@ -716,25 +973,67 @@ es.onmessage=e=>{
                 return string.Empty;
 
             var text = msg.MessageText;
-            var matches = Regex.Matches(text, @"\[([^\]]+)\]");
 
-            if (matches.Count == 0)
-                return text;
-
-            var result = text;
-            foreach (Match match in matches)
+            // ✅ 1. Сначала конвертируем YouTube эмодзи :code:
+            var emojiRegex = new Regex(@":([a-zA-Z0-9_-]+):");
+            text = emojiRegex.Replace(text, match =>
             {
-                var code = match.Groups[1].Value;
-                var emojiInfo = EmojiService.GetEmojiInfo($"[{code}]");
+                string emojiCode = match.Groups[1].Value;
+                string fullCode = $":{emojiCode}:";
 
-                if (emojiInfo != null && !string.IsNullOrEmpty(emojiInfo.ImagePath))
+                // Проверяем существование эмодзи через EmojiService
+                if (EmojiService.EmojiExists(fullCode))
                 {
-                    var imgTag = $"<img src='/emoji/{code}' class='emoji' alt='{code}' title='{code}'/>";
-                    result = result.Replace(match.Value, imgTag);
+                    var emojiInfo = EmojiService.GetEmojiInfo(fullCode);
+                    if (emojiInfo != null && !string.IsNullOrEmpty(emojiInfo.ImagePath))
+                    {
+                        // Возвращаем HTML для веба
+                        return $"<img src='/emoji/{emojiCode}.png' class='emoji youtube-emoji' alt='{emojiCode}' title='{emojiCode}' />";
+                    }
                 }
-            }
 
-            return result;
+                // Проверяем в папке YouTube эмодзи напрямую
+                string emojiPath = Path.Combine(
+                    AppDomain.CurrentDomain.BaseDirectory,
+                    "SF_Data", "Assets", "Emojis", "YouTube", "Images",
+                    $"{emojiCode}.png");
+
+                if (File.Exists(emojiPath))
+                {
+                    return $"<img src='/emoji/{emojiCode}.png' class='emoji youtube-emoji' alt='{emojiCode}' title='{emojiCode}' />";
+                }
+
+                return match.Value;
+            });
+
+            // ✅ 2. Конвертируем Twitch эмодзи [code]
+            var twitchRegex = new Regex(@"\[([^\]]+)\]");
+            text = twitchRegex.Replace(text, match =>
+            {
+                string emojiCode = match.Groups[1].Value;
+                string fullCode = $"[{emojiCode}]";
+
+                if (EmojiService.EmojiExists(fullCode))
+                {
+                    var emojiInfo = EmojiService.GetEmojiInfo(fullCode);
+                    if (emojiInfo != null && !string.IsNullOrEmpty(emojiInfo.ImagePath))
+                    {
+                        return $"<img src='/emoji/{emojiCode}.png' class='emoji twitch-emoji' alt='{emojiCode}' title='{emojiCode}' />";
+                    }
+                }
+
+                return match.Value;
+            });
+
+            // ✅ 3. Обрабатываем HTML теги
+            text = Regex.Replace(text, @"\[b\](.*?)\[/b\]", "<b>$1</b>");
+            text = Regex.Replace(text, @"\[i\](.*?)\[/i\]", "<i>$1</i>");
+            text = Regex.Replace(text, @"\[color=(.*?)\](.*?)\[/color\]", "<span style='color:$1'>$2</span>");
+
+            // ✅ 4. Заменяем переносы строк
+            text = text.Replace("\n", "<br>");
+
+            return text;
         }
 
         private string GetRankDisplay(int rank)

@@ -25,6 +25,7 @@ namespace SmithForge.Main.Services.ChatCommands
 
             string platform = null;
             string targetUsername = null;
+            bool forceUpdate = false;
 
             // Проверяем, есть ли аргументы
             if (info.Arguments.Count > 0)
@@ -32,6 +33,14 @@ namespace SmithForge.Main.Services.ChatCommands
                 // Склеиваем все аргументы обратно
                 string fullArg = string.Join(":", info.Arguments);
                 Debug.WriteLine($"[AvatarCommand] Полный аргумент: {fullArg}");
+
+                // ✅ Проверяем флаг принудительного обновления
+                if (fullArg.EndsWith("!"))
+                {
+                    forceUpdate = true;
+                    fullArg = fullArg.TrimEnd('!');
+                    Debug.WriteLine($"[AvatarCommand] Принудительное обновление!");
+                }
 
                 // Формат: "yt:UC..." или "yt:@username"
                 if (fullArg.Contains(':'))
@@ -64,9 +73,17 @@ namespace SmithForge.Main.Services.ChatCommands
 
                 if (account != null)
                 {
-                    // ✅ Извлекаем ID из ExternalId (формат: "platform:id")
-                    targetUsername = ExtractIdFromExternalId(account.ExternalId);
-                    Debug.WriteLine($"[AvatarCommand] Найден ID канала: {targetUsername} из ExternalId: {account.ExternalId}");
+                    // ✅ Для Twitch используем OriginalName (логин), для YouTube/GoodGame - ID канала
+                    if (platform == "twitch" || platform == "tw")
+                    {
+                        targetUsername = account.OriginalName;
+                        Debug.WriteLine($"[AvatarCommand] Найден логин Twitch: {targetUsername} из аккаунта {account.ExternalId}");
+                    }
+                    else
+                    {
+                        targetUsername = ExtractIdFromExternalId(account.ExternalId);
+                        Debug.WriteLine($"[AvatarCommand] Найден ID канала: {targetUsername} из ExternalId: {account.ExternalId}");
+                    }
                 }
                 else
                 {
@@ -85,28 +102,38 @@ namespace SmithForge.Main.Services.ChatCommands
                 return;
             }
 
-            Debug.WriteLine($"[AvatarCommand] Итог - платформа: {platform}, пользователь: {targetUsername}");
+            Debug.WriteLine($"[AvatarCommand] Итог - платформа: {platform}, пользователь: {targetUsername}, forceUpdate: {forceUpdate}");
 
             try
             {
                 if (platform == "youtube" || platform == "yt")
                 {
                     // ✅ Передаем Channel ID (UC...)
-                    await LoadYouTubeAvatar(targetUsername, msg, chater);
+                    await LoadYouTubeAvatar(targetUsername, msg, chater, forceUpdate);
                 }
                 else if (platform == "twitch" || platform == "tw")
                 {
-                    await LoadTwitchAvatar(targetUsername, msg, chater);
+                    await LoadTwitchAvatar(targetUsername, msg, chater, forceUpdate);
+                }
+                else if (platform == "goodgame" || platform == "gg")
+                {
+                    await LoadGoodGameAvatar(targetUsername, msg, chater, forceUpdate);
                 }
                 else
                 {
                     Debug.WriteLine($"[AvatarCommand] Платформа {platform} не поддерживается");
+                    msg.Message = $"❌ Платформа {platform} не поддерживается";
+                    msg.IsProcessedByCommand = true;
+                    msg.ShouldChargeForCommand = false;
                 }
             }
             catch (Exception ex)
             {
                 Debug.WriteLine($"[AvatarCommand] ОШИБКА: {ex.Message}");
                 Debug.WriteLine($"[AvatarCommand] Стек: {ex.StackTrace}");
+                msg.Message = $"❌ Ошибка: {ex.Message}";
+                msg.IsProcessedByCommand = true;
+                msg.ShouldChargeForCommand = false;
             }
         }
 
@@ -136,9 +163,18 @@ namespace SmithForge.Main.Services.ChatCommands
             };
         }
 
-        private async Task LoadYouTubeAvatar(string channelId, CommonMessage msg, Chater caller)
+        private async Task LoadYouTubeAvatar(string channelId, CommonMessage msg, Chater caller, bool forceUpdate = false)
         {
             Debug.WriteLine($"[AvatarCommand] Загрузка аватарки YouTube для канала: {channelId}");
+
+            if (string.IsNullOrEmpty(channelId))
+            {
+                Debug.WriteLine("[AvatarCommand] channelId пустой");
+                msg.Message = "❌ Не указан ID канала YouTube";
+                msg.IsProcessedByCommand = true;
+                msg.ShouldChargeForCommand = false;
+                return;
+            }
 
             // ✅ ИСПРАВЛЕНО: используем GetAvatarUrlByChannelId
             string avatarUrl = await YouTubeAvatarService.GetAvatarUrlByChannelId(channelId);
@@ -152,7 +188,8 @@ namespace SmithForge.Main.Services.ChatCommands
                 return;
             }
 
-            string savedAvatarPath = await YouTubeAvatarService.DownloadAvatarAsync(caller.Id, avatarUrl);
+            // ✅ Передаём forceUpdate
+            string savedAvatarPath = await YouTubeAvatarService.DownloadAvatarAsync(caller.Id, avatarUrl, forceUpdate);
             if (string.IsNullOrEmpty(savedAvatarPath))
             {
                 Debug.WriteLine($"[AvatarCommand] Не удалось скачать аватарку");
@@ -165,40 +202,54 @@ namespace SmithForge.Main.Services.ChatCommands
             Debug.WriteLine($"[AvatarCommand] Аватар сохранён: {savedAvatarPath}");
 
             // Обновляем данные пользователя
-            caller.AvatarFileName = $"{caller.Id}.png";
+            caller.AvatarFileName = Path.GetFileName(savedAvatarPath);
             ChaterStorage.AddOrUpdate(caller);
             caller.RefreshAvatar();
 
-            msg.IsProcessedByCommand = true;
-            msg.ShouldChargeForCommand = true;
-            msg.Message = "✅ Аватарка успешно загружена!";
+            //msg.IsProcessedByCommand = true;
+            //msg.ShouldChargeForCommand = true;
+            //msg.Message = "✅ Аватарка YouTube успешно загружена!";
             Debug.WriteLine($"[AvatarCommand] YouTube аватар УСПЕШНО ЗАГРУЖЕН для {caller.Login}");
         }
 
-        private async Task LoadTwitchAvatar(string username, CommonMessage msg, Chater caller)
+        private async Task LoadTwitchAvatar(string username, CommonMessage msg, Chater caller, bool forceUpdate = false)
         {
             Debug.WriteLine($"[AvatarCommand] Начинаем загрузку аватарки Twitch для {username}");
+
+            if (string.IsNullOrEmpty(username))
+            {
+                Debug.WriteLine("[AvatarCommand] username пустой");
+                msg.Message = "❌ Не указан логин пользователя Twitch";
+                msg.IsProcessedByCommand = true;
+                msg.ShouldChargeForCommand = false;
+                return;
+            }
 
             string avatarUrl = await TwitchAvatarService.GetAvatarUrlByLogin(username);
             if (string.IsNullOrEmpty(avatarUrl))
             {
                 Debug.WriteLine($"[AvatarCommand] Не удалось получить URL аватарки Twitch");
+                msg.Message = $"❌ Не найдена аватарка для @{username}";
+                msg.IsProcessedByCommand = true;
+                msg.ShouldChargeForCommand = false;
                 return;
             }
 
-            // ✅ DownloadAvatarAsync возвращает путь к сохранённому файлу
-            string savedAvatarPath = await TwitchAvatarService.DownloadAvatarAsync(caller.Id, avatarUrl);
+            // ✅ Передаём forceUpdate
+            string savedAvatarPath = await TwitchAvatarService.DownloadAvatarAsync(caller.Id, avatarUrl, forceUpdate);
             if (string.IsNullOrEmpty(savedAvatarPath))
             {
                 Debug.WriteLine($"[AvatarCommand] Не удалось скачать аватарку Twitch");
+                msg.Message = "❌ Не удалось скачать аватарку";
+                msg.IsProcessedByCommand = true;
+                msg.ShouldChargeForCommand = false;
                 return;
             }
 
-            // ✅ Файл уже сохранён в нужное место, не нужно его копировать!
             Debug.WriteLine($"[AvatarCommand] Аватар Twitch сохранён: {savedAvatarPath}");
 
             // Обновляем данные пользователя
-            caller.AvatarFileName = $"{caller.Id}.png";
+            caller.AvatarFileName = Path.GetFileName(savedAvatarPath);
 
             // Добавляем Twitch аккаунт если его нет
             string externalId = $"twitch:{username}";
@@ -217,9 +268,120 @@ namespace SmithForge.Main.Services.ChatCommands
             ChaterStorage.AddOrUpdate(caller);
             caller.RefreshAvatar();
 
-            msg.IsProcessedByCommand = true;
+            //msg.IsProcessedByCommand = true;
+            //msg.ShouldChargeForCommand = true;
+            //msg.Message = $"✅ Аватарка Twitch для @{username} успешно загружена!";
             Debug.WriteLine($"[AvatarCommand] Twitch аватар УСПЕШНО ЗАГРУЖЕН для {caller.Login}");
         }
+
+        // 1. Меняем дефолтное значение на true, раз метод ОБЯЗАН всегда обновлять
+        private async Task LoadGoodGameAvatar(string channelId, CommonMessage msg, Chater caller, bool forceUpdate = true)
+        {
+            Debug.WriteLine($"[AvatarCommand] Загрузка аватарки GoodGame для канала: {channelId} (Force: {forceUpdate})");
+
+            try
+            {
+                string channelName = null;
+                var account = caller.Accounts.FirstOrDefault(a =>
+                    a.Platform.Equals("goodgame", StringComparison.OrdinalIgnoreCase));
+
+                if (account != null && !string.IsNullOrEmpty(account.OriginalName))
+                {
+                    channelName = account.OriginalName;
+                }
+
+                if (string.IsNullOrEmpty(channelName) && !long.TryParse(channelId, out _))
+                {
+                    channelName = channelId;
+                }
+
+                // 🌟 ИСПРАВЛЕНИЕ 1: Передаем forceUpdate в сервис получения URL, 
+                // чтобы он сбросил свой внутренний кэш (если он там есть) и сходил в API GoodGame
+                string avatarUrl = await GoodGameAvatarService.GetAvatarUrlByChannelId(channelId, channelName);
+
+                if (string.IsNullOrEmpty(avatarUrl))
+                {
+                    Debug.WriteLine($"[AvatarCommand] Не удалось получить URL аватарки GoodGame для {channelId}");
+                    msg.Message = $"❌ Не найдена аватарка для канала {channelId}";
+                    msg.IsProcessedByCommand = true;
+                    msg.ShouldChargeForCommand = false;
+                    return;
+                }
+
+                // 🌟 ИСПРАВЛЕНИЕ 2: Перед скачиванием, если forceUpdate == true, 
+                // можно принудительно удалить старый файл аватарки с диска, чтобы старый кэш не мешал
+                if (forceUpdate && !string.IsNullOrEmpty(caller.AvatarFileName))
+                {
+                    var oldPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "SF_Data", "Assets", "Avatars", "custom", caller.AvatarFileName);
+                    if (!File.Exists(oldPath))
+                    {
+                        oldPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "SF_Data", "Assets", "Avatars", "platform", caller.AvatarFileName);
+                    }
+
+                    if (File.Exists(oldPath))
+                    {
+                        try { File.Delete(oldPath); Debug.WriteLine($"[AvatarCommand] Старый файл аватарки удален: {oldPath}"); } catch { }
+                    }
+                }
+
+                // Скачиваем заново
+                string savedPath = await GoodGameAvatarService.DownloadAvatarAsync(caller.Id, avatarUrl, forceUpdate);
+                if (string.IsNullOrEmpty(savedPath))
+                {
+                    Debug.WriteLine("[AvatarCommand] Не удалось скачать аватарку GoodGame");
+                    msg.Message = "❌ Не удалось скачать аватарку";
+                    msg.IsProcessedByCommand = true;
+                    msg.ShouldChargeForCommand = false;
+                    return;
+                }
+
+                Debug.WriteLine($"[AvatarCommand] Аватар GoodGame сохранён: {savedPath}");
+
+                // Обновляем данные пользователя
+                caller.AvatarFileName = Path.GetFileName(savedPath);
+                caller.RefreshAvatar(); // Метод должен пересчитать FullAvatarPath
+
+                // Синхронизируем регистр с тем, как работает ваш ChaterStorage!
+                string externalId = $"goodgame:{channelId}"; // Убрал .ToLower(), если в ChaterStorage вы его тоже убрали
+
+                var existingAccount = caller.Accounts.FirstOrDefault(a =>
+                    a.ExternalId.Equals(externalId, StringComparison.OrdinalIgnoreCase));
+
+                if (existingAccount == null)
+                {
+                    caller.Accounts.Add(new ExternalAccount
+                    {
+                        ExternalId = externalId,
+                        Platform = "goodgame",
+                        OriginalName = channelName ?? channelId
+                    });
+                }
+                else if (existingAccount.OriginalName != channelName)
+                {
+                    existingAccount.OriginalName = channelName ?? channelId;
+                }
+
+                // Сохраняем и ОПОВЕЩАЕМ веб-оверлей
+                DatabaseService.SaveChater(caller);
+                ChaterStorage.AddOrUpdate(caller);
+
+                // 🌟 Это вызовет SendAvatarUpdateOnly, который мы настроили в прошлом шаге
+                ChaterStorage.NotifyChaterUpdated(caller);
+
+                msg.IsProcessedByCommand = true;
+                msg.ShouldChargeForCommand = true;
+                msg.Message = $"✅ Аватарка GoodGame для канала {channelName ?? channelId} успешно обновлена!";
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[AvatarCommand] Ошибка загрузки GoodGame аватарки: {ex.Message}");
+                msg.Message = $"❌ Ошибка: {ex.Message}";
+                msg.IsProcessedByCommand = true;
+                msg.ShouldChargeForCommand = false;
+            }
+        }
+
+
         private string GetPlatformFromMessage(CommonMessage msg)
         {
             string type = msg.Type?.ToLower() ?? "";

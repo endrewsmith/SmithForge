@@ -179,32 +179,98 @@ namespace SmithForge.Main.Services
             return null;
         }
 
-        /// <summary>
-        /// Скачать аватарку и сохранить в папку platform
-        /// </summary>
-        public static async Task<string?> DownloadAvatarAsync(string userId, string avatarUrl)
+        public static async Task<string?> DownloadAvatarAsync(string userId, string avatarUrl, bool forceUpdate = false)
         {
             try
             {
-                string avatarPath = Path.Combine(AvatarFolder, $"{userId}.png");
-                Debug.WriteLine($"[YouTubeAvatar] Сохраняем в: {avatarPath}");
+                if (string.IsNullOrEmpty(avatarUrl))
+                    return null;
 
-                using (var client = new HttpClient())
+                string extension = Path.GetExtension(avatarUrl);
+                if (string.IsNullOrEmpty(extension))
+                    extension = ".png";
+
+                string avatarPath = Path.Combine(AvatarFolder, $"{userId}{extension}");
+
+                // ✅ Снимаем ReadOnly перед удалением
+                RemoveReadOnlyAttribute(avatarPath);
+
+                if (forceUpdate && File.Exists(avatarPath))
                 {
-                    client.Timeout = TimeSpan.FromSeconds(30);
-                    client.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0");
-                    client.DefaultRequestHeaders.Add("Referer", "https://www.youtube.com/");
+                    Debug.WriteLine($"[YouTubeAvatar] Принудительное обновление, удаляем старый файл: {avatarPath}");
 
-                    var bytes = await client.GetByteArrayAsync(avatarUrl);
-                    await File.WriteAllBytesAsync(avatarPath, bytes);
-                    Debug.WriteLine($"[YouTubeAvatar] Сохранено, размер: {bytes.Length} байт");
+                    bool deleted = false;
+                    for (int attempt = 0; attempt < 5; attempt++)
+                    {
+                        try
+                        {
+                            File.Delete(avatarPath);
+                            deleted = true;
+                            break;
+                        }
+                        catch (IOException)
+                        {
+                            await Task.Delay(300);
+                        }
+                    }
+
+                    if (!deleted)
+                    {
+                        string timestamp = DateTime.Now.Ticks.ToString();
+                        string newPath = Path.Combine(AvatarFolder, $"{userId}_{timestamp}{extension}");
+                        avatarPath = newPath;
+                    }
+                }
+
+                if (!forceUpdate && File.Exists(avatarPath))
+                {
+                    Debug.WriteLine($"[YouTubeAvatar] Аватар уже существует: {avatarPath}");
                     return avatarPath;
                 }
+
+                Debug.WriteLine($"[YouTubeAvatar] Скачиваем в: {avatarPath}");
+
+                using var client = new HttpClient();
+                client.Timeout = TimeSpan.FromSeconds(30);
+                client.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0");
+                client.DefaultRequestHeaders.Add("Referer", "https://www.youtube.com/");
+
+                var bytes = await client.GetByteArrayAsync(avatarUrl);
+
+                string? directory = Path.GetDirectoryName(avatarPath);
+                if (!string.IsNullOrEmpty(directory) && !Directory.Exists(directory))
+                    Directory.CreateDirectory(directory);
+
+                await File.WriteAllBytesAsync(avatarPath, bytes);
+
+                // ✅ СНИМАЕМ READONLY СРАЗУ ПОСЛЕ СОХРАНЕНИЯ
+                RemoveReadOnlyAttribute(avatarPath);
+
+                Debug.WriteLine($"[YouTubeAvatar] Скачан, размер: {bytes.Length} байт");
+                return avatarPath;
             }
             catch (Exception ex)
             {
                 Debug.WriteLine($"[YouTubeAvatar] Ошибка скачивания: {ex.Message}");
                 return null;
+            }
+        }
+
+        private static void RemoveReadOnlyAttribute(string filePath)
+        {
+            try
+            {
+                if (!File.Exists(filePath)) return;
+                var attributes = File.GetAttributes(filePath);
+                if ((attributes & FileAttributes.ReadOnly) == FileAttributes.ReadOnly)
+                {
+                    File.SetAttributes(filePath, attributes & ~FileAttributes.ReadOnly);
+                    Debug.WriteLine($"[YouTubeAvatar] Снят атрибут ReadOnly: {filePath}");
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[YouTubeAvatar] Ошибка снятия ReadOnly: {ex.Message}");
             }
         }
 
