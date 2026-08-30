@@ -49,6 +49,13 @@ namespace SmithForge.Main.Converters
             if (string.IsNullOrEmpty(text))
                 return new Span();
 
+            // ✅ ВСЁ В UI ПОТОКЕ
+            if (!Application.Current.Dispatcher.CheckAccess())
+            {
+                return Application.Current.Dispatcher.Invoke(() =>
+                    Convert(value, targetType, parameter, culture));
+            }
+
             double emojiSize = EmojiService.GetDefaultEmojiSize();
             if (parameter != null)
                 double.TryParse(parameter.ToString(), out emojiSize);
