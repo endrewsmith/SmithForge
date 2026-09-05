@@ -21,6 +21,8 @@ namespace SmithForge.Main.Models
 
         private List<int> _rankThresholds;
 
+        private int _voiceRate = 3;
+
         public AppSettings()
         {
             CommandShortcuts = new List<ShortcutItem>();
@@ -102,6 +104,19 @@ namespace SmithForge.Main.Models
 
         public int ImportantSoundVolume { get; set; } = 100;
         public int VoiceVolume { get; set; } = 100;
+
+        public int VoiceRate
+        {
+            get => _voiceRate;
+            set
+            {
+                if (_voiceRate != value)
+                {
+                    _voiceRate = Math.Clamp(value, -10, 10);
+                    OnPropertyChanged();
+                }
+            }
+        }
 
         // === Режим воспроизведения важных сообщений ===
         public ImportantPlaybackMode ImportantPlaybackMode { get; set; } = ImportantPlaybackMode.Auto; // ← Ошибка была здесь
