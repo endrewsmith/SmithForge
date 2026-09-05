@@ -231,4 +231,12 @@ public class SettingsService
         _settings.ProgramPath = value;
         ConfigService.Save(_settings);
     }
+
+    public void SetVoiceRate(int value)
+    {
+        _settings.VoiceRate = Math.Clamp(value, -10, 10);
+        ConfigService.Save(_settings);
+        VoiceService.SetVoiceRate(_settings.VoiceRate);
+        Debug.WriteLine($"[Settings] Скорость голоса: {_settings.VoiceRate}");
+    }
 }

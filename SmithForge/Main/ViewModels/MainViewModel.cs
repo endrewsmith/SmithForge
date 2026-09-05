@@ -20,6 +20,7 @@ using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.Linq;
 using System.Net.Http;
+using System.Speech.Synthesis;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
@@ -31,6 +32,8 @@ namespace SmithForge.ViewModels
 {
     public partial class MainViewModel : ObservableObject
     {
+        [ObservableProperty]
+        private int _voiceRate = 3;
 
         // ✅ Интегрированный YouTube-менеджер
         public YouTubeManagerViewModel YouTubeManager { get; } = new();
@@ -290,6 +293,13 @@ namespace SmithForge.ViewModels
             // ✅ Обновляем _chatManager с сервисом
             _chatManager = new ChatManagerViewModel(Chats, _chatConnectionService);
 
+            // ✅ ЗАГРУЖАЕМ СОХРАНЕННУЮ СКОРОСТЬ
+            _voiceRate = Settings.VoiceRate;
+            VoiceService.SetVoiceRate(_voiceRate);
+
+            Debug.WriteLine($"🎙️ [MainViewModel] СТАРТОВАЯ СКОРОСТЬ: {_voiceRate}");
+            Debug.WriteLine($"🎙️ [MainViewModel] VoiceService.GetVoiceRate() = {VoiceService.GetVoiceRate()}");
+
             LoadChats();
         }
 
@@ -337,6 +347,7 @@ namespace SmithForge.ViewModels
                 Debug.WriteLine($"[MainViewModel] Режим принудительно установлен: {mode}");
             }
         }
+
 
         // ============================================================
         // ОБРАБОТКА СООБЩЕНИЙ ИЗ YouTubeManager
@@ -1055,8 +1066,55 @@ namespace SmithForge.ViewModels
                                 MessageBoxButton.OK, MessageBoxImage.Warning);
             }
         }
+
+        [RelayCommand]
+        private void SetVoiceRate(object? parameter)
+        {
+            if (parameter == null) return;
+
+            int value = 3;
+
+            if (parameter is int intValue)
+                value = intValue;
+            else if (parameter is string stringValue && int.TryParse(stringValue, out int parsed))
+                value = parsed;
+            else if (parameter is double doubleValue)
+                value = (int)doubleValue;
+            else
+                return;
+
+            Debug.WriteLine($"🎯 SetVoiceRateCommand ВЫЗВАН! rate={value}");
+
+            // ✅ ВСЕГДА УСТАНАВЛИВАЕМ, ДАЖЕ ЕСЛИ ЗНАЧЕНИЕ ТАКОЕ ЖЕ
+            _voiceRate = Math.Clamp(value, -10, 10);
+            OnPropertyChanged(nameof(VoiceRate)); // Принудительно обновляем UI
+
+            Settings.VoiceRate = _voiceRate;
+            ConfigService.Save(Settings);
+            VoiceService.SetVoiceRate(_voiceRate);
+
+            Debug.WriteLine($"🎙️ [Command] Установлена скорость: {_voiceRate}");
+            Debug.WriteLine($"🎙️ [Command] VoiceService.GetVoiceRate() = {VoiceService.GetVoiceRate()}");
+        }
+
+        partial void OnVoiceRateChanged(int value)
+        {
+            value = Math.Clamp(value, -10, 10);
+
+            Debug.WriteLine($"🎯 OnVoiceRateChanged ВЫЗВАН! value={value}, _voiceRate={_voiceRate}");
+
+            // ✅ УБИРАЕМ ПРОВЕРКУ if (_voiceRate != value) — ВСЕГДА УСТАНАВЛИВАЕМ!
+            _voiceRate = value;
+            Settings.VoiceRate = value;
+            ConfigService.Save(Settings);
+
+            // ✅ ВСЕГДА ВЫЗЫВАЕМ VoiceService.SetVoiceRate
+            VoiceService.SetVoiceRate(value);
+
+            Debug.WriteLine($"🎙️ [MainViewModel] Скорость изменена: {value}");
+            Debug.WriteLine($"🎙️ [MainViewModel] VoiceService.GetVoiceRate() = {VoiceService.GetVoiceRate()}");
+        }
+
+
     }
-
-
-
 }
