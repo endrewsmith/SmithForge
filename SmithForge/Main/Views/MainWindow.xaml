@@ -6,7 +6,7 @@
         xmlns:local="clr-namespace:SmithForge.Main.Views"
         xmlns:converters="clr-namespace:SmithForge.Main.Converters"
         mc:Ignorable="d"
-        Title="SmithForge" Height="700" Width="900"
+        Title="SmithForge" Height="900" Width="900"
         WindowStartupLocation="CenterScreen">
 
     <Window.Resources>
@@ -463,6 +463,159 @@
         <Border Grid.Row="7" Background="#F0F0F5" BorderBrush="#DDD" BorderThickness="0,1" Padding="10" Margin="0,5,0,0">
             <StackPanel>
                 <TextBlock Text="УПРАВЛЕНИЕ ОКНАМИ ЧАТОВ" FontSize="12" FontWeight="Bold" Foreground="#5C6BC0" Margin="0,0,0,8"/>
+
+                <!-- Управление скоростью скролла -->
+                <Border Grid.Row="8" Background="#F0F4FF" BorderBrush="#BBDEFB" BorderThickness="0,1,0,1" Padding="10" Margin="0,5,0,0">
+                    <StackPanel>
+                        <!-- Заголовок -->
+                        <TextBlock Text="📚 Инфо-чат (витрина)" FontSize="14" FontWeight="Bold" Foreground="#1565C0" Margin="0,0,0,10"/>
+
+                        <!-- Управление скоростью скролла -->
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+
+                            <TextBlock Grid.Column="0" Text="🏃 Скорость скролла:" VerticalAlignment="Center" Margin="0,0,15,0"/>
+
+                            <Slider Grid.Column="1" 
+                    Minimum="200" 
+                    Maximum="2000" 
+                    Value="{Binding ScrollSpeed, UpdateSourceTrigger=PropertyChanged}"
+                    TickFrequency="100" 
+                    IsSnapToTickEnabled="True"
+                    VerticalAlignment="Center"/>
+
+                            <TextBlock Grid.Column="2" 
+                       Text="{Binding ScrollSpeed, StringFormat={}{0}мс}" 
+                       Width="60" 
+                       TextAlignment="Right" 
+                       VerticalAlignment="Center" 
+                       Margin="10,0,0,0"/>
+                        </Grid>
+                        <!-- Управление скоростью появления -->
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+
+                            <TextBlock Grid.Column="0" Text="✨ Скорость появления:" VerticalAlignment="Center" Margin="0,0,10,0"/>
+
+                            <Slider Grid.Column="1" 
+            Minimum="0.1" 
+            Maximum="2.0" 
+            Value="{Binding AppearSpeed, UpdateSourceTrigger=PropertyChanged}"
+            TickFrequency="0.1" 
+            IsSnapToTickEnabled="True"
+            VerticalAlignment="Center"/>
+
+                            <TextBlock Grid.Column="2" 
+               Text="{Binding AppearSpeed, StringFormat={}{0:F1}с}" 
+               Width="40" 
+               TextAlignment="Right" 
+               VerticalAlignment="Center" 
+               Margin="10,0,0,0"/>
+                        </Grid>
+                    </StackPanel>
+                </Border>
+
+                <StackPanel>
+                    <!-- Заголовок -->
+                    <Grid Margin="0,0,0,8">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" Text="📚 Инфо-чат (витрина)" FontSize="14" FontWeight="Bold" Foreground="#1565C0"/>
+                        <TextBlock Grid.Column="1" Text="{Binding RotationStatus}" FontSize="11" VerticalAlignment="Center" Margin="10,0,0,0"/>
+                        <TextBlock Grid.Column="2" Text="{Binding RotationTotalPages, StringFormat='📄 Страниц: {0}'}" FontSize="11" Foreground="#888" VerticalAlignment="Center"/>
+                    </Grid>
+
+                    <!-- Кнопки управления -->
+                    <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                        <Button Content="▶️ Запустить" Command="{Binding RotationStartCommand}" 
+                    Background="#4CAF50" Foreground="White" Padding="12,5" Margin="0,0,5,0"/>
+                        <Button Content="⏹ Остановить" Command="{Binding RotationStopCommand}" 
+                    Background="#F44336" Foreground="White" Padding="12,5" Margin="0,0,5,0"/>
+                        <Button Content="🔄 Обновить список" Command="{Binding RotationRefreshPagesCommand}" 
+                    Background="#2196F3" Foreground="White" Padding="12,5"/>
+                    </StackPanel>
+
+                    <!-- Интервал тишины -->
+                    <Grid Margin="0,0,0,8">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" Text="⏱ Тишина (сек):" VerticalAlignment="Center" Margin="0,0,10,0"/>
+                        <Slider Grid.Column="1" Minimum="5" Maximum="120" 
+                    Value="{Binding RotationSilenceInterval, UpdateSourceTrigger=PropertyChanged}"
+                    TickFrequency="5" IsSnapToTickEnabled="True"
+                    VerticalAlignment="Center"/>
+                        <TextBlock Grid.Column="2" Text="{Binding RotationSilenceInterval, StringFormat={}{0}с}" 
+                       Width="40" TextAlignment="Right" VerticalAlignment="Center" Margin="10,0,0,0"/>
+                    </Grid>
+                    <!-- Прогресс показа страниц -->
+                    <Grid Margin="0,0,0,8">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+
+                        <TextBlock Grid.Column="0" Text="📊 Прогресс:" VerticalAlignment="Center" Margin="0,0,10,0"/>
+
+                        <ProgressBar Grid.Column="1" 
+                 Minimum="0" 
+                 Maximum="{Binding RotationTotalPages}"
+                 Value="{Binding RotationShownPages}"
+                 Height="10"
+                 VerticalAlignment="Center"
+                 Background="#2D2D44"
+                 Foreground="#4CAF50"/>
+
+                        <!-- ✅ Исправленный TextBlock -->
+                        <TextBlock Grid.Column="2" 
+               Text="{Binding RotationShownPages}" 
+               FontSize="11"
+               Foreground="#888"
+               VerticalAlignment="Center" 
+               Margin="10,0,0,0"/>
+                    </Grid>
+                </StackPanel>
+
+                <!-- Кнопка генерации страниц стикеров -->
+                <Border Grid.Row="8" Background="#FFF3E0" BorderBrush="#FFE0B2" BorderThickness="0,1,0,1" Padding="10" Margin="0,5,0,0">
+                    <StackPanel>
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+
+                            <TextBlock Grid.Column="0" Text="🎨 Стикеры" FontSize="14" FontWeight="Bold" Foreground="#E65100"/>
+
+                            <Button Grid.Column="2" Content="🔄 Сгенерировать страницы стикеров" 
+                    Command="{Binding GenerateStickerPagesCommand}"
+                    Background="#4CAF50" Foreground="White" Padding="12,5"/>
+                            <!-- ✅ НОВАЯ КНОПКА ДЛЯ ЗВУКОВ -->
+                            <Button Grid.Column="3" Content="🔊 Сгенерировать страницы звуков" 
+                    Command="{Binding GenerateSoundPagesCommand}"
+                    Background="#2196F3" Foreground="White" Padding="12,5"/>
+                        </Grid>
+
+                        <TextBlock Grid.Column="0" Text="{Binding StickerPagesStatus}" 
+                   FontSize="11" Foreground="#888" Margin="0,5,0,0"/>
+                    </StackPanel>
+                </Border>
 
                 <!-- Главный чат -->
                 <Border Background="White" CornerRadius="4" Padding="8" Margin="0,0,0,5">

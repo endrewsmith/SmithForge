@@ -8,6 +8,7 @@ using SmithForge.Features.ChatManager;
 using SmithForge.Features.ChatOverlay;
 using SmithForge.Features.ChatOverlayShorts;
 using SmithForge.Features.ImportantOverlay;
+using SmithForge.Features.InfoSystem;
 using SmithForge.Features.StickersOverlay;
 using SmithForge.Features.YouTubeManager.ViewModels;
 using SmithForge.Main.Models;
@@ -21,12 +22,14 @@ using System.Diagnostics;
 using System.Linq;
 using System.Net.Http;
 using System.Speech.Synthesis;
+using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Threading;
+using System.IO;
 
 namespace SmithForge.ViewModels
 {
@@ -34,6 +37,27 @@ namespace SmithForge.ViewModels
     {
         [ObservableProperty]
         private int _voiceRate = 3;
+
+        [ObservableProperty]
+        private int _scrollSpeed = 1500;
+        [ObservableProperty]
+        private double _appearSpeed = 0.3;
+
+        private InfoRotationService? _rotationService;
+        private StickerPageService _stickerPageService;
+        private SoundPageService _soundPageService;
+
+        [ObservableProperty]
+        private int _rotationTotalPages = 0;
+
+        [ObservableProperty]
+        private string _rotationStatus = "⏹ Остановлена";
+
+        [ObservableProperty]
+        private int _rotationSilentSeconds = 0;
+
+        [ObservableProperty]
+        private int _rotationShownPages = 0; // ← НОВОЕ СВОЙСТВО
 
         // ✅ Интегрированный YouTube-менеджер
         public YouTubeManagerViewModel YouTubeManager { get; } = new();
@@ -161,6 +185,8 @@ namespace SmithForge.ViewModels
         private ChatConnectionService _chatConnectionService = null!;
         private StreamSessionManager _streamSessionManager = null!;
 
+        private InfoService _infoService;
+
         public MainViewModel()
         {
             FolderManager.EnsureDirectoriesExist();
@@ -185,10 +211,9 @@ namespace SmithForge.ViewModels
             _webServer.MessageAdded += OnWebMessageAdded;
             Task.Run(async () => await StartWebServerAsync());
 
-            // ✅ Инициализация сервиса обработки сообщений
-            var processor = new MessageProcessor(Settings);
-            _messageHandler = new MessageHandlerService(processor, _overlayManager, _dashboardService, _webServer);
-            _messageHandler.OnProcessed += OnMessageProcessed;
+            _infoService = new InfoService();
+
+
 
             // ============================================================
             // СИНХРОНИЗАЦИЯ НАСТРОЕК YOUTUBE ИЗ APP SETTINGS
@@ -299,6 +324,32 @@ namespace SmithForge.ViewModels
 
             Debug.WriteLine($"🎙️ [MainViewModel] СТАРТОВАЯ СКОРОСТЬ: {_voiceRate}");
             Debug.WriteLine($"🎙️ [MainViewModel] VoiceService.GetVoiceRate() = {VoiceService.GetVoiceRate()}");
+
+
+            // ============================================================
+            // ИНИЦИАЛИЗАЦИЯ РОТАЦИИ
+            // ============================================================
+            var infoService = new InfoService();
+            var pagesDir = Path.Combine(
+                AppDomain.CurrentDomain.BaseDirectory,
+                "SF_Data", "InfoWeb", "Pages");
+
+            _rotationService = new InfoRotationService(infoService, pagesDir);
+            _rotationService.PageSelected += OnRotationPageSelected;
+            _rotationService.Start(30);
+
+            _stickerPageService = new StickerPageService();
+            _soundPageService = new SoundPageService();
+
+            // Обновляем статус
+            UpdateRotationStatus();
+
+            Debug.WriteLine("[MainViewModel] InfoRotationService инициализирован");
+
+            // ✅ Инициализация сервиса обработки сообщений
+            var processor = new MessageProcessor(Settings, infoService, _stickerPageService, _soundPageService);
+            _messageHandler = new MessageHandlerService(processor, _overlayManager, _dashboardService, _webServer);
+            _messageHandler.OnProcessed += OnMessageProcessed;
 
             LoadChats();
         }
@@ -1115,6 +1166,214 @@ namespace SmithForge.ViewModels
             Debug.WriteLine($"🎙️ [MainViewModel] VoiceService.GetVoiceRate() = {VoiceService.GetVoiceRate()}");
         }
 
+        partial void OnScrollSpeedChanged(int value)
+        {
+            // Отправляем новую скорость на сервер
+            _ = SendScrollSpeed(value);
+        }
 
+        private async Task SendScrollSpeed(int speed)
+        {
+            try
+            {
+                using var client = new HttpClient();
+                var json = $"{{\"speed\":{speed}}}";
+                var content = new StringContent(json, Encoding.UTF8, "application/json");
+
+                var response = await client.PostAsync($"http://localhost:{Settings.NetworkPort}/info/scroll/speed", content);
+
+                if (response.IsSuccessStatusCode)
+                {
+                    Debug.WriteLine($"[InfoChat] Скорость скролла отправлена: {speed}ms");
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[InfoChat] Ошибка отправки скорости: {ex.Message}");
+            }
+        }
+
+        partial void OnAppearSpeedChanged(double value)
+        {
+            _ = SendAppearSpeed(value);
+        }
+
+        private async Task SendAppearSpeed(double speed)
+        {
+            try
+            {
+                using var client = new HttpClient();
+                var json = $"{{\"speed\":{speed.ToString(System.Globalization.CultureInfo.InvariantCulture)}}}";
+                var content = new StringContent(json, Encoding.UTF8, "application/json");
+
+                await client.PostAsync($"http://localhost:{Settings.NetworkPort}/info/appear/speed", content);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[InfoChat] Ошибка отправки скорости появления: {ex.Message}");
+            }
+        }
+
+        // ============================================================
+        // ОБРАБОТЧИК СОБЫТИЙ
+        // ============================================================
+
+        private void OnRotationPageSelected(object? sender, string pageName)
+        {
+            try
+            {
+                // Загружаем HTML (уже загружен через InfoService.Render)
+                var webServer = WebServerService.Instance;
+                if (webServer != null)
+                {
+                    var infoService = new InfoService();
+                    var html = infoService.Render(pageName, "system");
+                    webServer.SendInfoMessage(html, pageName);
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[Rotation] ❌ Ошибка: {ex.Message}");
+            }
+        }
+
+        // ============================================================
+        // КОМАНДЫ ДЛЯ UI
+        // ============================================================
+
+        [RelayCommand]
+        private void RotationStart()
+        {
+            _rotationService?.Start(RotationSilenceInterval);
+            UpdateRotationStatus();
+        }
+
+        [RelayCommand]
+        private void RotationStop()
+        {
+            _rotationService?.Stop();
+            UpdateRotationStatus();
+        }
+
+        [RelayCommand]
+        private void RotationRefreshPages()
+        {
+            _rotationService?.RefreshPagesList();
+            UpdateRotationStatus();
+        }
+
+        [RelayCommand]
+        private void RotationActivity()
+        {
+            _rotationService?.OnUserActivity();
+            UpdateRotationStatus();
+        }
+
+        // ============================================================
+        // СВОЙСТВА ДЛЯ UI
+        // ============================================================
+
+        [ObservableProperty]
+        private int _rotationSilenceInterval = 30;
+
+        partial void OnRotationSilenceIntervalChanged(int value)
+        {
+            _rotationService?.SetSilenceInterval(value);
+        }
+
+
+
+        private void UpdateRotationStatus()
+        {
+            var status = _rotationService?.GetStatus();
+            if (status == null) return;
+
+            RotationTotalPages = status.TotalPages;
+            RotationShownPages = status.ShownPages; // ← добавить эту строку
+            RotationSilentSeconds = status.SilentSeconds;
+
+            if (!status.IsRunning)
+            {
+                RotationStatus = "⏹ Остановлена";
+            }
+            else if (status.IsWaitingForSilence)
+            {
+                RotationStatus = "📢 Показ страницы...";
+            }
+            else
+            {
+                RotationStatus = $"🔇 Тишина: {status.SilentSeconds}с / {status.SilenceIntervalSeconds}с";
+            }
+        }
+
+        // Обновляем статус по таймеру (раз в секунду)
+        private void StartStatusUpdater()
+        {
+            _ = Task.Run(async () =>
+            {
+                while (true)
+                {
+                    await Task.Delay(1000);
+                    if (_rotationService != null)
+                    {
+                        UpdateRotationStatus();
+                    }
+                }
+            });
+        }
+
+        public void NotifyUserActivity()
+        {
+            _rotationService?.OnUserActivity();
+            UpdateRotationStatus();
+        }
+
+        [ObservableProperty]
+        private string _stickerPagesStatus = "Готово";
+
+        [RelayCommand]
+        private void GenerateStickerPages()
+        {
+            try
+            {
+                StickerPagesStatus = "⏳ Сканирование папок...";
+
+                var count = _stickerPageService.GenerateAllPages();
+
+                if (count > 0)
+                {
+                    StickerPagesStatus = $"✅ Сгенерировано {count} страниц стикеров";
+                    Debug.WriteLine($"[StickerPages] Сгенерировано {count} страниц");
+                }
+                else
+                {
+                    StickerPagesStatus = "❌ Нет паков со стикерами";
+                }
+            }
+            catch (Exception ex)
+            {
+                StickerPagesStatus = $"❌ Ошибка: {ex.Message}";
+                Debug.WriteLine($"[StickerPages] Ошибка: {ex.Message}");
+            }
+        }
+
+        // Команда для UI
+        [ObservableProperty]
+        private string _soundPagesStatus = "Готово";
+
+        [RelayCommand]
+        private void GenerateSoundPages()
+        {
+            try
+            {
+                SoundPagesStatus = "⏳ Сканирование звуков...";
+                var count = _soundPageService.GenerateAllPages();
+                SoundPagesStatus = count > 0 ? $"✅ Сгенерировано {count} страниц звуков" : "❌ Нет паков со звуками";
+            }
+            catch (Exception ex)
+            {
+                SoundPagesStatus = $"❌ Ошибка: {ex.Message}";
+            }
+        }
     }
 }
