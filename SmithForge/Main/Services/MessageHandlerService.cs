@@ -1,12 +1,14 @@
+using SmithForge.ChatEngine.Core.Models;
+using SmithForge.Main.Models;
+using SmithForge.Main.Services.ChatCommands;
+using SmithForge.ViewModels;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
 using System.Threading.Tasks;
-using SmithForge.ChatEngine.Core.Models;
-using SmithForge.Main.Models;
-using SmithForge.Main.Services.ChatCommands;
+using System.Windows;
 
 namespace SmithForge.Main.Services
 {
@@ -152,6 +154,12 @@ namespace SmithForge.Main.Services
                 {
                     // Обычные сообщения показываем в оверлее
                     _overlayManager.AddMessage(chater, overlayMsg);
+                }
+
+                // ✅ Уведомляем ротацию об активности
+                if (Application.Current.MainWindow?.DataContext is MainViewModel mainVm)
+                {
+                    mainVm.NotifyUserActivity();
                 }
             }
             catch (Exception ex)

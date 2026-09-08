@@ -1,10 +1,11 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text.RegularExpressions;
+﻿using SmithForge.Features.InfoSystem;
 using SmithForge.Main.Models;
 using SmithForge.Main.Services.ChatCommands;
+using System;
+using System.Collections.Generic;
 using System.Diagnostics;
+using System.Linq;
+using System.Text.RegularExpressions;
 
 namespace SmithForge.Main.Services
 {
@@ -18,7 +19,7 @@ namespace SmithForge.Main.Services
         // ДОБАВЛЯЕМ: словарь сокращений из настроек
         private readonly Dictionary<string, string> _shortcuts;
 
-        public MessageProcessor(AppSettings settings)
+        public MessageProcessor(AppSettings settings, InfoService infoService, StickerPageService stickerPageService, SoundPageService soundPageService)
         {
             _settings = settings ?? throw new ArgumentNullException(nameof(settings));
             _commandMap = new Dictionary<string, IChatCommand>(StringComparer.OrdinalIgnoreCase);
@@ -52,6 +53,8 @@ namespace SmithForge.Main.Services
 
             var commandsList = new List<IChatCommand>
             {
+                new SoundCommand(soundPageService),
+                new InfoCommand(infoService, stickerPageService),
                 new HelpCommand(_commandMap),
                 new BoldCommand(),
                 new ItalicCommand(),
