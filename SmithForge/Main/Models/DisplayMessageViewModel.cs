@@ -352,6 +352,13 @@ namespace SmithForge.Main.Models
 
         public void RefreshAvatar()
         {
+            // ✅ УБЕЖДАЕМСЯ, ЧТО МЫ В UI ПОТОКЕ
+            if (!Application.Current.Dispatcher.CheckAccess())
+            {
+                Application.Current.Dispatcher.Invoke(() => RefreshAvatar());
+                return;
+            }
+
             _cachedAvatarPath = null;
             OnPropertyChanged(nameof(AvatarPath));
         }

@@ -66,6 +66,8 @@ namespace SmithForge.Main.Services
                 new VoiceCommand(),
                 new StickerCommand(),
                 new AvatarCommand(),
+                new HiddenCommand(),
+                new VideoCommand(),
             };
 
             foreach (var cmd in commandsList)
@@ -90,7 +92,40 @@ namespace SmithForge.Main.Services
         // ДОБАВЛЯЕМ: метод замены сокращений
         private string ReplaceShortcuts(string message)
         {
-            if (string.IsNullOrWhiteSpace(message) || _shortcuts.Count == 0)
+            if (string.IsNullOrWhiteSpace(message))
+                return message;
+
+            // ✅ ШАГ 1a: Паттерн сXсY → !!st:X:Y (конкретный стикер)
+            // с2с2 → !!st:2:2
+            message = System.Text.RegularExpressions.Regex.Replace(
+                message,
+                @"\b[сc](\d+)[сc](\d+)\b",
+                match =>
+                {
+                    string packNumber = match.Groups[1].Value;
+                    string stickerNumber = match.Groups[2].Value;
+                    string replacement = $"!!st:{packNumber}:{stickerNumber}";
+                    Debug.WriteLine($"[Shortcuts] ПАТТЕРН! '{match.Value}' -> '{replacement}'");
+                    return replacement;
+                },
+                System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+
+            // ✅ ШАГ 1b: Паттерн сXс → !!st:X:random (рандомный стикер)
+            // с2с → !!st:2:random
+            message = System.Text.RegularExpressions.Regex.Replace(
+                message,
+                @"\b[сc](\d+)[сc]\b",
+                match =>
+                {
+                    string packNumber = match.Groups[1].Value;
+                    string replacement = $"!!st:{packNumber}:random";
+                    Debug.WriteLine($"[Shortcuts] ПАТТЕРН (рандом)! '{match.Value}' -> '{replacement}'");
+                    return replacement;
+                },
+                System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+
+            // ✅ ШАГ 2: Обычные сокращения из словаря
+            if (_shortcuts.Count == 0)
                 return message;
 
             var words = message.Split(' ');
@@ -192,8 +227,8 @@ namespace SmithForge.Main.Services
                     // Если сообщение не обработано командой, проверяем можно ли оставить разметку
                     if (!msg.IsProcessedByCommand)
                     {
-                        // Разрешаем прямую разметку только с 5 ранга
-                        if (chater.Rank >= 5)
+                        // Разрешаем прямую разметку с 3 ранга
+                        if (chater.Rank >= 3)
                         {
                             // Оставляем теги - пользователь может писать разметку вручную
                             Debug.WriteLine($"[MARKUP] Прямая разметка разрешена для ранга {chater.Rank}");
@@ -209,7 +244,45 @@ namespace SmithForge.Main.Services
                             }
                         }
                     }
+                    // ✅ Если сообщение обработано командой
+                    else
+                    {
+                        // ✅ ОТОБРАЖАЕМЫЕ теги (показываются в чате) - ВКЛЮЧАЯ voice!
+                        bool hasDisplayableTags = msg.Message.Contains("<b>") || msg.Message.Contains("</b>") ||
+                                                  msg.Message.Contains("<i>") || msg.Message.Contains("</i>") ||
+                                                  msg.Message.Contains("<color=") || msg.Message.Contains("</color>") ||
+                                                  msg.Message.Contains("<c=") || msg.Message.Contains("</c>") ||
+                                                  msg.Message.Contains("<voice>") || msg.Message.Contains("</voice>");
 
+                        // ✅ СЛУЖЕБНЫЕ теги (НЕ показываются в чате, только действия)
+                        bool hasServiceTags = msg.Message.Contains("<sticker") ||
+                                              msg.Message.Contains("<like") ||
+                                              msg.Message.Contains("<dislike") ||
+                                              msg.Message.Contains("<nick") ||
+                                              msg.Message.Contains("<sound") ||
+                                              msg.Message.Contains("<hide>") || msg.Message.Contains("</hide>");
+
+                        // ✅ Если есть ОТОБРАЖАЕМЫЕ теги - показываем в чате
+                        if (hasDisplayableTags)
+                        {
+                            Debug.WriteLine($"[MessageProcessor] ✅ Есть отображаемые теги, показываем в чате");
+                            // Продолжаем выполнение
+                        }
+                        // ✅ Если есть только СЛУЖЕБНЫЕ теги - НЕ показываем в чате, но обрабатываем
+                        else if (hasServiceTags)
+                        {
+                            Debug.WriteLine($"[MessageProcessor] ⏭ Только служебные теги, скрываем из чата");
+                            // Продолжаем выполнение (OnProcessed будет вызван для обработки)
+                        }
+                        // ❌ Если нет НИКАКИХ тегов - пропускаем полностью
+                        else
+                        {
+                            Debug.WriteLine($"[MessageProcessor] ⏭ Команда выполнена, но нет тегов для отображения");
+                            return;
+                        }
+                    }
+
+                    // ✅ ВСЕГДА вызываем OnProcessed (для озвучивания, стикеров и т.д.)
                     msg.User = chater;
                     OnProcessed?.Invoke(chater, msg, commandsFound);
                 }
@@ -271,6 +344,7 @@ namespace SmithForge.Main.Services
             string cleanMessage = msg.Message;
             Debug.WriteLine($"[CMD] До удаления команд: {cleanMessage}");
 
+            // ✅ Удаляем все команды из текста
             foreach (var cmd in commandsFound.OrderByDescending(c => c.Index))
             {
                 Debug.WriteLine($"[CMD] Удаляем команду: {cmd.Raw} с позиции {cmd.Index}, длина {cmd.Length}");
@@ -280,6 +354,7 @@ namespace SmithForge.Main.Services
 
             double totalCost = 0;
             var executedCommands = new List<ChatCommandInfo>();
+            bool anyCommandExecuted = false;
 
             foreach (var cmdInfo in availableCommands)
             {
@@ -292,23 +367,25 @@ namespace SmithForge.Main.Services
 
                     var tempMsg = new CommonMessage
                     {
-                        Message = cleanMessage,
+                        Message = cleanMessage,  // ← передаем ТЕКУЩИЙ cleanMessage (может быть уже с тегами от предыдущей команды)
                         Type = msg.Type,
                         Login = msg.Login,
                         IsProcessedByCommand = false,
-                        ShouldChargeForCommand = true // по умолчанию списываем
+                        ShouldChargeForCommand = true
                     };
 
                     cmdInfo.Command.Execute(cmdInfo.Info, chater, tempMsg, _settings);
 
-                    Debug.WriteLine($"[CMD] Текст ПОСЛЕ выполнения: {tempMsg.Message}");
+                    Debug.WriteLine($"[CMD] Текст ПОСЛЕ выполнения {cmdInfo.Command.Name}: {tempMsg.Message}");
                     Debug.WriteLine($"[CMD] IsProcessedByCommand: {tempMsg.IsProcessedByCommand}");
                     Debug.WriteLine($"[CMD] ShouldChargeForCommand: {tempMsg.ShouldChargeForCommand}");
 
+                    // ✅ Обновляем cleanMessage результатом выполнения команды
                     if (tempMsg.IsProcessedByCommand)
                     {
                         cleanMessage = tempMsg.Message;
                         msg.DisplayTimeMs = tempMsg.DisplayTimeMs;
+                        anyCommandExecuted = true;
                         Debug.WriteLine($"[CMD] Текст сохранен: {cleanMessage}");
                         Debug.WriteLine($"[CMD] Время сохранено: {msg.DisplayTimeMs}мс");
                     }
@@ -355,9 +432,9 @@ namespace SmithForge.Main.Services
                 Debug.WriteLine($"[CMD] Списано {totalCost} кармы. Остаток: {chater.Karma:F1}");
             }
 
+            // ✅ Итоговый текст - результат последовательного выполнения всех команд
             msg.Message = cleanMessage;
-            // Если в сообщении была хоть одна команда (даже неудачная) — помечаем как обработанное
-            msg.IsProcessedByCommand = commandsFound.Count > 0;
+            msg.IsProcessedByCommand = anyCommandExecuted || commandsFound.Count > 0;
 
             Debug.WriteLine($"[CMD] Финальный текст: {cleanMessage}");
             Debug.WriteLine($"[CMD] IsProcessedByCommand: {msg.IsProcessedByCommand}");

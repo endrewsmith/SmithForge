@@ -429,18 +429,20 @@ public partial class YouTubeManagerViewModel : ObservableObject
             client.OnLog += (s, msg) => LogMessage($"[{stream.Title}] {msg}");
             client.OnStatusChanged += OnChatStatusChanged;
 
-            var success = await client.ConnectAsync(stream.VideoId);
-
-            if (success)
-            {
-                ActiveClients.Add(client);
-                LogMessage($"  ✅ Подключен к: {stream.Title}");
-                AddSystemMessage($"Подключен к чату: {stream.Title}", stream.VideoId);
-            }
-            else
-            {
-                LogMessage($"  ❌ Не удалось подключиться к: {stream.Title}");
-            }
+            await client.ConnectAsync(stream.VideoId);
+            ActiveClients.Add(client);
+            LogMessage($"  ✅ Подключен к: {stream.Title}");
+            AddSystemMessage($"Подключен к чату: {stream.Title}", stream.VideoId);
+            //if (success)
+            //{
+            //    ActiveClients.Add(client);
+            //    LogMessage($"  ✅ Подключен к: {stream.Title}");
+            //    AddSystemMessage($"Подключен к чату: {stream.Title}", stream.VideoId);
+            //}
+            //else
+            //{
+            //    LogMessage($"  ❌ Не удалось подключиться к: {stream.Title}");
+            //}
         }
         catch (Exception ex)
         {

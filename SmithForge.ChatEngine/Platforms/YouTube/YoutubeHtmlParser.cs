@@ -495,4 +495,136 @@ public class YoutubeHtmlParser
 
         return title;
     }
+
+    /// <summary>
+    /// Извлекает токен для режима "Все сообщения" (All messages) из submenu чата.
+    /// Используется вместо ExtractContinuationSmart для получения ВСЕХ сообщений.
+    /// </summary>
+    public string ExtractAllMessagesToken(string html, Action<string>? log = null)
+    {
+        log?.Invoke("🔍 Поиск токена ALL MESSAGES...");
+
+        try
+        {
+            using var initialData = ParseInitialData(html);
+            var root = initialData.RootElement;
+
+            // ✅ Ищем submenu с двумя режимами чата
+            var token = FindAllMessagesTokenRecursive(root, log);
+
+            if (!string.IsNullOrEmpty(token))
+            {
+                log?.Invoke($"✅ Найден ALL MESSAGES токен: {token.Substring(0, Math.Min(50, token.Length))}...");
+                return token;
+            }
+
+            log?.Invoke("❌ Токен ALL MESSAGES не найден");
+            return null;
+        }
+        catch (Exception ex)
+        {
+            log?.Invoke($"❌ Ошибка поиска токена: {ex.Message}");
+            return null;
+        }
+    }
+
+    private string FindAllMessagesTokenRecursive(JsonElement element, Action<string>? log)
+    {
+        if (element.ValueKind == JsonValueKind.Object)
+        {
+            // ✅ Ищем "liveChatSubmenuRenderer"
+            if (element.TryGetProperty("liveChatSubmenuRenderer", out var submenuRenderer))
+            {
+                log?.Invoke("  🎯 Найден liveChatSubmenuRenderer");
+
+                // Ищем submenuItems
+                if (submenuRenderer.TryGetProperty("submenuItems", out var items))
+                {
+                    var itemsList = items.EnumerateArray().ToList();
+                    log?.Invoke($"  📋 Элементов в submenu: {itemsList.Count}");
+
+                    // ✅ Второй элемент (индекс 1) = "All messages"
+                    if (itemsList.Count >= 2)
+                    {
+                        var allMessagesItem = itemsList[1];
+
+                        // Извлекаем токен
+                        var token = ExtractTokenFromSubmenuItem(allMessagesItem, log);
+                        if (!string.IsNullOrEmpty(token))
+                        {
+                            return token;
+                        }
+                    }
+                }
+            }
+
+            // Рекурсивно обходим все свойства
+            foreach (var prop in element.EnumerateObject())
+            {
+                var result = FindAllMessagesTokenRecursive(prop.Value, log);
+                if (!string.IsNullOrEmpty(result)) return result;
+            }
+        }
+        else if (element.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var item in element.EnumerateArray())
+            {
+                var result = FindAllMessagesTokenRecursive(item, log);
+                if (!string.IsNullOrEmpty(result)) return result;
+            }
+        }
+
+        return null;
+    }
+
+    private string ExtractTokenFromSubmenuItem(JsonElement item, Action<string>? log)
+    {
+        try
+        {
+            // Вариант 1: continuation напрямую
+            if (item.TryGetProperty("continuation", out var cont))
+            {
+                return cont.GetString();
+            }
+
+            // Вариант 2: navigationEndpoint → continuationCommand → token
+            if (item.TryGetProperty("navigationEndpoint", out var nav))
+            {
+                if (nav.TryGetProperty("continuationCommand", out var cmd))
+                {
+                    if (cmd.TryGetProperty("token", out var token))
+                    {
+                        return token.GetString();
+                    }
+                }
+            }
+
+            // Вариант 3: serviceEndpoint → continuationCommand
+            if (item.TryGetProperty("serviceEndpoint", out var service))
+            {
+                if (service.TryGetProperty("continuationCommand", out var cmd))
+                {
+                    if (cmd.TryGetProperty("token", out var token))
+                    {
+                        return token.GetString();
+                    }
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            log?.Invoke($"  ⚠️ Ошибка извлечения токена: {ex.Message}");
+        }
+
+        return null;
+    }
+
+    public string ExtractClientVersionDirectly(string html)
+    {
+        var match = Regex.Match(html, @"""INNERTUBE_CLIENT_VERSION""\s*:\s*""([^""]+)""");
+        if (match.Success) return match.Groups[1].Value;
+
+        match = Regex.Match(html, @"""clientVersion""\s*:\s*""([^""]+)""");
+        return match.Success ? match.Groups[1].Value : "2.20240701.00.00";
+    }
 }

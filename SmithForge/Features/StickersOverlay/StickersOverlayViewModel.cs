@@ -5,6 +5,8 @@ using System.Collections.ObjectModel;
 using System.Windows;
 using System.Text.RegularExpressions;
 using System;
+using System.Linq;
+using System.Threading.Tasks;
 
 namespace SmithForge.Features.StickersOverlay
 {
@@ -28,10 +30,12 @@ namespace SmithForge.Features.StickersOverlay
         {
             ChaterStorage.OnChaterUpdated += OnChaterUpdated;
         }
+
         public void SetDisplayTime(int milliseconds)
         {
             StickerDisplayTimeMs = milliseconds;
         }
+
         public void SetMode(ChatDisplayMode mode)
         {
             _currentMode = mode;
@@ -60,55 +64,60 @@ namespace SmithForge.Features.StickersOverlay
         {
             if (!IsEnabled) return;
 
-            Application.Current.Dispatcher.Invoke(() =>
+            // ✅ УБЕЖДАЕМСЯ, ЧТО МЫ В UI ПОТОКЕ
+            if (!Application.Current.Dispatcher.CheckAccess())
             {
-                try
+                Application.Current.Dispatcher.Invoke(() => ShowSticker(user, msg));
+                return;
+            }
+
+            try
+            {
+                // Извлекаем путь к стикеру из тега
+                var stickerMatch = Regex.Match(msg.Message, @"<sticker pack='(\d+)' id='(\d+)' path='([^']+)'");
+                string stickerPath = null;
+                string textContent = "";
+
+                if (stickerMatch.Success)
                 {
-                    // Извлекаем путь к стикеру из тега
-                    var stickerMatch = Regex.Match(msg.Message, @"<sticker pack='(\d+)' id='(\d+)' path='([^']+)'");
-                    string stickerPath = null;
-                    string textContent = "";
-
-                    if (stickerMatch.Success)
-                    {
-                        stickerPath = stickerMatch.Groups[3].Value;
-                        // Удаляем тег стикера, но сохраняем остальной текст
-                        textContent = Regex.Replace(msg.Message, @"<sticker[^>]*/>", "").Trim();
-                    }
-                    else
-                    {
-                        // Если нет тега стикера, просто очищаем все теги
-                        textContent = Regex.Replace(msg.Message, @"<[^>]*>", "").Trim();
-                    }
-
-                    // Если нет стикера — выходим (стикер обязателен)
-                    if (string.IsNullOrEmpty(stickerPath)) return;
-
-                    // Создаем ViewModel для стикера
-                    var msgVm = new DisplayMessageViewModel(user, msg, stickerPath);
-                    msgVm.MessageText = textContent;  // <-- ВАЖНО: заполняем текст!
-
-                    System.Diagnostics.Debug.WriteLine($"[Stickers] Стикер: path={stickerPath}, текст='{textContent}'");
-
-                    ApplyModeSettings(msgVm);
-
-                    lock (_queueLock)
-                    {
-                        _stickerQueue.Enqueue(msgVm);
-                        System.Diagnostics.Debug.WriteLine($"[StickersQueue] Добавлен стикер, текст: '{textContent}', очередь: {_stickerQueue.Count}");
-                    }
-
-                    if (!_isShowingSticker)
-                    {
-                        ProcessQueue();
-                    }
+                    stickerPath = stickerMatch.Groups[3].Value;
+                    // Удаляем тег стикера, но сохраняем остальной текст
+                    textContent = Regex.Replace(msg.Message, @"<sticker[^>]*/>", "").Trim();
                 }
-                catch (Exception ex)
+                else
                 {
-                    System.Diagnostics.Debug.WriteLine($"[StickersOverlay ShowSticker Error] {ex.Message}");
+                    // Если нет тега стикера, просто очищаем все теги
+                    textContent = Regex.Replace(msg.Message, @"<[^>]*>", "").Trim();
                 }
-            });
+
+                // Если нет стикера — выходим (стикер обязателен)
+                if (string.IsNullOrEmpty(stickerPath)) return;
+
+                // Создаем ViewModel для стикера
+                var msgVm = new DisplayMessageViewModel(user, msg, stickerPath);
+                msgVm.MessageText = textContent;
+
+                System.Diagnostics.Debug.WriteLine($"[Stickers] Стикер: path={stickerPath}, текст='{textContent}'");
+
+                ApplyModeSettings(msgVm);
+
+                lock (_queueLock)
+                {
+                    _stickerQueue.Enqueue(msgVm);
+                    System.Diagnostics.Debug.WriteLine($"[StickersQueue] Добавлен стикер, текст: '{textContent}', очередь: {_stickerQueue.Count}");
+                }
+
+                if (!_isShowingSticker)
+                {
+                    ProcessQueue();
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[StickersOverlay ShowSticker Error] {ex.Message}");
+            }
         }
+
         private async void ProcessQueue()
         {
             if (_isShowingSticker) return;
@@ -133,6 +142,7 @@ namespace SmithForge.Features.StickersOverlay
                 }
 
                 if (nextSticker == null) break;
+
                 // ВОСПРОИЗВЕСТИ ЗВУК СТИКЕРА
                 VoiceService.PlayStickerSound();
 
@@ -159,22 +169,26 @@ namespace SmithForge.Features.StickersOverlay
         {
             var tcs = new TaskCompletionSource<bool>();
 
-            Application.Current.Dispatcher.Invoke(() =>
+            // ✅ УБЕЖДАЕМСЯ, ЧТО МЫ В UI ПОТОКЕ
+            if (!Application.Current.Dispatcher.CheckAccess())
             {
-                try
-                {
-                    // Очищаем предыдущие стикеры
-                    DisplayMessages.Clear();
-                    // Добавляем новый
-                    DisplayMessages.Add(stickerVm);
-                    tcs.SetResult(true);
-                }
-                catch (Exception ex)
-                {
-                    System.Diagnostics.Debug.WriteLine($"[ShowStickerInternal Error] {ex.Message}");
-                    tcs.SetException(ex);
-                }
-            });
+                Application.Current.Dispatcher.Invoke(() => ShowStickerInternal(stickerVm));
+                return tcs.Task;
+            }
+
+            try
+            {
+                // Очищаем предыдущие стикеры
+                DisplayMessages.Clear();
+                // Добавляем новый
+                DisplayMessages.Add(stickerVm);
+                tcs.SetResult(true);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[ShowStickerInternal Error] {ex.Message}");
+                tcs.SetException(ex);
+            }
 
             return tcs.Task;
         }
@@ -183,48 +197,78 @@ namespace SmithForge.Features.StickersOverlay
         {
             var tcs = new TaskCompletionSource<bool>();
 
-            Application.Current.Dispatcher.Invoke(() =>
+            // ✅ УБЕЖДАЕМСЯ, ЧТО МЫ В UI ПОТОКЕ
+            if (!Application.Current.Dispatcher.CheckAccess())
             {
-                try
+                Application.Current.Dispatcher.Invoke(() => HideStickerInternal(stickerVm));
+                return tcs.Task;
+            }
+
+            try
+            {
+                if (DisplayMessages.Contains(stickerVm))
                 {
-                    if (DisplayMessages.Contains(stickerVm))
-                    {
-                        DisplayMessages.Remove(stickerVm);
-                    }
-                    tcs.SetResult(true);
+                    DisplayMessages.Remove(stickerVm);
                 }
-                catch (Exception ex)
-                {
-                    System.Diagnostics.Debug.WriteLine($"[HideStickerInternal Error] {ex.Message}");
-                    tcs.SetException(ex);
-                }
-            });
+                tcs.SetResult(true);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[HideStickerInternal Error] {ex.Message}");
+                tcs.SetException(ex);
+            }
 
             return tcs.Task;
         }
 
         private void OnChaterUpdated(Chater updatedChater)
         {
-            Application.Current.Dispatcher.Invoke(() =>
+            // ✅ УБЕЖДАЕМСЯ, ЧТО МЫ В UI ПОТОКЕ
+            if (!Application.Current.Dispatcher.CheckAccess())
             {
-                foreach (var msg in DisplayMessages.Where(m => m.User?.Id == updatedChater.Id))
+                Application.Current.Dispatcher.Invoke(() => OnChaterUpdated(updatedChater));
+                return;
+            }
+
+            try
+            {
+                // ✅ БЕРЁМ КОПИЮ СПИСКА, ЧТОБЫ ИЗБЕЖАТЬ КОНФЛИКТОВ
+                var messagesToUpdate = DisplayMessages
+                    .Where(m => m.User?.Id == updatedChater.Id)
+                    .ToList();
+
+                foreach (var msg in messagesToUpdate)
                 {
                     msg.User = updatedChater;
                     msg.UpdateMessageCount();
+                    msg.RefreshAvatar();
                 }
-            });
+
+                if (messagesToUpdate.Any())
+                {
+                    System.Diagnostics.Debug.WriteLine($"[StickersOverlay] Обновлено {messagesToUpdate.Count} сообщений для {updatedChater.EffectiveName}");
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[StickersOverlay] Ошибка обновления: {ex.Message}");
+            }
         }
 
         public void ClearStickers()
         {
-            Application.Current.Dispatcher.Invoke(() =>
+            // ✅ УБЕЖДАЕМСЯ, ЧТО МЫ В UI ПОТОКЕ
+            if (!Application.Current.Dispatcher.CheckAccess())
             {
-                DisplayMessages.Clear();
-                lock (_queueLock)
-                {
-                    _stickerQueue.Clear();
-                }
-            });
+                Application.Current.Dispatcher.Invoke(() => ClearStickers());
+                return;
+            }
+
+            DisplayMessages.Clear();
+            lock (_queueLock)
+            {
+                _stickerQueue.Clear();
+            }
         }
 
         public void Dispose()

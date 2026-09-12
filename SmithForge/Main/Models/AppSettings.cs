@@ -85,6 +85,8 @@ namespace SmithForge.Main.Models
         public ChatDisplayMode ImportantChatMode { get; set; } = ChatDisplayMode.AppearAndFade;
         public ChatDisplayMode StickersChatMode { get; set; } = ChatDisplayMode.AppearAndFade;
 
+        public bool AutoOpenMediaChat { get; set; } = true; // по умолчанию включено
+
         // === Множители для платформ ===
         public double KarmaRateTwitch { get; set; } = 1.0;
         public double KarmaRateYouTube { get; set; } = 1.0;
@@ -172,18 +174,18 @@ namespace SmithForge.Main.Models
             {
                 CommandShortcuts = new List<ShortcutItem>
                 {
-                    new ShortcutItem { Key = "ввв", Value = "!!важно" },
-                    new ShortcutItem { Key = "вж", Value = "!!важно" },
-                    new ShortcutItem { Key = "ввм", Value = "!!важно:м" },
-                    new ShortcutItem { Key = "ввж", Value = "!!важно:ж" },
-                    new ShortcutItem { Key = "вв0", Value = "!!важно:0" },
-                    new ShortcutItem { Key = "вв1", Value = "!!важно:1" },
-                    new ShortcutItem { Key = "вв2", Value = "!!важно:2" },
-                    new ShortcutItem { Key = "вв3", Value = "!!важно:3" },
-                    new ShortcutItem { Key = "вв4", Value = "!!важно:4" },
-                    new ShortcutItem { Key = "вв5", Value = "!!важно:5" },
-                    new ShortcutItem { Key = "вв6", Value = "!!важно:6" },
-                    new ShortcutItem { Key = "вв7", Value = "!!важно:7" },
+                    new ShortcutItem { Key = "ввв", Value = "!!voice" },
+                    new ShortcutItem { Key = "вж", Value = "!!voice" },
+                    new ShortcutItem { Key = "ввм", Value = "!!voice:м" },
+                    new ShortcutItem { Key = "ввж", Value = "!!voice:ж" },
+                    new ShortcutItem { Key = "вв0", Value = "!!voice:0" },
+                    new ShortcutItem { Key = "вв1", Value = "!!voice:1" },
+                    new ShortcutItem { Key = "вв2", Value = "!!voice:2" },
+                    new ShortcutItem { Key = "вв3", Value = "!!voice:3" },
+                    new ShortcutItem { Key = "вв4", Value = "!!voice:4" },
+                    new ShortcutItem { Key = "вв5", Value = "!!voice:5" },
+                    new ShortcutItem { Key = "вв6", Value = "!!voice:6" },
+                    new ShortcutItem { Key = "вв7", Value = "!!voice:7" },
                 },
                 CommandPrefixes = new List<string> { "!", "/" },
                 MainChatMode = ChatDisplayMode.AppearAndFade,

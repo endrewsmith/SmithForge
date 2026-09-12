@@ -9,6 +9,7 @@ using System.Diagnostics;
 using System.Linq;
 using System.Threading.Tasks;
 using System.Windows;
+using System.IO;
 
 namespace SmithForge.Main.Services
 {
@@ -73,33 +74,35 @@ namespace SmithForge.Main.Services
                 Debug.WriteLine($"   - Текст: {msg.Message}");
                 Debug.WriteLine($"   - IsProcessedByCommand: {msg.IsProcessedByCommand}");
 
-                // ✅ ПРОВЕРЯЕМ РЕЗУЛЬТАТ ВЫПОЛНЕНИЯ КОМАНДЫ ПО НАЛИЧИЮ ТЕГОВ
-                bool isImportantAction = msg.Message.Contains("<important>") || msg.Message.Contains("</important>");
+                // ✅ Проверяем наличие тегов (может быть несколько!)
+                bool isVoiceAction = msg.Message.Contains("<voice>") || msg.Message.Contains("</voice>");
+                bool isHideAction = msg.Message.Contains("<hide>") || msg.Message.Contains("</hide>");
                 bool isStickerAction = msg.Message.Contains("<sticker");
+                bool isVideoAction = msg.Message.Contains("<video");
                 bool isReactionAction = msg.Message.Contains("<like") || msg.Message.Contains("<dislike") || msg.Message.Contains("<nick");
+                bool hasFormatting = msg.Message.Contains("<b>") || msg.Message.Contains("</b>") ||
+                                     msg.Message.Contains("<i>") || msg.Message.Contains("</i>") ||
+                                     msg.Message.Contains("<color=") || msg.Message.Contains("</color>") ||
+                                     msg.Message.Contains("<c=") || msg.Message.Contains("</c>");
 
-                // ✅ Если команда была, но не выполнена (нет тегов) — пропускаем ВСЁ (и дашборд, и оверлей)
-                if (msg.IsProcessedByCommand && !isImportantAction && !isStickerAction && !isReactionAction)
-                {
-                    Debug.WriteLine($"[MessageHandler] ⏭ Команда не выполнена, сообщение НЕ отображается и НЕ озвучивается");
-                    return;
-                }
-
-                // ✅ Если сообщение пустое после обработки — пропускаем
+                // ✅ Если сообщение пустое — пропускаем
                 if (string.IsNullOrWhiteSpace(msg.Message))
                 {
                     Debug.WriteLine($"[MessageHandler] ⏭ Сообщение пустое, пропускаем");
                     return;
                 }
 
+                // ✅ ОЧИЩАЕМ ТЕКСТ ОТ ВСЕХ СЛУЖЕБНЫХ ТЕГОВ (включая вложенные)
                 string cleanUiMessage = msg.Message;
-                if (isImportantAction)
-                {
-                    cleanUiMessage = msg.Message
-                        .Replace("<important>", "")
-                        .Replace("</important>", "")
-                        .Trim();
-                }
+
+                // ✅ Убираем все служебные теги (регуляркой, чтобы удалить даже вложенные)
+                cleanUiMessage = System.Text.RegularExpressions.Regex.Replace(cleanUiMessage, @"</?(?:voice|hide|sticker|like|dislike|nick|sound)[^>]*>", "");
+
+                // ✅ Дополнительная очистка от оставшихся угловых скобок
+                cleanUiMessage = cleanUiMessage.Trim();
+
+                // ✅ Если после очистки остались пустые теги форматирования — убираем и их
+                // Но форматирующие теги (<b>, <i>, <color>) оставляем для отображения
 
                 var overlayMsg = new CommonMessage
                 {
@@ -113,46 +116,150 @@ namespace SmithForge.Main.Services
                     DisplayTimeMs = msg.DisplayTimeMs
                 };
 
-                // В дашборд показываем ВСЕ сообщения (включая невыполненные команды)
+                // ✅ В дашборд показываем ВСЕ сообщения (включая скрытые!)
                 _dashboardService.AddMessage(chater, overlayMsg);
+                Debug.WriteLine($"[Dashboard] ✅ Добавлено в дашборд: {chater.EffectiveName}: {cleanUiMessage}");
 
-                // ✅ ДОБАВЛЯЕМ В ВЕБ-ОВЕРЛЕЙ
-                if (_webServer != null)
+                // ✅ В веб-оверлей НЕ отправляем скрытые сообщения!
+                if (_webServer != null && !isHideAction && !isStickerAction)
                 {
                     var displayMsg = new DisplayMessageViewModel(chater, overlayMsg);
                     _webServer.AddMessage(displayMsg);
-                    Debug.WriteLine($"[WebServer] ✅ ДОБАВЛЕНО сообщение из MessageHandlerService: {chater.EffectiveName}: {msg.Message}");
+                    Debug.WriteLine($"[WebServer] ✅ ДОБАВЛЕНО в веб: {chater.EffectiveName}: {cleanUiMessage}");
+                }
+                else if (isStickerAction)
+                {
+                    Debug.WriteLine($"[WebServer] ⏭ Стикер-сообщение от {chater.Login} НЕ отправлено в веб-чат");
                 }
 
-
-
-                // В оверлеи отправляем ТОЛЬКО успешно выполненные команды
-                if (isImportantAction)
+                // ✅ ОБРАБОТКА ГОЛОСОВЫХ СООБЩЕНИЙ (ДАЖЕ ЕСЛИ ОНИ СКРЫТЫЕ!)
+                if (isVoiceAction)
                 {
-                    Debug.WriteLine($"[Important] ✅ Важное сообщение от {chater.Login}: {cleanUiMessage}");
-                    Task.Run(async () =>
-                    {
-                        await Task.Delay(200);
-                        _overlayManager.AddImportantMessage(chater, overlayMsg);
-                    });
+                    Debug.WriteLine($"[Voice] ✅ Голосовое сообщение от {chater.Login}: {cleanUiMessage}");
+                    _overlayManager.AddImportantMessage(chater, overlayMsg);
                 }
                 else if (isStickerAction)
                 {
                     Debug.WriteLine($"[Stickers] ✅ Стикер от {chater.Login}");
-                    Task.Run(async () =>
+
+                    _overlayManager.AddStickerMessage(chater, overlayMsg);
+
+                    if (_webServer != null)
                     {
-                        await Task.Delay(200);
-                        _overlayManager.AddStickerMessage(chater, overlayMsg);
-                    });
+                        Task.Run(() =>
+                        {
+                            try
+                            {
+                                var stickerMatch = System.Text.RegularExpressions.Regex.Match(
+                                    msg.Message,
+                                    @"<sticker pack='(\d+)' id='(\d+)' path='([^']+)'");
+
+                                if (stickerMatch.Success)
+                                {
+                                    string stickerPath = stickerMatch.Groups[3].Value;
+                                    string stickerId = stickerMatch.Groups[2].Value;
+                                    bool isAnimated = stickerPath.EndsWith(".gif", StringComparison.OrdinalIgnoreCase) ||
+                                                     stickerPath.EndsWith(".webp", StringComparison.OrdinalIgnoreCase);
+
+                                    // ✅ ИЗВЛЕКАЕМ ТЕКСТ ПОСЛЕ КОМАНДЫ
+                                    string cleanText = System.Text.RegularExpressions.Regex.Replace(
+                                        msg.Message,
+                                        @"<sticker[^>]*/>",
+                                        "").Trim();
+
+                                    // ✅ ЕСЛИ ТЕКСТА НЕТ — ПОКАЗЫВАЕМ ТОЛЬКО НИК (БЕЗ ДВОЕТОЧИЯ)
+                                    // В любом случае ник будет показан в JS
+
+
+                                    _webServer.SendStickerToMedia(
+                                        chater.EffectiveName,  // ← НИК ВСЕГДА ПЕРЕДАЁТСЯ
+                                        stickerPath,
+                                        stickerId,
+                                        isAnimated,
+                                        cleanText
+
+                                    );
+
+                                    Debug.WriteLine($"[Media] ✅ Стикер отправлен в медиа-чат: {stickerId}, ник: {chater.EffectiveName}, текст: '{cleanText}'");
+                                }
+                            }
+                            catch (Exception ex)
+                            {
+                                Debug.WriteLine($"[Media] ❌ Ошибка отправки стикера: {ex.Message}");
+                            }
+                        });
+                    }
+                }
+                else if (isVideoAction)
+                {
+                    Debug.WriteLine($"[Video] ✅ Видео от {chater.Login}");
+
+                    if (_webServer != null)
+                    {
+                        Task.Run(() =>
+                        {
+                            try
+                            {
+                                var videoMatch = System.Text.RegularExpressions.Regex.Match(
+                                    msg.Message,
+                                    @"<video path='([^']+)' />");
+
+                                if (videoMatch.Success)
+                                {
+                                    string videoPath = videoMatch.Groups[1].Value;
+
+                                    // Преобразуем путь в URL
+                                    string webPath = videoPath.Replace(
+                                        AppDomain.CurrentDomain.BaseDirectory,
+                                        "/")
+                                        .Replace("\\", "/")
+                                        .Replace("//", "/");
+
+                                    if (!webPath.StartsWith("/SF_Data/"))
+                                    {
+                                        webPath = "/SF_Data/" + webPath.TrimStart('/');
+                                    }
+
+                                    // Определяем тип видео
+                                    string extension = Path.GetExtension(videoPath).ToLower();
+                                    bool isAnimatedGif = extension == ".gif" || extension == ".webp";
+
+                                    var json = new
+                                    {
+                                        type = isAnimatedGif ? "sticker" : "video",  // GIF показываем как стикер
+                                        userName = chater.EffectiveName,
+                                        videoUrl = webPath,
+                                        stickerPath = webPath,  // Для GIF
+                                        isAnimated = isAnimatedGif,
+                                        text = "",
+                                        timestamp = DateTime.Now.ToString("yyyy-MM-ddTHH:mm:ss")
+                                    };
+
+                                    var jsonStr = System.Text.Json.JsonSerializer.Serialize(json);
+                                    _webServer.SendMediaMessage(jsonStr);
+
+                                    Debug.WriteLine($"[Media] ✅ Видео отправлено в медиа-чат: {webPath}");
+                                }
+                            }
+                            catch (Exception ex)
+                            {
+                                Debug.WriteLine($"[Media] ❌ Ошибка отправки видео: {ex.Message}");
+                            }
+                        });
+                    }
                 }
                 else if (isReactionAction)
                 {
                     Debug.WriteLine($"[Reaction] Реакция от {chater.Login}: {msg.Message}");
-                    // Реакции НЕ показываем в оверлее
                 }
-                else
+                else if (isHideAction)
                 {
-                    // Обычные сообщения показываем в оверлее
+                    // ✅ СКРЫТЫЕ СООБЩЕНИЯ: ТОЛЬКО в дашборде (уже добавлено выше)
+                    Debug.WriteLine($"[Hide] 📝 Скрытое сообщение от {chater.Login}: {cleanUiMessage} (Только в дашборде)");
+                }
+                else if (hasFormatting || !string.IsNullOrEmpty(cleanUiMessage))
+                {
+                    // Обычные сообщения в оверлей
                     _overlayManager.AddMessage(chater, overlayMsg);
                 }
 
@@ -166,8 +273,6 @@ namespace SmithForge.Main.Services
             {
                 Debug.WriteLine($"[MessageHandler] Ошибка обработки: {ex.Message}");
             }
-
-
         }
 
         public void ProcessConnectorMessage(object? sender, IncomingChatMessage message)

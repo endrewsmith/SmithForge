@@ -209,6 +209,7 @@ namespace SmithForge.ViewModels
 
             _webServer = new WebServerService((int)Settings.NetworkPort);
             _webServer.MessageAdded += OnWebMessageAdded;
+            _webServer.RawSsePayloadReady += OnRawSsePayloadReady; // ✅ ДОБАВИТЬ
             Task.Run(async () => await StartWebServerAsync());
 
             _infoService = new InfoService();
@@ -354,6 +355,42 @@ namespace SmithForge.ViewModels
             LoadChats();
         }
 
+        private void OnRawSsePayloadReady(object? sender, string rawData)
+        {
+            // Обработчик для отправки сырых SSE-данных (например, обновление аватарок)
+            // Этот метод нужен для совместимости с WebServerService
+            Debug.WriteLine($"[MainViewModel] Получены сырые SSE-данные: {rawData.Length} символов");
+        }
+
+        /// <summary>
+        /// Корректное завершение веб-сервера
+        /// </summary>
+        public void ShutdownWebServer()
+        {
+            try
+            {
+                Debug.WriteLine("[MainViewModel] Завершение веб-сервера...");
+
+                if (_webServer != null)
+                {
+                    // 1. Отписываемся от событий (предотвращаем утечки памяти)
+                    _webServer.MessageAdded -= OnWebMessageAdded;
+                    _webServer.RawSsePayloadReady -= OnRawSsePayloadReady;
+
+                    // 2. Вызываем Dispose (закроет все SSE-соединения и остановит сервер)
+                    _webServer.Dispose();
+                    _webServer = null;
+                }
+
+                _isWebServerRunning = false;
+
+                Debug.WriteLine("[MainViewModel] Веб-сервер завершён");
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[MainViewModel] Ошибка завершения веб-сервера: {ex.Message}");
+            }
+        }
         // ============================================================
         // СИНХРОНИЗАЦИЯ НАСТРОЕК YOUTUBE - СОХРАНЕНИЕ ПРИ ИЗМЕНЕНИИ
         // ============================================================
@@ -403,7 +440,7 @@ namespace SmithForge.ViewModels
         // ============================================================
         // ОБРАБОТКА СООБЩЕНИЙ ИЗ YouTubeManager
         // ============================================================
-        
+
         private void OnYouTubeManagerMessageReceived(object? sender, ChatMessage message)
         {
             try

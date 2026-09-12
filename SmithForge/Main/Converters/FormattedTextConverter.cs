@@ -115,18 +115,19 @@ namespace SmithForge.Main.Converters
                     run.FontStyle = FontStyles.Italic;
                     Debug.WriteLine($"[FormattedTextConverter] Applied Italic");
                 }
-                else if (tagName == "c" || tagName == "color")
+                else if (tagName == "color" || tagName == "c")
                 {
                     string colorValue = "white";
                     if (fullTag.Contains("="))
                     {
                         int eqPos = fullTag.IndexOf('=');
                         colorValue = fullTag.Substring(eqPos + 1).Trim();
+                        // Убираем кавычки если есть
+                        colorValue = colorValue.Trim('"', '\'');
                     }
                     run.Foreground = GetColorBrush(colorValue);
                     Debug.WriteLine($"[FormattedTextConverter] Applied Color: {colorValue}");
                 }
-                // Тег important и extend просто игнорируем (они для логики, не для стиля)
             }
             catch (Exception ex)
             {
@@ -141,12 +142,20 @@ namespace SmithForge.Main.Converters
                 if (colorValue.StartsWith("#"))
                     return new SolidColorBrush((Color)ColorConverter.ConvertFromString(colorValue));
 
-                return colorValue switch
+                return colorValue.ToLower() switch
                 {
                     "red" => Brushes.Red,
                     "green" => Brushes.Green,
                     "blue" => Brushes.Blue,
                     "yellow" => Brushes.Yellow,
+                    "orange" => Brushes.Orange,
+                    "purple" => Brushes.Purple,
+                    "pink" => Brushes.Pink,
+                    "cyan" => Brushes.Cyan,
+                    "magenta" => Brushes.Magenta,
+                    "white" => Brushes.White,
+                    "black" => Brushes.Black,
+                    "gray" or "grey" => Brushes.Gray,
                     _ => Brushes.White
                 };
             }

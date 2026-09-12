@@ -1,12 +1,13 @@
-using System;
-using System.Diagnostics;
-using System.Windows;
 using SmithForge.ChatEngine.Core.Models;
 using SmithForge.Features.ChatOverlay;
 using SmithForge.Features.ChatOverlayShorts;
 using SmithForge.Features.ImportantOverlay;
 using SmithForge.Features.StickersOverlay;
 using SmithForge.Main.Models;
+using System;
+using System.Diagnostics;
+using System.Text.RegularExpressions;
+using System.Windows;
 
 namespace SmithForge.Main.Services;
 
@@ -208,5 +209,45 @@ public class OverlayManagerService
             _important?.Hide();
         else
             _important?.Show();
+    }
+
+    public void AddStickerToMedia(Chater user, CommonMessage msg)
+    {
+        try
+        {
+            // Извлекаем путь к стикеру из тега
+            var stickerMatch = Regex.Match(msg.Message, @"<sticker pack='(\d+)' id='(\d+)' path='([^']+)'");
+            if (!stickerMatch.Success) return;
+
+            string stickerPath = stickerMatch.Groups[3].Value;
+            string stickerId = stickerMatch.Groups[2].Value;
+            bool isAnimated = stickerPath.EndsWith(".gif", StringComparison.OrdinalIgnoreCase) ||
+                             stickerPath.EndsWith(".webp", StringComparison.OrdinalIgnoreCase) ||
+                             stickerPath.EndsWith(".apng", StringComparison.OrdinalIgnoreCase);
+
+            // Очищаем текст от тегов
+            string cleanText = Regex.Replace(msg.Message, @"<[^>]*>", "").Trim();
+
+            // Отправляем в веб-сервер
+            var webServer = WebServerService.Instance;
+            if (webServer != null)
+            {
+                webServer.SendStickerToMedia(
+                    user.EffectiveName,
+                    stickerPath,
+                    stickerId,
+                    isAnimated,
+                    cleanText
+                );
+            }
+            else
+            {
+                System.Diagnostics.Debug.WriteLine($"[Media] ❌ WebServerService.Instance == null");
+            }
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[Media] Ошибка отправки стикера: {ex.Message}");
+        }
     }
 }
