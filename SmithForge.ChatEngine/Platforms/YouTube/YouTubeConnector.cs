@@ -118,21 +118,13 @@ public class YouTubeConnector : IChatConnector
             _chatClient.OnLog += OnChatLog;
             _chatClient.OnStatusChanged += OnChatStatusChanged;
 
-            var success = await _chatClient.ConnectAsync(_currentVideoId);
+            // ✅ Просто вызываем метод, убрав "var success ="
+            await _chatClient.ConnectAsync(_currentVideoId, _cts.Token);
 
-            if (success)
-            {
-                Status.IsConnected = true;
-                Status.ErrorMessage = null;
-                Status.LastMessageReceived = DateTime.UtcNow;
-                StatusChanged?.Invoke(this, Status);
-
-                _logger?.LogInformation($"✅ Подключен к YouTube чату видео: {_currentVideoId}");
-            }
-            else
-            {
-                throw new Exception("Не удалось подключиться к YouTube чату");
-            }
+            Status.IsConnected = true;
+            Status.ErrorMessage = null;
+            Status.LastMessageReceived = DateTime.UtcNow;
+            StatusChanged?.Invoke(this, Status);
         }
         catch (Exception ex)
         {
@@ -297,6 +289,7 @@ public class YouTubeConnector : IChatConnector
 
     private void OnChatLog(object? sender, string message)
     {
+        Debug.WriteLine($"[YouTube] {message}");
         _logger?.LogInformation($"[YouTube] {message}");
     }
 

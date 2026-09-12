@@ -107,18 +107,21 @@ namespace SmithForge.Features.InfoSystem
 
                 _packCounter++;
 
-                var baseId = GeneratePackId(folderName);
-                var packId = $"{baseId}_{_packCounter}";
+                // ✅ Парсим номер из имени папки (gaechka_1 → 1)
+                int packNumber = ExtractNumberFromName(folderName, _packCounter);
+
+                // ✅ packId = имя папки (gaechka_1 → gaechka_1)
+                var packId = GeneratePackId(folderName);
 
                 // ✅ СОХРАНЯЕМ СВЯЗИ
                 _packNameToId[folderName] = packId;
-                _packNumberToId[_packCounter] = packId;
-                _packIdToNumber[packId] = _packCounter;
+                _packNumberToId[packNumber] = packId;
+                _packIdToNumber[packId] = packNumber;
 
                 var pack = new StickerPackInfo
                 {
                     PackId = packId,
-                    Number = _packCounter,
+                    Number = packNumber,
                     FolderName = folderName,
                     DisplayName = GetDisplayName(folderName),
                     PreviewImage = files.First(),
@@ -132,10 +135,21 @@ namespace SmithForge.Features.InfoSystem
                 };
 
                 _packCache[packId] = pack;
-                Debug.WriteLine($"[StickerPage] #{_packCounter} {folderName} → '{packId}' ({pack.Stickers.Count} стикеров)");
+                Debug.WriteLine($"[StickerPage] #{packNumber} {folderName} → '{packId}' ({pack.Stickers.Count} стикеров)");
             }
 
             Debug.WriteLine($"[StickerPage] Всего паков: {_packCache.Count}");
+        }
+
+        // ✅ Извлечение номера из имени папки (gaechka_1 → 1)
+        private int ExtractNumberFromName(string folderName, int fallback)
+        {
+            var match = Regex.Match(folderName, @"(\d+)$");
+            if (match.Success && int.TryParse(match.Groups[1].Value, out int number))
+            {
+                return number;
+            }
+            return fallback;
         }
 
         // ============================================================
@@ -187,6 +201,10 @@ namespace SmithForge.Features.InfoSystem
                 Debug.WriteLine("[StickerPage] ❌ Нет паков для генерации");
                 return 0;
             }
+
+            // ✅ ГАРАНТИРОВАННО СОЗДАЁМ ПАПКИ ПЕРЕД ГЕНЕРАЦИЕЙ
+            Directory.CreateDirectory(_pagesDir);
+            Directory.CreateDirectory(_stickersPagesDir);
 
             var generatedCount = 0;
 
@@ -270,6 +288,13 @@ namespace SmithForge.Features.InfoSystem
                     AppDomain.CurrentDomain.BaseDirectory,
                     "/").Replace("\\", "/");
 
+                // ✅ Короткая команда: с{номер_пака}с{номер_стикера}
+                // Например: с2с2, с3с24
+                string shortCommand = $"с{pack.Number}с{sticker.Id.TrimStart('0')}";
+
+                // ✅ Рандомная команда: с{номер_пака}с
+                string randomCommand = $"с{pack.Number}с";
+
                 sb.AppendLine($"  <div class='sticker-card'>");
                 sb.AppendLine($"    <div class='sticker-preview'>");
                 sb.AppendLine($"      <img src='{stickerPath}' alt='{sticker.Id}' />");
@@ -279,12 +304,13 @@ namespace SmithForge.Features.InfoSystem
                 }
                 sb.AppendLine($"    </div>");
                 sb.AppendLine($"    <div class='sticker-info'>");
-                sb.AppendLine($"      <span class='sticker-id'>#{sticker.Id}</span>");
+                sb.AppendLine($"      <span class='sticker-command'>{shortCommand}</span>");
                 sb.AppendLine($"    </div>");
                 sb.AppendLine($"  </div>");
             }
 
             sb.AppendLine("  </div>");
+            sb.AppendLine($"  <p style='color:#888;font-size:12px;margin-top:10px;'>💡 Рандомный стикер: <b>с{pack.Number}с</b></p>");
             sb.AppendLine($"  <a href='!!info:stickers' class='back-link'>⬅️ Назад к пакам</a>");
             sb.AppendLine("</div>");
             return sb.ToString();

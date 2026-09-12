@@ -1,6 +1,8 @@
-﻿using SmithForge.Main.Models;
+﻿using Google.Apis.YouTube.v3.Data;
+using SmithForge.Main.Models;
 using System;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
 using System.Net;
@@ -9,6 +11,9 @@ using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Windows.Documents;
+using TwitchLib.Client.Models.Internal;
+using static Google.Apis.Requests.BatchRequest;
 
 namespace SmithForge.Main.Services
 {
@@ -432,6 +437,25 @@ namespace SmithForge.Main.Services
                 }
 
                 // ============================================================
+                // МЕДИА-ЧАТ
+                // ============================================================
+
+                if (path == "/media/stream")
+                {
+                    Debug.WriteLine("[WebServer] ✅ Обработка /media/stream запроса!");
+                    await HandleMediaStreamRequestAsync(context);
+                    return;
+                }
+
+                if (path == "/media" || path == "/media/")
+                {
+                    // Отдаём HTML-страницу для медиа-чата
+                    await ServeMediaPageAsync(context);
+                    return;
+                }
+
+
+                // ============================================================
                 // ОБЩИЕ РЕСУРСЫ
                 // ============================================================
 
@@ -850,10 +874,11 @@ namespace SmithForge.Main.Services
                 return match.Value;
             });
 
-            // ✅ 3. HTML теги
-            text = Regex.Replace(text, @"\[b\](.*?)\[/b\]", "<b>$1</b>");
-            text = Regex.Replace(text, @"\[i\](.*?)\[/i\]", "<i>$1</i>");
-            text = Regex.Replace(text, @"\[color=(.*?)\](.*?)\[/color\]", "<span style='color:$1'>$2</span>");
+            // ✅ 3. HTML теги форматирования (уже есть)
+            text = Regex.Replace(text, @"<b>(.*?)</b>", "<b>$1</b>");
+            text = Regex.Replace(text, @"<i>(.*?)</i>", "<i>$1</i>");
+            text = Regex.Replace(text, @"<color=(.*?)>(.*?)</color>", "<span style='color:$1'>$2</span>");
+            text = Regex.Replace(text, @"<c=(.*?)>(.*?)</c>", "<span style='color:$1'>$2</span>");
 
             // ✅ 4. Заменяем переносы строк
             text = text.Replace("\n", "<br>");
@@ -1380,9 +1405,34 @@ es.onmessage=e=>{
 
         public void Dispose()
         {
+            Debug.WriteLine("[WebServer] Начинаем корректное завершение...");
+
+            // 1. Закрываем все SSE-соединения
+            CloseAllMediaConnections();
+            CloseAllInfoConnections();
+
+            // 2. Останавливаем сервер
             Stop();
+
+            // 3. Очищаем кэши
+            ClearImageCache();
+            ClearPageCache();
+
+            // 4. Очищаем историю сообщений
+            lock (_lockObject)
+            {
+                _messages.Clear();
+            }
+            lock (_mediaHistoryLock)
+            {
+                _mediaMessageHistory.Clear();
+            }
+
+            // 5. Закрываем HttpListener
             _listener?.Close();
-            _cts?.Dispose();
+            _listener = null;
+
+            Debug.WriteLine("[WebServer] Завершение выполнено");
         }
 
         // ============================================================
@@ -1748,6 +1798,201 @@ es.onmessage=e=>{
                 Debug.WriteLine("[WebServer] 🗑 Кеш страниц очищен");
             }
         }
+
+        // ============================================================
+        // МЕДИА-ЧАТ (стикеры, GIF, видео)
+        // ============================================================
+
+        private readonly List<HttpListenerContext> _mediaStreamClients = new();
+        private readonly object _mediaLock = new object();
+
+        // Обработчик для /media/stream
+        private async Task HandleMediaStreamRequestAsync(HttpListenerContext context)
+        {
+            Debug.WriteLine("[WebServer] 📺 HandleMediaStreamRequestAsync НАЧАЛО!");
+
+            var response = context.Response;
+
+            response.Headers.Add("Content-Type", "text/event-stream");
+            response.Headers.Add("Cache-Control", "no-cache");
+            response.Headers.Add("Connection", "keep-alive");
+            response.StatusCode = 200;
+
+            lock (_mediaLock)
+            {
+                _mediaStreamClients.Add(context);
+            }
+
+            Debug.WriteLine($"[WebServer] 📺 Медиа-клиент подключен. Всего: {_mediaStreamClients.Count}");
+
+            try
+            {
+                // Отправляем последние 10 медиа-сообщений
+                var mediaMessages = GetLastMediaMessages(10);
+                foreach (var msg in mediaMessages)
+                {
+                    var data = $"data: {msg}\n\n";
+                    var buffer = Encoding.UTF8.GetBytes(data);
+                    await response.OutputStream.WriteAsync(buffer);
+                    await response.OutputStream.FlushAsync();
+                }
+
+                while (context.Request.InputStream.CanRead)
+                {
+                    await Task.Delay(1000);
+                    if (!context.Request.InputStream.CanRead)
+                        break;
+                }
+            }
+            finally
+            {
+                lock (_mediaLock)
+                {
+                    _mediaStreamClients.Remove(context);
+                }
+                Debug.WriteLine($"[WebServer] 📺 Медиа-клиент отключен. Осталось: {_mediaStreamClients.Count}");
+                try { response.Close(); } catch { }
+            }
+        }
+
+        /// <summary>
+        /// Кэш медиа-сообщений (для истории)
+        /// </summary>
+        private readonly List<string> _mediaMessageHistory = new();
+        private readonly object _mediaHistoryLock = new();
+        private const int MAX_MEDIA_HISTORY = 50;
+
+        /// <summary>
+        /// Отправить медиа-сообщение (стикер или видео)
+        /// </summary>
+        public void SendMediaMessage(string jsonData)
+        {
+            var data = $"data: {jsonData}\n\n";
+
+            // Сохраняем в историю
+            lock (_mediaHistoryLock)
+            {
+                _mediaMessageHistory.Add(jsonData);
+                if (_mediaMessageHistory.Count > MAX_MEDIA_HISTORY)
+                    _mediaMessageHistory.RemoveAt(0);
+            }
+
+            // Отправляем всем подключенным клиентам
+            var bytes = Encoding.UTF8.GetBytes(data);
+            var disconnected = new List<HttpListenerContext>();
+
+            lock (_mediaLock)
+            {
+                foreach (var client in _mediaStreamClients)
+                {
+                    try
+                    {
+                        client.Response.OutputStream.Write(bytes);
+                        client.Response.OutputStream.Flush();
+                    }
+                    catch
+                    {
+                        disconnected.Add(client);
+                    }
+                }
+
+                foreach (var client in disconnected)
+                {
+                    _mediaStreamClients.Remove(client);
+                }
+            }
+        }
+
+
+        private List<string> GetLastMediaMessages(int count)
+        {
+            lock (_mediaHistoryLock)
+            {
+                return _mediaMessageHistory.TakeLast(count).ToList();
+            }
+        }
+
+        public void SendStickerToMedia(string userName, string stickerPath, string stickerId, bool isAnimated, string text = "")
+        {
+            try
+            {
+                // ✅ Преобразуем локальный путь в URL
+                string webPath = stickerPath.Replace(
+                    AppDomain.CurrentDomain.BaseDirectory,
+                    "/")
+                    .Replace("\\", "/")
+                    .Replace("//", "/");
+
+                // Добавляем префикс /SF_Data/
+                if (!webPath.StartsWith("/SF_Data/"))
+                {
+                    webPath = "/SF_Data/" + webPath.TrimStart('/');
+                }
+
+                // ✅ ЛОГИРУЕМ ТЕКСТ ДЛЯ ОТЛАДКИ
+                Debug.WriteLine($"[WebServer] 📝 Текст для стикера: '{text}'");
+
+                var json = new
+                {
+                    type = "sticker",
+                    userName = userName ?? "Аноним",
+                    stickerId = stickerId ?? "0",
+                    stickerPath = webPath,
+                    isAnimated = isAnimated,
+                    text = text ?? "",  // ✅ ТЕКСТ ПЕРЕДАЁТСЯ
+                    timestamp = DateTime.Now.ToString("yyyy-MM-ddTHH:mm:ss")
+                };
+
+                var jsonStr = System.Text.Json.JsonSerializer.Serialize(json);
+
+                Debug.WriteLine($"[WebServer] 📺 Отправка JSON: {jsonStr}");
+
+                SendMediaMessage(jsonStr);
+
+                Debug.WriteLine($"[WebServer] 📺 Отправлен стикер в медиа-чат: {stickerId} -> {webPath}, текст: '{text}'");
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[WebServer] ❌ Ошибка отправки стикера: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// Отправить видео в медиа-чат
+        /// </summary>
+        public void SendVideoToMedia(string userName, string videoUrl, string text = "")
+        {
+            var json = new
+            {
+                type = "video",
+                userName = userName,
+                videoUrl = videoUrl,
+                text = text,
+                timestamp = DateTime.Now.ToString("yyyy-MM-ddTHH:mm:ss")
+            };
+
+            var jsonStr = System.Text.Json.JsonSerializer.Serialize(json);
+            SendMediaMessage(jsonStr);
+            Debug.WriteLine($"[WebServer] 📺 Отправлено видео в медиа-чат: {videoUrl}");
+        }
+
+        /// <summary>
+        /// Отправить текстовое сообщение в медиа-чат
+        /// </summary>
+        public void SendTextToMedia(string userName, string text)
+        {
+            var json = new
+            {
+                type = "text",
+                userName = userName,
+                text = text,
+                timestamp = DateTime.Now.ToString("yyyy-MM-ddTHH:mm:ss")
+            };
+
+            var jsonStr = System.Text.Json.JsonSerializer.Serialize(json);
+            SendMediaMessage(jsonStr);
+        }
+
 
         // ============================================================
         // ДЕФОЛТНЫЕ СТРАНИЦЫ (в самом конце)
@@ -2244,6 +2489,552 @@ window.addEventListener('beforeunload', () => {
 </body>
 </html>
 """;
+
+
+        private async Task ServeMediaPageAsync(HttpListenerContext context)
+        {
+            var response = context.Response;
+
+            var html = """
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="UTF-8">
+            <title>🎨 Медиа-чат SmithForge</title>
+            <style>
+                * { margin: 0; padding: 0; box-sizing: border-box; }
+                body {
+                    font-family: 'Segoe UI', sans-serif;
+                    background: transparent;
+                    color: #eee;
+                    height: 100vh;
+                    display: flex;
+                    flex-direction: column;
+                    align-items: center;
+                    justify-content: center;
+                    overflow: hidden;
+                }
+                
+                #media-container {
+                    position: relative;
+                    width: 100%;
+                    height: 100%;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                }
+                
+                /* Единственное сообщение-стикер по центру */
+                .media-message {
+                    position: absolute;
+                    background: rgba(26, 26, 46, 0.88);
+                    border: 2px solid rgba(255, 215, 0, 0.3);
+                    border-radius: 20px;
+                    padding: 24px 32px;
+                    max-width: 80%;
+                    min-width: 200px;
+                    backdrop-filter: blur(12px);
+                    box-shadow: 0 8px 40px rgba(0,0,0,0.7);
+                    text-align: center;
+                    opacity: 0;
+                    transform: scale(0.7) rotate(-5deg);
+                    transition: opacity 0.4s ease, transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+                    pointer-events: none;
+                }
+                
+                .media-message.visible {
+                    opacity: 1;
+                    transform: scale(1) rotate(0deg);
+                }
+                
+                .media-message.hiding {
+                    opacity: 0;
+                    transform: scale(0.7) rotate(5deg);
+                }
+                
+                .media-message .msg-header {
+                    display: flex;
+                    justify-content: space-between;
+                    align-items: center;
+                    margin-bottom: 10px;
+                    font-size: 14px;
+                    color: #888;
+                    border-bottom: 1px solid rgba(255,255,255,0.05);
+                    padding-bottom: 8px;
+                }
+                
+                .media-message .msg-header .user-name {
+                    color: #ffd700;
+                    font-weight: bold;
+                    font-size: 16px;
+                }
+                
+                .media-message .msg-header .timestamp {
+                    color: #555;
+                    font-size: 11px;
+                }
+                
+                .media-message .msg-body {
+                    display: flex;
+                    flex-direction: column;
+                    align-items: center;
+                    gap: 10px;
+                }
+                
+                /* Стикер */
+                .sticker-image {
+                    max-width: 300px;
+                    max-height: 300px;
+                    border-radius: 16px;
+                    object-fit: contain;
+                    background: rgba(0,0,0,0.2);
+                    padding: 10px;
+                }
+                
+                .sticker-image.animated {
+                    border: 3px solid #ff6b6b;
+                }
+                
+                /* Видео */
+                .video-container {
+                    width: 100%;
+                    max-width: 500px;
+                    border-radius: 16px;
+                    overflow: hidden;
+                    background: #000;
+                }
+                
+                .video-container video {
+                    width: 100%;
+                    display: block;
+                }
+                
+                /* Текст под стикером */
+    .media-text {
+        color: #ccc;
+        font-size: 16px;
+        text-align: center;
+        word-break: break-word;
+        max-width: 100%;
+        margin-top: 8px;
+        padding: 0 4px;
+        line-height: 1.4;
+
+        /* ✅ ОГРАНИЧЕНИЕ ПО ШИРИНЕ СТИКЕРА */
+        max-width: 300px;  /* ← ДОЛЖНО СОВПАДАТЬ С max-width СТИКЕРА */
+        width: 100%;
+        box-sizing: border-box;
+
+        /* ✅ ПЕРЕНОС ДЛИННЫХ СЛОВ */
+        overflow-wrap: break-word;
+        word-wrap: break-word;
+        hyphens: auto;
+
+    /* ✅ ОГРАНИЧЕНИЕ ПО КОЛИЧЕСТВУ СТРОК С МНОГОТОЧИЕМ */
+    display: -webkit-box;
+    -webkit-line-clamp: 3;        /* ← КОЛИЧЕСТВО СТРОК (меняйте) */
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-height: calc(1.4em * 3);   /* line-height * количество строк */
+    }
+
+        /* ✅ ИМЯ ПОЛЬЗОВАТЕЛЯ - НЕ ПЕРЕНОСИТЬ ПО БУКВАМ! */
+    .media-text .user-name-inline {
+        color: #ffd700;
+        font-weight: bold;
+        white-space: nowrap;        /* ← НЕ ПЕРЕНОСИТЬ НА НОВУЮ СТРОКУ */
+        display: inline-block;      /* ← ЧТОБЫ РАБОТАЛО КАК БЛОК */
+        margin-right: 4px;          /* ← ОТСТУП ПОСЛЕ НИКА */
+    }
+                
+                .media-text .highlight {
+                    color: #ffd700;
+    font-weight: bold;
+                }
+                
+                /* Статус-бар */
+                #status-bar {
+                    position: fixed;
+                    bottom: 20px;
+                    left: 50%;
+                    transform: translateX(-50%);
+                    padding: 6px 18px;
+                    background: rgba(0,0,0,0.5);
+                    border-radius: 20px;
+                    font-size: 11px;
+                    color: #666;
+                    text-align: center;
+                    backdrop-filter: blur(4px);
+                    border: 1px solid rgba(255,255,255,0.05);
+                    pointer-events: none;
+                    z-index: 100;
+                }
+                
+                /* Анимация для появления */
+                @keyframes stickerPop {
+                    0% { opacity: 0; transform: scale(0.5) rotate(-10deg); }
+                    70% { transform: scale(1.05) rotate(1deg); }
+                    100% { opacity: 1; transform: scale(1) rotate(0deg); }
+                }
+                
+                @keyframes stickerFadeOut {
+                    0% { opacity: 1; transform: scale(1) rotate(0deg); }
+                    100% { opacity: 0; transform: scale(0.7) rotate(5deg); }
+                }
+                
+                .media-message.pop-in {
+                    animation: stickerPop 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+                }
+                
+                .media-message.fade-out {
+                    animation: stickerFadeOut 0.4s ease forwards;
+                }
+                
+                /* Счетчик очереди */
+                #queue-badge {
+                    position: fixed;
+                    top: 15px;
+                    right: 15px;
+                    background: rgba(255, 215, 0, 0.15);
+                    border: 1px solid rgba(255, 215, 0, 0.2);
+                    border-radius: 12px;
+                    padding: 4px 14px;
+                    font-size: 12px;
+                    color: #ffd700;
+                    backdrop-filter: blur(4px);
+                    pointer-events: none;
+                    z-index: 100;
+                    font-weight: bold;
+                }
+            </style>
+        </head>
+        <body>
+            <div id="media-container">
+                <div id="current-message" class="media-message"></div>
+            </div>
+            <div id="queue-badge">📦 0</div>
+
+            <script>
+                const container = document.getElementById('media-container');
+                const currentMessageEl = document.getElementById('current-message');
+                const statusBar = document.getElementById('status-bar');
+                const queueBadge = document.getElementById('queue-badge');
+                
+                // ⚙️ НАСТРОЙКИ (можно изменять)
+                const DISPLAY_TIME_MS = 5000;        // 5 секунд по умолчанию
+                const MAX_MESSAGES = 50;             // Максимум в истории
+                const SHOW_TIMESTAMP = true;          // Показывать время
+                
+                // Очередь стикеров
+                let messageQueue = [];
+                let isDisplaying = false;
+                let displayTimer = null;
+                
+                // Подключение к SSE
+                function connectMediaStream() {
+                    const es = new EventSource('/media/stream');
+                    
+                    es.onmessage = function(e) {
+                        try {
+                            const data = JSON.parse(e.data);
+                            
+                            // Обработка закрытия
+                            if (data.type === 'close') {
+                                console.log('Сервер закрывает соединение:', data.message);
+                                es.close();
+                                
+                                return;
+                            }
+                            
+                            addToQueue(data);
+                        } catch (ex) {
+                            console.error('SSE parse error:', ex);
+                        }
+                    };
+                    
+                    es.onerror = function() {
+                        if (es.readyState === EventSource.CLOSED) {
+                            
+                            return;
+                        }
+                        
+                        setTimeout(connectMediaStream, 3000);
+                    };
+                    
+                    es.onopen = function() {
+                        
+                    };
+                }
+                
+                // Добавление в очередь
+    function addToQueue(data) {
+        // Проверяем, что это стикер
+        if (data.type !== 'sticker') {
+            return;
+        }
+
+        // ✅ ЛОГИРУЕМ ПОЛУЧЕННЫЙ ТЕКСТ
+        console.log(`📝 Получен стикер: ${data.stickerId}, текст: "${data.text || '(пусто)'}"`);
+
+        // Ограничиваем очередь
+        if (messageQueue.length >= MAX_MESSAGES) {
+            messageQueue.shift();
+        }
+
+        messageQueue.push(data);
+        updateQueueBadge();
+
+        console.log(`📦 Добавлен стикер в очередь (${messageQueue.length}):`, data.stickerId, 'текст:', data.text);
+
+        if (!isDisplaying) {
+            showNextSticker();
+        }
+    }
+                
+                // Показать следующий стикер
+    // Показать следующий стикер
+    function showNextSticker() {
+        if (isDisplaying) return;
+
+        if (messageQueue.length === 0) {
+            currentMessageEl.className = 'media-message';
+            currentMessageEl.innerHTML = '';
+            isDisplaying = false;
+            updateQueueBadge();
+            return;
+        }
+
+        isDisplaying = true;
+
+        const data = messageQueue.shift();
+        updateQueueBadge();
+
+        console.log(`🖼 Показываем стикер: ${data.stickerId}, текст: "${data.text || '(пусто)'}"`);
+
+        let content = '';
+        let textHtml = '';
+
+        // ✅ СТИКЕР
+        if (data.type === 'sticker') {
+            const isAnimated = data.isAnimated || false;
+            const imgUrl = data.stickerPath;
+
+            if (imgUrl) {
+                content = `
+                    <img src="${imgUrl}" 
+                         class="sticker-image ${isAnimated ? 'animated' : ''}" 
+                         alt="Стикер ${data.stickerId}"
+                         loading="lazy"
+                         onerror="this.style.display='none'" />
+                `;
+            }
+        }
+
+        // ✅ ВСЕГДА ПОКАЗЫВАЕМ НИК (ДАЖЕ БЕЗ ТЕКСТА!)
+        const userName = data.userName || 'Аноним';
+        const color = data.platformColor || '#ffd700';
+
+        let displayText = data.text?.trim() || '';
+
+        // Ограничиваем текст по символам
+        const MAX_CHARS = 200;
+        if (displayText.length > MAX_CHARS) {
+            displayText = displayText.substring(0, MAX_CHARS) + '...';
+        }
+
+        // ✅ ФОРМИРУЕМ ТЕКСТ С НИКОМ
+        if (displayText.length > 0) {
+            // Есть текст — ник + текст
+            textHtml = `<div class="media-text"><span class="user-name-inline">${userName}</span>:  ${displayText}</div>`;
+            console.log(`📝 Добавляем: "${userName}: ${displayText}"`);
+        } else {
+            // Нет текста — только ник
+            textHtml = `<div class="media-text"><span class="user-name-inline">${userName}</span></div>`;
+            console.log(`📝 Добавляем только ник: "${userName}"`);
+        }
+
+        // ✅ ЕСЛИ НЕТ СТИКЕРА - ПРОПУСКАЕМ
+        if (!content) {
+            console.warn('⚠️ Нет стикера для отображения');
+            isDisplaying = false;
+            if (messageQueue.length > 0) {
+                showNextSticker();
+            } else {
+                currentMessageEl.className = 'media-message';
+                currentMessageEl.innerHTML = '';
+                updateQueueBadge();
+            }
+            return;
+        }
+
+        // ✅ СОБИРАЕМ HTML
+        currentMessageEl.className = 'media-message pop-in';
+        currentMessageEl.innerHTML = `
+            <div class="msg-body">
+                ${content}
+                ${textHtml}
+            </div>
+        `;
+
+        // ✅ ПОДСТРАИВАЕМ ШИРИНУ ТЕКСТА ПОД СТИКЕР
+        setTimeout(() => {
+            const img = currentMessageEl.querySelector('.sticker-image');
+            const textEl = currentMessageEl.querySelector('.media-text');
+
+            if (img && textEl) {
+                const imgWidth = img.naturalWidth || img.clientWidth || 280;
+                textEl.style.maxWidth = Math.min(imgWidth, 280) + 'px';
+            }
+        }, 50);
+
+        // ✅ ТАЙМЕР ДЛЯ СКРЫТИЯ
+        if (displayTimer) {
+            clearTimeout(displayTimer);
+            displayTimer = null;
+        }
+
+        displayTimer = setTimeout(() => {
+            hideCurrentSticker();
+        }, DISPLAY_TIME_MS);
+    }
+                
+                // Скрыть текущий стикер с анимацией
+                function hideCurrentSticker() {
+                    if (!isDisplaying) return;
+                    
+                    // Добавляем класс для анимации исчезновения
+                    currentMessageEl.className = 'media-message fade-out';
+                    
+                    // Ждём окончания анимации
+                    setTimeout(() => {
+                        // Проверяем, есть ли ещё стикеры в очереди
+                        if (messageQueue.length > 0) {
+                            isDisplaying = false;
+                            showNextSticker();
+                        } else {
+                            // Очищаем контейнер
+                            currentMessageEl.className = 'media-message';
+                            currentMessageEl.innerHTML = '';
+                            isDisplaying = false;
+                            updateQueueBadge();
+                        }
+                    }, 400);
+                }
+                
+                // Обновить бейдж очереди
+                function updateQueueBadge() {
+                    queueBadge.textContent = `📦 ${messageQueue.length}`;
+                    
+                    if (messageQueue.length > 0) {
+                        queueBadge.style.display = 'block';
+                    } else {
+                        queueBadge.style.display = 'none';
+                    }
+                }
+                
+                // Принудительно показать следующий (можно вызвать из консоли)
+                function forceNext() {
+                    if (displayTimer) {
+                        clearTimeout(displayTimer);
+                        displayTimer = null;
+                    }
+                    hideCurrentSticker();
+                }
+                
+                // Доступ к функциям из консоли
+                window.forceNext = forceNext;
+                window.getQueue = () => messageQueue;
+                
+                // Запускаем
+                connectMediaStream();
+                console.log('🎨 Медиа-чат запущен (режим: один стикер в центре)');
+                console.log(`⏱ Время отображения: ${DISPLAY_TIME_MS}мс`);
+                
+                // Очистка при закрытии
+                window.addEventListener('beforeunload', function() {
+                    if (displayTimer) {
+                        clearTimeout(displayTimer);
+                    }
+                });
+            </script>
+        </body>
+        </html>
+    """;
+
+            var bytes = Encoding.UTF8.GetBytes(html);
+            response.ContentType = "text/html; charset=utf-8";
+            response.ContentLength64 = bytes.Length;
+            await response.OutputStream.WriteAsync(bytes);
+            response.Close();
+        }
+
+        /// <summary>
+        /// Закрыть все SSE-соединения для медиа-чата
+        /// </summary>
+        public void CloseAllMediaConnections()
+        {
+            lock (_mediaLock)
+            {
+                foreach (var client in _mediaStreamClients)
+                {
+                    try
+                    {
+                        // Отправляем событие о закрытии
+                        var closeData = $"data: {{\"type\":\"close\",\"message\":\"Сервер завершает работу\"}}\n\n";
+                        var buffer = Encoding.UTF8.GetBytes(closeData);
+                        client.Response.OutputStream.Write(buffer);
+                        client.Response.OutputStream.Flush();
+
+                        // Закрываем соединение
+                        client.Response.Close();
+                    }
+                    catch (Exception ex)
+                    {
+                        Debug.WriteLine($"[WebServer] Ошибка закрытия медиа-клиента: {ex.Message}");
+                    }
+                }
+                _mediaStreamClients.Clear();
+                Debug.WriteLine("[WebServer] Все медиа-клиенты закрыты");
+            }
+        }
+
+        /// <summary>
+        /// Закрыть все SSE-соединения для информационного чата
+        /// </summary>
+        public void CloseAllInfoConnections()
+        {
+            lock (_infoLock)
+            {
+                foreach (var client in _infoStreamClients)
+                {
+                    try
+                    {
+                        var closeData = $"data: {{\"type\":\"close\",\"message\":\"Сервер завершает работу\"}}\n\n";
+                        var buffer = Encoding.UTF8.GetBytes(closeData);
+                        client.Response.OutputStream.Write(buffer);
+                        client.Response.OutputStream.Flush();
+                        client.Response.Close();
+                    }
+                    catch (Exception ex)
+                    {
+                        Debug.WriteLine($"[WebServer] Ошибка закрытия инфо-клиента: {ex.Message}");
+                    }
+                }
+                _infoStreamClients.Clear();
+                Debug.WriteLine("[WebServer] Все инфо-клиенты закрыты");
+            }
+        }
+
+        /// <summary>
+        /// Закрыть все SSE-соединения для основного чата
+        /// </summary>
+        public void CloseAllStreamConnections()
+        {
+            // Для основного чата /stream соединения закрываются через MessageAdded
+            // Но можно добавить отдельный список если нужно
+            Debug.WriteLine("[WebServer] Основной чат закрывается через MessageAdded");
+        }
 
     }
 }

@@ -20,37 +20,76 @@ namespace SmithForge.Main.Services.ChatCommands
             Debug.WriteLine($"[StickerCommand] Исходный текст: '{msg.Message}'");
 
             int packId = 1;
-            int stickerId = 1;
+            string stickerIdStr = "1";
 
-            // Парсим номер пака (первый аргумент)
+            // ✅ Парсим пак (только число)
             if (info.Arguments.Count > 0 && int.TryParse(info.Arguments[0], out int p))
             {
                 packId = p;
             }
 
-            // Парсим номер стикера (второй аргумент)
-            if (info.Arguments.Count > 1 && int.TryParse(info.Arguments[1], out int s))
+            // ✅ Парсим стикер (число или random)
+            if (info.Arguments.Count > 1)
             {
-                stickerId = s;
+                stickerIdStr = info.Arguments[1];
             }
 
-            // Проверяем, существует ли такой стикер
-            string stickerPath = StickerManager.GetStickerPath(packId, stickerId);
+            string stickerPath = null;
+            int finalStickerId = 1;
+
+            // ✅ ОБРАБОТКА "random" — случайный стикер из пака
+            if (stickerIdStr.Equals("random", StringComparison.OrdinalIgnoreCase))
+            {
+                var pack = StickerManager.GetPack(packId);
+
+                if (pack == null || pack.StickerFiles.Count == 0)
+                {
+                    msg.Message = $"❌ Пак {packId} пуст или не найден";
+                    msg.IsProcessedByCommand = true;
+                    msg.ShouldChargeForCommand = false;
+                    return;
+                }
+
+                var random = new Random();
+                int randomIndex = random.Next(pack.StickerFiles.Count);
+                stickerPath = pack.StickerFiles[randomIndex];
+                finalStickerId = randomIndex + 1;
+
+                Debug.WriteLine($"[StickerCommand] 🎲 Рандом: выбран стикер #{finalStickerId} из {pack.StickerFiles.Count}");
+            }
+            else
+            {
+                // ✅ Конкретный стикер
+                if (int.TryParse(stickerIdStr, out int s))
+                {
+                    finalStickerId = s;
+                }
+
+                stickerPath = StickerManager.GetStickerPath(packId, finalStickerId);
+            }
 
             if (string.IsNullOrEmpty(stickerPath))
             {
-                msg.Message = $"❌ Стикер пак {packId}, номер {stickerId} не найден";
+                msg.Message = $"❌ Стикер пак {packId}, номер {stickerIdStr} не найден";
                 msg.IsProcessedByCommand = true;
+                msg.ShouldChargeForCommand = false;
                 Debug.WriteLine($"[StickerCommand] Стикер не найден");
                 return;
             }
 
-            // СОХРАНЯЕМ исходный текст и ДОБАВЛЯЕМ тег
-            string originalText = msg.Message; // Текст до команды
-            msg.Message = $"<sticker pack='{packId}' id='{stickerId}' path='{stickerPath}' />{originalText}";
-            msg.IsProcessedByCommand = true;
+            // ✅ УДАЛЯЕМ КОМАНДУ ИЗ ТЕКСТА
+            string textAfterCommand = msg.Message;
+            var commandMatch = System.Text.RegularExpressions.Regex.Match(textAfterCommand, @"!!st:[^ ]+");
+            if (commandMatch.Success)
+            {
+                textAfterCommand = textAfterCommand.Remove(commandMatch.Index, commandMatch.Length).Trim();
+            }
 
-            Debug.WriteLine($"[StickerCommand] КОНЕЦ - стикер: пак {packId}, номер {stickerId}");
+            msg.Message = $"<sticker pack='{packId}' id='{finalStickerId}' path='{stickerPath}' />{textAfterCommand}";
+            msg.IsProcessedByCommand = true;
+            msg.ShouldChargeForCommand = true;
+
+            Debug.WriteLine($"[StickerCommand] КОНЕЦ - стикер: пак {packId}, номер {finalStickerId}");
             Debug.WriteLine($"[StickerCommand] Итоговое сообщение: '{msg.Message}'");
         }
     }

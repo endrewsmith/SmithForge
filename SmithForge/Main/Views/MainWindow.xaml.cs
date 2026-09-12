@@ -211,13 +211,20 @@ namespace SmithForge.Main.Views
 
         protected override void OnClosed(EventArgs e)
         {
+            Debug.WriteLine("[MainWindow] Начинаем закрытие...");
+
             if (DataContext is SmithForge.ViewModels.MainViewModel vm)
             {
+                // 1. Останавливаем все чаты
                 if (vm.IsProcessRunning)
                 {
                     vm.StopCommand.Execute(null);
                 }
 
+                // 2. ✅ КОРРЕКТНОЕ ЗАКРЫТИЕ ВЕБ-СЕРВЕРА (ДО сохранения настроек)
+                vm.ShutdownWebServer();
+
+                // 3. Сохраняем настройки
                 vm.Settings.WindowTop = this.Top;
                 vm.Settings.WindowLeft = this.Left;
                 vm.Settings.WindowHeight = this.Height;
@@ -231,6 +238,12 @@ namespace SmithForge.Main.Views
 
                 ConfigService.Save(vm.Settings);
             }
+
+            // 4. Отменяем глобальные хуки
+            UnregisterGlobalHotkey();
+            StopKeyboardHook();
+
+            Debug.WriteLine("[MainWindow] Закрытие завершено");
             base.OnClosed(e);
             Application.Current.Shutdown();
         }
