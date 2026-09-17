@@ -152,6 +152,24 @@
             </MenuItem>
             <MenuItem Header="Shorts Overlay" Click="ToggleShortsOverlay_Click"/>
             <MenuItem Header="YouTube Manager" Click="OpenYouTubeManager_Click"/>
+            <MenuItem Header="🔔 Алерты">
+                <MenuItem Header="⚙️ Настройки алертов" Click="OpenAlertsSettings_Click">
+                    <MenuItem.Icon>
+                        <TextBlock Text="⚙️"/>
+                    </MenuItem.Icon>
+                </MenuItem>
+                <Separator/>
+                <MenuItem Header="👁 Показать/скрыть оверлей алертов" Click="ToggleAlertsOverlay_Click">
+                    <MenuItem.Icon>
+                        <TextBlock Text="👁"/>
+                    </MenuItem.Icon>
+                </MenuItem>
+                <MenuItem Header="🌐 Открыть веб-оверлей в браузере" Click="OpenAlertsWebOverlay_Click">
+                    <MenuItem.Icon>
+                        <TextBlock Text="🌐"/>
+                    </MenuItem.Icon>
+                </MenuItem>
+            </MenuItem>
         </Menu>
 
         <!-- ПАНЕЛЬ УПРАВЛЕНИЯ (Строка 1) -->
@@ -644,6 +662,46 @@
                             <Button Content="⚙️" Width="30" Height="30" 
                     ToolTip="Настройки"
                     Command="{Binding ConfigureMainChatCommand}"/>
+                        </StackPanel>
+                    </Grid>
+                </Border>
+
+                <!-- 🔔 Алерты (DonationAlerts / DonationPay) -->
+                <Border Background="#FFF8E1" CornerRadius="4" Padding="8" Margin="0,0,0,5">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+
+                        <TextBlock Grid.Column="0" Text="🔔" FontSize="16" Margin="0,0,8,0" VerticalAlignment="Center"/>
+                        <TextBlock Grid.Column="1" Text="Алерты (донаты)" FontWeight="SemiBold" VerticalAlignment="Center"/>
+
+                        <!-- Настройка длительности показа -->
+                        <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,10,0">
+                            <TextBlock Text="⏱️" FontSize="14" VerticalAlignment="Center" Margin="0,0,5,0"/>
+                            <Slider Width="100"
+                                    Minimum="3"
+                                    Maximum="30"
+                                    Value="{Binding Settings.AlertsAlertDuration, UpdateSourceTrigger=PropertyChanged}"
+                                    TickFrequency="1"
+                                    IsSnapToTickEnabled="True"
+                                    VerticalAlignment="Center"/>
+                            <TextBlock Text="{Binding Settings.AlertsAlertDuration, StringFormat={}{0}сек}"
+                                       FontSize="11"
+                                       VerticalAlignment="Center"
+                                       Margin="5,0,0,0"/>
+                        </StackPanel>
+
+                        <StackPanel Grid.Column="3" Orientation="Horizontal">
+                            <Button Content="👁️" Width="30" Height="30" Margin="0,0,5,0"
+                                    ToolTip="Показать/скрыть оверлей алертов"
+                                    Click="ToggleAlertsOverlay_Click"/>
+                            <Button Content="⚙️" Width="30" Height="30"
+                                    ToolTip="Настройки алертов"
+                                    Click="OpenAlertsSettings_Click"/>
                         </StackPanel>
                     </Grid>
                 </Border>

@@ -235,6 +235,7 @@ namespace SmithForge.Main.Views
                 vm.SaveShortsPosition();
                 vm.SaveImportantPosition();
                 vm.SaveStickersPosition();
+                vm.SaveAlertsPosition();
 
                 ConfigService.Save(vm.Settings);
             }
@@ -378,6 +379,54 @@ namespace SmithForge.Main.Views
             window.DataContext = vm.GetChatManagerViewModel();  // ← нужно добавить метод
             window.Owner = this;
             window.ShowDialog();
+        }
+
+        // ============================================================
+        // 🔔 ОБРАБОТЧИКИ АЛЕРТОВ
+        // ============================================================
+
+        /// <summary>
+        /// Открыть окно настроек алертов
+        /// </summary>
+        private async void OpenAlertsSettings_Click(object sender, RoutedEventArgs e)
+        {
+            if (DataContext is SmithForge.ViewModels.MainViewModel vm)
+            {
+                await vm.OpenAlertsSettingsCommand.ExecuteAsync(null);
+            }
+        }
+
+        /// <summary>
+        /// Вкл/выкл оверлей алертов
+        /// </summary>
+        private void ToggleAlertsOverlay_Click(object sender, RoutedEventArgs e)
+        {
+            if (DataContext is SmithForge.ViewModels.MainViewModel vm)
+            {
+                vm.ToggleAlertsOverlayCommand.Execute(null);
+            }
+        }
+
+        /// <summary>
+        /// Открыть веб-оверлей алертов в браузере
+        /// </summary>
+        private void OpenAlertsWebOverlay_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                string url = "http://localhost:10881/alerts";
+                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+                {
+                    FileName = url,
+                    UseShellExecute = true
+                });
+                System.Diagnostics.Debug.WriteLine($"[MainWindow] Открыт веб-оверлей алертов: {url}");
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Не удалось открыть браузер: {ex.Message}", "Ошибка",
+                    MessageBoxButton.OK, MessageBoxImage.Warning);
+            }
         }
     }
 }

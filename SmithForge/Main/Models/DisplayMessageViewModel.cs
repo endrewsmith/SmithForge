@@ -12,6 +12,7 @@ using System.Windows.Data;
 using System.Windows.Documents;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Media.Imaging;
 
 namespace SmithForge.Main.Models
 {
@@ -277,12 +278,14 @@ namespace SmithForge.Main.Models
         {
             _cachedSkin = null;
             _cachedAvatarPath = null;
+            _cachedAvatarImage = null;   // ✅ ДОБАВЛЕНО
             OnPropertyChanged(nameof(DisplayName));
             OnPropertyChanged(nameof(MessageCount));
             OnPropertyChanged(nameof(UserRank));
             OnPropertyChanged(nameof(PlatformColor));
             OnPropertyChanged(nameof(MessageSkin));
             OnPropertyChanged(nameof(AvatarPath));
+            OnPropertyChanged(nameof(AvatarImage));  // ✅ ДОБАВЛЕНО
         }
 
         // ⭐ ИСПРАВЛЕНО: Теперь конвертер вызывается строго ОДИН раз при получении текста!
@@ -360,44 +363,43 @@ namespace SmithForge.Main.Models
             }
 
             _cachedAvatarPath = null;
+            _cachedAvatarImage = null;   // ✅ ДОБАВЛЕНО: сбрасываем BitmapImage
+
             OnPropertyChanged(nameof(AvatarPath));
+            OnPropertyChanged(nameof(AvatarImage));  // ✅ ДОБАВЛЕНО
         }
 
-        //private void OnChaterUpdated(Chater updatedChater)
-        //{
-        //    if (User?.Id == updatedChater.Id)
-        //    {
-        //        User = updatedChater;
-        //        OnPropertyChanged(nameof(User));
-        //        OnPropertyChanged(nameof(UserRank));
-        //        OnPropertyChanged(nameof(DisplayName));
-        //        OnPropertyChanged(nameof(MessageCount));
-        //        OnPropertyChanged(nameof(PlatformColor));
+        private BitmapImage? _cachedAvatarImage;
 
-        //        _cachedSkin = null;
-        //        OnPropertyChanged(nameof(MessageSkin));
+        public BitmapImage? AvatarImage
+        {
+            get
+            {
+                if (_cachedAvatarImage != null) return _cachedAvatarImage;
 
-        //        _cachedAvatarPath = null;
-        //        OnPropertyChanged(nameof(AvatarPath));
+                string? path = AvatarPath;  // твой существующий путь
+                if (string.IsNullOrEmpty(path) || !File.Exists(path))
+                    return null;
 
-        //        // ✅ Если обновился пользователь — пересоздаём форматированный текст (ранг влияет на цвет)
-        //        if (!string.IsNullOrEmpty(MessageText))
-        //        {
-        //            try
-        //            {
-        //                FormattedMessage = _formattedTextConverter.Convert(MessageText, typeof(object), null, null);
-        //            }
-        //            catch (Exception ex)
-        //            {
-        //                System.Diagnostics.Debug.WriteLine($"[FormattedMessage Rebuild Error] {ex.Message}");
-        //            }
-        //        }
-        //    }
-        //}
+                try
+                {
+                    var bitmap = new BitmapImage();
+                    bitmap.BeginInit();
+                    bitmap.UriSource = new Uri(path, UriKind.Absolute);
+                    bitmap.CacheOption = BitmapCacheOption.OnLoad;              // ← загружаем сразу
+                    bitmap.CreateOptions = BitmapCreateOptions.IgnoreImageCache; // ← игнорим кеш
+                    bitmap.EndInit();
+                    bitmap.Freeze();   // ← отпускаем файл
 
-        //public void Dispose()
-        //{
-        //    ChaterStorage.OnChaterUpdated -= OnChaterUpdated;
-        //}
+                    _cachedAvatarImage = bitmap;
+                    return bitmap;
+                }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine($"[Avatar] Ошибка: {ex.Message}");
+                    return null;
+                }
+            }
+        }
     }
 }

@@ -367,56 +367,60 @@ namespace SmithForge.Features.ChatManager
         }
 
         // ========== СОХРАНЕНИЕ И ЗАГРУЗКА В ФАЙЛ ==========
-
+        private static readonly object _saveLock = new object();
         public void SaveChatsToFile()
         {
-            try
+            lock (_saveLock)
             {
-                string? directory = Path.GetDirectoryName(ChatsConfigPath);
-                if (!string.IsNullOrEmpty(directory) && !Directory.Exists(directory))
+                try
                 {
-                    Directory.CreateDirectory(directory);
-                }
-
-                var chatDataList = new List<ChatSaveData>();
-                foreach (var chat in Chats)
-                {
-                    chatDataList.Add(new ChatSaveData
+                    string? directory = Path.GetDirectoryName(ChatsConfigPath);
+                    if (!string.IsNullOrEmpty(directory) && !Directory.Exists(directory))
                     {
-                        ChatName = chat.ChatName,
-                        Platform = chat.Platform,
-                        ChannelId = chat.ChannelId,
-                        VideoId = chat.VideoId,
-                        ApiKey = chat.ApiKey,
-                        DisplayName = chat.DisplayName,
-                        Mode = chat.Mode,
-                        PreferredMethod = chat.PreferredMethod,
-                        LastUsedMethod = chat.LastUsedMethod,
-                        MessageCount = chat.MessageCount
-                    });
+                        Directory.CreateDirectory(directory);
+                    }
+
+                    var chatDataList = new List<ChatSaveData>();
+                    foreach (var chat in Chats)
+                    {
+                        chatDataList.Add(new ChatSaveData
+                        {
+                            ChatName = chat.ChatName,
+                            Platform = chat.Platform,
+                            ChannelId = chat.ChannelId,
+                            VideoId = chat.VideoId,
+                            ApiKey = chat.ApiKey,
+                            DisplayName = chat.DisplayName,
+                            Mode = chat.Mode,
+                            PreferredMethod = chat.PreferredMethod,
+                            LastUsedMethod = chat.LastUsedMethod,
+                            MessageCount = chat.MessageCount
+                        });
+                    }
+
+                    var saveData = new ChatConfigFile
+                    {
+                        Version = 1,
+                        LastModified = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"),
+                        Chats = chatDataList
+                    };
+
+                    var options = new JsonSerializerOptions
+                    {
+                        WriteIndented = true
+                    };
+
+                    string json = JsonSerializer.Serialize(saveData, options);
+                    File.WriteAllText(ChatsConfigPath, json);
+
+                    System.Diagnostics.Debug.WriteLine($"[ChatManager] Сохранено {chatDataList.Count} чатов");
                 }
-
-                var saveData = new ChatConfigFile
+                catch (Exception ex)
                 {
-                    Version = 1,
-                    LastModified = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"),
-                    Chats = chatDataList
-                };
-
-                var options = new JsonSerializerOptions
-                {
-                    WriteIndented = true
-                };
-
-                string json = JsonSerializer.Serialize(saveData, options);
-                File.WriteAllText(ChatsConfigPath, json);
-
-                System.Diagnostics.Debug.WriteLine($"[ChatManager] Сохранено {chatDataList.Count} чатов");
+                    System.Diagnostics.Debug.WriteLine($"[ChatManager] Ошибка сохранения: {ex.Message}");
+                }
             }
-            catch (Exception ex)
-            {
-                System.Diagnostics.Debug.WriteLine($"[ChatManager] Ошибка сохранения: {ex.Message}");
-            }
+                
         }
 
         private void LoadChatsFromFilePrivate()

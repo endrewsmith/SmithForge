@@ -119,7 +119,7 @@ namespace SmithForge.ChatEngine.Platforms.GoodGame
         private async Task ProcessMessageAsync(string message)
         {
             // ✅ ОТЛАДКА: выводим сырое сообщение
-            Debug.WriteLine($"[GgWebSocket] RAW: {message}");
+            //Debug.WriteLine($"[GgWebSocket] RAW: {message}");
 
             try
             {
@@ -129,7 +129,7 @@ namespace SmithForge.ChatEngine.Platforms.GoodGame
                 if (root.TryGetProperty("type", out var typeElement))
                 {
                     var type = typeElement.GetString();
-                    Debug.WriteLine($"[GgWebSocket] Тип: {type}");
+                    //Debug.WriteLine($"[GgWebSocket] Тип: {type}");
 
                     // Проверяем наличие поля data
                     if (!root.TryGetProperty("data", out var data))
@@ -148,11 +148,11 @@ namespace SmithForge.ChatEngine.Platforms.GoodGame
                             await HandleRemoveMessageAsync(data);
                             break;
                         case "welcome":
-                            Debug.WriteLine($"[GgWebSocket] 👋 Welcome получено");
+                            //Debug.WriteLine($"[GgWebSocket] 👋 Welcome получено");
                             OnLog?.Invoke(this, "👋 Получено welcome от сервера");
                             break;
                         default:
-                            Debug.WriteLine($"[GgWebSocket] 📨 Неизвестный тип: {type}");
+                            //Debug.WriteLine($"[GgWebSocket] 📨 Неизвестный тип: {type}");
                             OnLog?.Invoke(this, $"📨 Неизвестный тип: {type}");
                             break;
                     }

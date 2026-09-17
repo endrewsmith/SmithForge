@@ -19,44 +19,63 @@ namespace SmithForge.Main.Services.ChatCommands
         {
             Debug.WriteLine($"[DislikeCommand] ========== НАЧАЛО ==========");
 
-            // 1. Парсим номер сообщения
             string messageNumberStr = GetArg(info, 0, "0");
             if (!int.TryParse(messageNumberStr, out int messageNumber) || messageNumber <= 0)
             {
-                Debug.WriteLine($"[DislikeCommand] Ошибка: неверный номер '{messageNumberStr}'");
-                // Оставляем тег даже при ошибке, чтобы сообщение было скрыто
-                msg.Message = $"<dislike msg='{messageNumber}' user='{chater.Id}' />";
+                Debug.WriteLine($"[DislikeCommand] Ошибка: неверный формат номера '{messageNumberStr}'");
+                msg.Message = string.Empty;
                 msg.IsProcessedByCommand = true;
                 msg.ShouldChargeForCommand = false;
                 return;
             }
 
-            // 2. Проверяем автора в базе данных
             string targetAuthorId = DatabaseService.GetChaterIdByMessageNumber(messageNumber);
 
             if (string.IsNullOrEmpty(targetAuthorId))
             {
-                Debug.WriteLine($"[DislikeCommand] Сообщение #{messageNumber} не найдено");
-                msg.Message = $"<dislike msg='{messageNumber}' user='{chater.Id}' />";
+                Debug.WriteLine($"[DislikeCommand] Сообщение #{messageNumber} не найдено в БД");
+                msg.Message = string.Empty;
                 msg.IsProcessedByCommand = true;
                 msg.ShouldChargeForCommand = false;
                 return;
             }
 
-            // 3. ПРОВЕРКА НА САМО-ДИЗЛАЙК
             if (targetAuthorId == chater.Id)
             {
-                Debug.WriteLine($"[DislikeCommand] ЗАПРЕТ: {chater.Login} пытался дизлайкнуть себя.");
-                msg.Message = $"<dislike msg='{messageNumber}' user='{chater.Id}' />"; // ВСЕГДА создаем тег
+                Debug.WriteLine($"[DislikeCommand] ЗАПРЕТ: {chater.Login} пытался дизлайкнуть себя (сообщение #{messageNumber})");
+                msg.Message = string.Empty;
                 msg.IsProcessedByCommand = true;
                 msg.ShouldChargeForCommand = false;
                 return;
             }
 
-            // 4. Успешное выполнение
-            Debug.WriteLine($"[DislikeCommand] Дизлайк разрешен для #{messageNumber}");
+            // ✅ Проверяем текущую реакцию
+            long chatLogId = DatabaseService.GetMessageIdByNumber(messageNumber);
+            if (chatLogId <= 0)
+            {
+                Debug.WriteLine($"[DislikeCommand] Не удалось получить ChatLogs.Id для #{messageNumber}");
+                msg.Message = string.Empty;
+                msg.IsProcessedByCommand = true;
+                msg.ShouldChargeForCommand = false;
+                return;
+            }
 
-            // Формируем тег для UI
+            string? existingReaction = DatabaseService.GetUserReaction(chatLogId, chater.Id);
+            Debug.WriteLine($"[DislikeCommand] Текущая реакция пользователя: {existingReaction ?? "(нет)"}");
+
+            // ✅ Если уже стоит ДИЗЛАЙК — пропускаем без списания
+            if (existingReaction == "dislike")
+            {
+                Debug.WriteLine($"[DislikeCommand] ⏭ У пользователя уже дизлайк на #{messageNumber}, пропускаем без списания");
+                msg.Message = string.Empty;
+                msg.IsProcessedByCommand = true;
+                msg.ShouldChargeForCommand = false;
+                return;
+            }
+
+            Debug.WriteLine($"[DislikeCommand] ✅ Дизлайк разрешен для #{messageNumber} от {chater.Login} " +
+                            $"(было: {existingReaction ?? "ничего"} → станет: dislike)");
+
             msg.Message = $"<dislike msg='{messageNumber}' user='{chater.Id}' />";
             msg.IsProcessedByCommand = true;
             msg.ShouldChargeForCommand = true;

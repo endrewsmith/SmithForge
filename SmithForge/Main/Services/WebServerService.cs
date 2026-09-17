@@ -28,14 +28,19 @@ namespace SmithForge.Main.Services
         private readonly object _lockObject = new();
         private readonly Dictionary<int, string> _rankTemplates = new();
 
-        public event EventHandler<DisplayMessageViewModel>? MessageAdded;
-        public event EventHandler<string> RawSsePayloadReady; // Событие для отправки готового JSON в стрим
-
         private readonly Dictionary<string, string> _infoPageCache = new();
-        private readonly List<HttpListenerContext> _infoStreamClients = new();
+        private readonly List<SseClient> _infoStreamClients = new();
         private readonly object _infoLock = new object();
         private readonly string _infoPagesDir;
         private readonly string _infoWebDir;
+
+        // === SSE-клиенты основного чата /stream ===
+        private readonly List<SseClient> _streamClients = new();
+        private readonly object _streamLock = new object();
+
+        // === Alerts Overlay (веб-оверлей алертов) ===
+        private readonly List<SseClient> _alertsStreamClients = new();
+        private readonly object _alertsLock = new object();
 
         public static WebServerService? Instance { get; private set; }
 
@@ -97,43 +102,6 @@ namespace SmithForge.Main.Services
                 Debug.WriteLine($"[WebServer] ✅ Создан info/index.html");
             }
         }
-        /// <summary>
-        /// Отправить обновление чаттера в веб-оверлей
-        /// </summary>
-        public void SendChaterUpdate(Chater chater, DisplayMessageViewModel msgVm)
-        {
-            try
-            {
-                if (chater == null) return;
-
-                // ✅ Проверяем, что аватарка существует
-                if (string.IsNullOrEmpty(msgVm.AvatarPath) || !File.Exists(msgVm.AvatarPath))
-                {
-                    Debug.WriteLine($"[WebServer] ⚠️ Аватарка не найдена для {chater.EffectiveName}");
-                    return;
-                }
-
-                Debug.WriteLine($"[WebServer] SendChaterUpdate вызван для {chater.EffectiveName}");
-                Debug.WriteLine($"[WebServer] AvatarPath: {msgVm.AvatarPath}");
-
-                // ✅ Отправляем через событие ТОЛЬКО если есть текст сообщения
-                // Если это обновление аватарки (пустое сообщение) - пропускаем
-                if (!string.IsNullOrEmpty(msgVm.MessageText))
-                {
-                    MessageAdded?.Invoke(this, msgVm);
-                    Debug.WriteLine($"[WebServer] ✅ Отправлено обновление для {chater.EffectiveName}");
-                }
-                else
-                {
-                    // ✅ Для обновления аватарки отправляем специальное SSE-событие
-                    SendAvatarUpdateOnly(chater);
-                }
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine($"[WebServer] Ошибка в SendChaterUpdate: {ex.Message}");
-            }
-        }
 
         /// <summary>
         /// Отправить только обновление аватарки (без создания сообщения)
@@ -179,7 +147,7 @@ namespace SmithForge.Main.Services
                 var data = $"data: {json}\n\n";
 
                 // ✅ Вместо MessageAdded вызываем специализированное событие со строкой данных
-                RawSsePayloadReady?.Invoke(this, data);
+                BroadcastRawSse(data);
 
                 Debug.WriteLine($"[WebServer] ✅ Отправлено обновление аватарки для {chater.EffectiveName}");
             }
@@ -189,62 +157,6 @@ namespace SmithForge.Main.Services
             }
         }
 
-
-        /// <summary>
-        /// Отправить обновление аватарки в веб-оверлей
-        /// </summary>
-        /// <summary>
-        /// Отправить обновление аватарки в веб-оверлей
-        /// </summary>
-        public void SendAvatarUpdate(Chater chater, DisplayMessageViewModel msgVm)
-        {
-            if (chater == null) return;
-
-            try
-            {
-                Debug.WriteLine($"[WebServer] Отправка обновления аватарки для {chater.EffectiveName}");
-
-                // ✅ Проверяем, что аватарка существует
-                if (string.IsNullOrEmpty(msgVm.AvatarPath) || !File.Exists(msgVm.AvatarPath))
-                {
-                    Debug.WriteLine($"[WebServer] ⚠️ Аватарка не найдена: {msgVm.AvatarPath}");
-                    return;
-                }
-
-                // ✅ НЕ вызываем MessageAdded для пустых сообщений
-                // Вместо этого отправляем SSE событие напрямую через MessageAdded с типом avatar_update
-                // Но для этого нужно, чтобы в JavaScript обрабатывался этот тип
-
-                // ✅ Отправляем через SSE напрямую, используя существующий механизм
-                // Создаём сообщение с текстом-маркером, который JavaScript обработает как обновление
-                var tempMsg = new DisplayMessageViewModel(chater, new CommonMessage
-                {
-                    Message = "🔄",  // ← Специальный маркер для обновления
-                    Type = "avatar_update",
-                    MessageNumber = 0
-                });
-                tempMsg.RefreshAvatar();
-
-                // ✅ Теперь добавляем в историю и отправляем
-                // Добавляем с маркером, но потом JavaScript скроет его
-                lock (_lockObject)
-                {
-                    _messages.Add(tempMsg);
-                    if (_messages.Count > 100)
-                    {
-                        _messages.RemoveAt(0);
-                    }
-                }
-
-                MessageAdded?.Invoke(this, tempMsg);
-
-                Debug.WriteLine($"[WebServer] ✅ Отправлено обновление аватарки для {chater.EffectiveName}");
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine($"[WebServer] Ошибка отправки обновления аватарки: {ex.Message}");
-            }
-        }
         public async Task StartAsync()
         {
             if (_isRunning) return;
@@ -454,6 +366,23 @@ namespace SmithForge.Main.Services
                     return;
                 }
 
+                // ============================================================
+                // ALERTS (веб-оверлей алертов)
+                // ============================================================
+
+                if (path == "/alerts/stream")
+                {
+                    Debug.WriteLine("[WebServer] ✅ Обработка /alerts/stream запроса!");
+                    await HandleAlertsStreamRequestAsync(context);
+                    return;
+                }
+
+                if (path == "/alerts" || path == "/alerts/")
+                {
+                    Debug.WriteLine("[WebServer] ✅ Обработка /alerts запроса!");
+                    await ServeAlertsPageAsync(context);
+                    return;
+                }
 
                 // ============================================================
                 // ОБЩИЕ РЕСУРСЫ
@@ -663,22 +592,41 @@ namespace SmithForge.Main.Services
             try
             {
                 var fileName = Path.GetFileName(context.Request.Url?.AbsolutePath);
-                var avatarPath = Path.Combine(
-                    AppDomain.CurrentDomain.BaseDirectory,
-                    "SF_Data", "Assets", "Avatars", "custom",
-                    fileName);
-
-                if (!File.Exists(avatarPath))
+                if (string.IsNullOrEmpty(fileName))
                 {
-                    // Пробуем в platform
-                    avatarPath = Path.Combine(
-                        AppDomain.CurrentDomain.BaseDirectory,
-                        "SF_Data", "Assets", "Avatars", "platform",
-                        fileName);
+                    context.Response.StatusCode = 404;
+                    context.Response.Close();
+                    return;
                 }
 
-                if (!File.Exists(avatarPath))
+                // ✅ Ищем в 4 папках: custom, platform, Default, default
+                string baseDir = Path.Combine(
+                    AppDomain.CurrentDomain.BaseDirectory,
+                    "SF_Data", "Assets", "Avatars");
+
+                string[] searchFolders = new[]
                 {
+            Path.Combine(baseDir, "custom"),
+            Path.Combine(baseDir, "platform"),
+            Path.Combine(baseDir, "Default"),   // ← ДОБАВЛЕНО
+            Path.Combine(baseDir, "default"),   // ← ДОБАВЛЕНО (на случай разного регистра)
+        };
+
+                string? avatarPath = null;
+                foreach (var folder in searchFolders)
+                {
+                    var candidate = Path.Combine(folder, fileName);
+                    if (File.Exists(candidate))
+                    {
+                        avatarPath = candidate;
+                        Debug.WriteLine($"[WebServer] ✅ Аватар найден: {candidate}");
+                        break;
+                    }
+                }
+
+                if (avatarPath == null)
+                {
+                    Debug.WriteLine($"[WebServer] ❌ Аватар НЕ найден: {fileName}");
                     context.Response.StatusCode = 404;
                     context.Response.Close();
                     return;
@@ -687,14 +635,19 @@ namespace SmithForge.Main.Services
                 var bytes = await File.ReadAllBytesAsync(avatarPath);
                 context.Response.ContentType = "image/png";
                 context.Response.ContentLength64 = bytes.Length;
+                context.Response.Headers.Add("Cache-Control", "no-cache, no-store, must-revalidate");
                 await context.Response.OutputStream.WriteAsync(bytes);
                 context.Response.Close();
             }
             catch (Exception ex)
             {
                 Debug.WriteLine($"[WebServer] Ошибка аватара: {ex.Message}");
-                context.Response.StatusCode = 500;
-                context.Response.Close();
+                try
+                {
+                    context.Response.StatusCode = 500;
+                    context.Response.Close();
+                }
+                catch { }
             }
         }
 
@@ -887,174 +840,34 @@ namespace SmithForge.Main.Services
         }
         private async Task HandleStreamRequestAsync(HttpListenerContext context)
         {
-            Debug.WriteLine("[WebServer] HandleStreamRequestAsync НАЧАЛО!");
+            using var client = new SseClient(context, heartbeatIntervalMs: 15000);
+            Debug.WriteLine($"[WebServer] 💬 Stream-клиент {client.Id} подключён");
 
-            var response = context.Response;
-            var connectionTaskSource = new TaskCompletionSource<bool>();
+            lock (_streamLock)
+            {
+                _streamClients.Add(client);
+            }
 
             try
             {
-                response.Headers.Add("Content-Type", "text/event-stream");
-                response.Headers.Add("Cache-Control", "no-cache");
-                response.Headers.Add("Connection", "keep-alive");
-                response.StatusCode = 200;
+                // Приветствие — чтобы браузер сразу понял, что соединение живо
+                //await client.SendAsync($"data: {{\"type\":\"hello\",\"ts\":\"{DateTime.Now:HH:mm:ss}\"}}\n\n");
+                await client.SendAsync(": ping\n\n");
 
-                Debug.WriteLine("[WebServer] SSE заголовки отправлены");
-
-                // Отправляем последние 10 сообщений
-                List<DisplayMessageViewModel> messagesToSend;
-                lock (_lockObject)
-                {
-                    messagesToSend = _messages.TakeLast(10).ToList();
-                }
-
-                Debug.WriteLine($"[WebServer] Отправка {messagesToSend.Count} последних сообщений");
-
-                foreach (var msg in messagesToSend)
-                {
-                    try
-                    {
-                        // ✅ Конвертируем эмодзи в HTML
-                        string formattedText = GetFormattedMessageForWeb(msg.MessageText);
-
-                        var rankTemplate = GetRankTemplate(msg.UserRank);
-                        var rankCss = await GetRankCssContent(msg.UserRank);
-
-                        var json = JsonSerializer.Serialize(new
-                        {
-                            type = "chat_message",
-                            id = msg.Id,
-                            displayName = msg.DisplayName,
-                            messageText = formattedText,
-                            formattedMessage = formattedText,
-                            userRank = msg.UserRank,
-                            rankDisplay = GetRankDisplay(msg.UserRank),
-                            rankClass = GetRankClass(msg.UserRank),
-                            rankCss = rankCss,
-                            rankTemplate = rankTemplate,
-                            avatarPath = msg.AvatarPath,
-                            timestamp = DateTime.Now.ToString("HH:mm:ss"),
-                            karmaKey = msg.User?.KarmaKeyDisplay ?? "",
-                            karma = msg.User?.KarmaDisplay ?? "",
-                            messageNumber = msg.MessageNumber,
-                            messageCount = msg.MessageCount,
-                            likes = msg.Likes,
-                            dislikes = msg.Dislikes,
-                            platform = msg.Type?.ToLower() ?? "twitch"
-                        });
-
-                        var data = $"data: {json}\n\n";
-                        var buffer = Encoding.UTF8.GetBytes(data);
-                        await response.OutputStream.WriteAsync(buffer);
-                        await response.OutputStream.FlushAsync();
-                    }
-                    catch (Exception ex)
-                    {
-                        Debug.WriteLine($"[WebServer] Ошибка отправки сообщения из истории: {ex.Message}");
-                    }
-                }
-
-                // ✅ Обработчик для обычных сообщений
-                EventHandler<DisplayMessageViewModel> messageHandler = (s, msg) =>
-                {
-                    if (string.IsNullOrEmpty(msg.MessageText))
-                        return;
-
-                    Task.Run(async () =>
-                    {
-                        try
-                        {
-                            // ✅ Конвертируем эмодзи в HTML
-                            string formattedText = GetFormattedMessageForWeb(msg.MessageText);
-
-                            var rankTemplate = GetRankTemplate(msg.UserRank);
-                            var rankCss = await GetRankCssContent(msg.UserRank);
-
-                            var json = JsonSerializer.Serialize(new
-                            {
-                                type = "chat_message",
-                                id = msg.Id,
-                                displayName = msg.DisplayName,
-                                messageText = formattedText,
-                                formattedMessage = formattedText,
-                                userRank = msg.UserRank,
-                                rankDisplay = GetRankDisplay(msg.UserRank),
-                                rankClass = GetRankClass(msg.UserRank),
-                                rankCss = rankCss,
-                                rankTemplate = rankTemplate,
-                                avatarPath = msg.AvatarPath,
-                                timestamp = DateTime.Now.ToString("HH:mm:ss"),
-                                karmaKey = msg.User?.KarmaKeyDisplay ?? "",
-                                karma = msg.User?.KarmaDisplay ?? "",
-                                messageNumber = msg.MessageNumber,
-                                messageCount = msg.MessageCount,
-                                likes = msg.Likes,
-                                dislikes = msg.Dislikes,
-                                platform = msg.Type?.ToLower() ?? "twitch"
-                            });
-
-                            var data = $"data: {json}\n\n";
-                            var buffer = Encoding.UTF8.GetBytes(data);
-
-                            lock (response.OutputStream)
-                            {
-                                response.OutputStream.Write(buffer);
-                                response.OutputStream.Flush();
-                            }
-
-                            Debug.WriteLine($"[WebServer] SSE отправлено сообщение: {msg.DisplayName}: {msg.MessageText}");
-                        }
-                        catch (Exception ex)
-                        {
-                            Debug.WriteLine($"[WebServer] Ошибка отправки: {ex.Message}");
-                            connectionTaskSource.TrySetResult(true);
-                        }
-                    });
-                };
-
-                // ✅ Обработчик для обновлений аватарки
-                EventHandler<string> avatarUpdateHandler = (s, rawData) =>
-                {
-                    Task.Run(async () =>
-                    {
-                        try
-                        {
-                            var buffer = Encoding.UTF8.GetBytes(rawData);
-
-                            lock (response.OutputStream)
-                            {
-                                response.OutputStream.Write(buffer);
-                                response.OutputStream.Flush();
-                            }
-
-                            Debug.WriteLine($"[WebServer] SSE отправлено обновление аватарки");
-                        }
-                        catch (Exception ex)
-                        {
-                            Debug.WriteLine($"[WebServer] Ошибка отправки обновления аватарки: {ex.Message}");
-                            connectionTaskSource.TrySetResult(true);
-                        }
-                    });
-                };
-
-                MessageAdded += messageHandler;
-                RawSsePayloadReady += avatarUpdateHandler;
-
-                using var registration = _cts?.Token.Register(() => connectionTaskSource.TrySetResult(true));
-
-                await connectionTaskSource.Task;
-
-                MessageAdded -= messageHandler;
-                RawSsePayloadReady -= avatarUpdateHandler;
+                // Ждём отключения клиента или остановки сервера
+                await client.WaitUntilClosedAsync(_cts?.Token ?? CancellationToken.None);
             }
             catch (Exception ex)
             {
-                Debug.WriteLine($"[WebServer] Ошибка в HandleStreamRequestAsync: {ex.Message}");
+                Debug.WriteLine($"[WebServer] Stream-клиент {client.Id} ошибка: {ex.Message}");
             }
             finally
             {
-                try { response.Close(); } catch { }
-                Debug.WriteLine("[WebServer] HandleStreamRequestAsync ЗАВЕРШЕН");
+                lock (_streamLock)
+                {
+                    _streamClients.Remove(client);
+                }
+                Debug.WriteLine($"[WebServer] 💬 Stream-клиент {client.Id} отключён. Осталось: {_streamClients.Count}");
             }
         }
 
@@ -1090,33 +903,118 @@ namespace SmithForge.Main.Services
 
         public void AddMessage(DisplayMessageViewModel msg)
         {
-            Debug.WriteLine($"[WebServer] AddMessage: DisplayName='{msg.DisplayName}', MessageText='{msg.MessageText}'");
+            if (msg == null) return;
+            if (string.IsNullOrEmpty(msg.DisplayName) || msg.DisplayName == "Unknown") return;
+            if (string.IsNullOrEmpty(msg.MessageText)) return;
 
-            if (string.IsNullOrEmpty(msg.DisplayName) || msg.DisplayName == "Unknown")
-            {
-                Debug.WriteLine($"[WebServer] ⏭ Пропущено Unknown");
-                return;
-            }
+            // Рассылаем напрямую всем stream-клиентам
+            BroadcastChatMessage(msg);
+        }
 
-            // ✅ ЕСЛИ ТЕКСТ ПУСТОЙ - ПРОСТО ВЫХОДИМ, НЕ ВЫЗЫВАЕМ MessageAdded
-            if (string.IsNullOrEmpty(msg.MessageText))
-            {
-                Debug.WriteLine($"[WebServer] ⏭ Пропущено сообщение с пустым текстом");
-                return;
-            }
+        /// <summary>
+        /// Разослать сообщение чата всем SSE-клиентам /stream
+        /// </summary>
+        public void BroadcastChatMessage(DisplayMessageViewModel msg)
+        {
+            if (msg == null) return;
 
-            lock (_lockObject)
+            string json;
+            try
             {
-                _messages.Add(msg);
-                if (_messages.Count > 100)
+                string formattedText = GetFormattedMessageForWeb(msg.MessageText);
+
+                var rankTemplate = GetRankTemplate(msg.UserRank);
+                var rankCss = GetRankCssContent(msg.UserRank).GetAwaiter().GetResult();
+
+                json = JsonSerializer.Serialize(new
                 {
-                    _messages.RemoveAt(0);
+                    type = "chat_message",
+                    id = msg.Id,
+                    displayName = msg.DisplayName,
+                    messageText = formattedText,
+                    formattedMessage = formattedText,
+                    userRank = msg.UserRank,
+                    rankDisplay = GetRankDisplay(msg.UserRank),
+                    rankClass = GetRankClass(msg.UserRank),
+                    rankCss = rankCss,
+                    rankTemplate = rankTemplate,
+                    avatarPath = msg.AvatarPath,
+                    timestamp = DateTime.Now.ToString("HH:mm:ss"),
+                    karmaKey = msg.User?.KarmaKeyDisplay ?? "",
+                    karma = msg.User?.KarmaDisplay ?? "",
+                    messageNumber = msg.MessageNumber,
+                    messageCount = msg.MessageCount,
+                    likes = GetLikesCountForMessage(msg.MessageNumber),
+                    dislikes = GetDislikesCountForMessage(msg.MessageNumber),
+                    platform = msg.Type?.ToLower() ?? "twitch"
+                });
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[WebServer] Ошибка формирования chat_message JSON: {ex.Message}");
+                return;
+            }
+
+            BroadcastRawSse($"data: {json}\n\n");
+        }
+
+        private int GetLikesCountForMessage(int messageNumber)
+        {
+            if (messageNumber <= 0) return 0;
+            try
+            {
+                long id = DatabaseService.GetMessageIdByNumber(messageNumber);
+                if (id <= 0) return 0;
+                var counts = DatabaseService.GetReactionCounts(id);
+                return counts.Likes;
+            }
+            catch { return 0; }
+        }
+
+        private int GetDislikesCountForMessage(int messageNumber)
+        {
+            if (messageNumber <= 0) return 0;
+            try
+            {
+                long id = DatabaseService.GetMessageIdByNumber(messageNumber);
+                if (id <= 0) return 0;
+                var counts = DatabaseService.GetReactionCounts(id);
+                return counts.Dislikes;
+            }
+            catch { return 0; }
+        }
+        /// <summary>
+        /// Разослать произвольные SSE-данные всем клиентам /stream
+        /// (используется для avatar_update и других спец-сообщений)
+        /// </summary>
+        public void BroadcastRawSse(string sseData)
+        {
+            List<SseClient> snapshot;
+            lock (_streamLock)
+            {
+                if (_streamClients.Count == 0) return;
+                snapshot = new List<SseClient>(_streamClients);
+            }
+
+            var dead = new List<SseClient>();
+            foreach (var client in snapshot)
+            {
+                if (!client.Send(sseData))
+                {
+                    dead.Add(client);
                 }
             }
 
-            MessageAdded?.Invoke(this, msg);
+            if (dead.Count > 0)
+            {
+                lock (_streamLock)
+                {
+                    foreach (var d in dead) _streamClients.Remove(d);
+                }
+                foreach (var d in dead) d.Dispose();
+                Debug.WriteLine($"[WebServer] 🧹 Удалено {dead.Count} мёртвых stream-клиентов");
+            }
         }
-
         private void CreateDefaultHtmlFiles()
         {
             try
@@ -1403,6 +1301,388 @@ es.onmessage=e=>{
             }
         }
 
+        // ============================================================
+        // ALERTS OVERLAY (веб-оверлей алертов)
+        // ============================================================
+
+        /// <summary>
+        /// SSE-поток алертов для /alerts/stream
+        /// </summary>
+        private async Task HandleAlertsStreamRequestAsync(HttpListenerContext context)
+        {
+            using var client = new SseClient(context, heartbeatIntervalMs: 15000);
+            Debug.WriteLine($"[WebServer] 🔔 Alerts-клиент {client.Id} подключён");
+
+            lock (_alertsLock)
+            {
+                _alertsStreamClients.Add(client);
+            }
+
+            try
+            {
+                // Приветствие — чтобы браузер сразу понял, что соединение живо
+                //await client.SendAsync($"data: {{\"type\":\"hello\",\"ts\":\"{DateTime.Now:HH:mm:ss}\"}}\n\n");
+                await client.SendAsync(": ping\n\n");
+
+                // Ждём отключения (или остановки сервера)
+                await client.WaitUntilClosedAsync(_cts?.Token ?? CancellationToken.None);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[WebServer] Alerts-клиент {client.Id} ошибка: {ex.Message}");
+            }
+            finally
+            {
+                lock (_alertsLock)
+                {
+                    _alertsStreamClients.Remove(client);
+                }
+                Debug.WriteLine($"[WebServer] 🔔 Alerts-клиент {client.Id} отключён. Осталось: {_alertsStreamClients.Count}");
+            }
+        }
+
+        /// <summary>
+        /// HTML-страница веб-оверлея алертов для OBS
+        /// </summary>
+        private async Task ServeAlertsPageAsync(HttpListenerContext context)
+        {
+            var response = context.Response;
+
+            const string alertsHtml = @"<!DOCTYPE html>
+<html lang=""ru"">
+<head>
+    <meta charset=""UTF-8"">
+    <title>SmithForge Alerts</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            background: transparent;
+            font-family: 'Segoe UI', sans-serif;
+            overflow: hidden;
+            width: 100vw;
+            height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        #alert-container {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%) scale(0.6);
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.4s ease, transform 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
+            max-width: 90vw;
+        }
+
+        #alert-container.visible {
+            opacity: 1;
+            transform: translate(-50%, -50%) scale(1);
+        }
+
+        #alert-container.hiding {
+            opacity: 0;
+            transform: translate(-50%, -50%) scale(0.7);
+        }
+
+        /* Базовый вид */
+        .alert-box {
+            padding: 25px 40px;
+            border-radius: 22px;
+            border: 2px solid;
+            backdrop-filter: blur(10px);
+            text-align: center;
+            min-width: 400px;
+            max-width: 700px;
+        }
+
+        /* DonationAlerts — золото */
+        .alert-box.provider-donationalerts {
+            background: rgba(13, 13, 26, 0.9);
+            border-color: #FFD700;
+            box-shadow: 0 0 40px rgba(255, 215, 0, 0.5),
+                        0 0 80px rgba(255, 215, 0, 0.3);
+        }
+
+        .alert-box.provider-donationalerts .provider-label { color: #FFD700; }
+        .alert-box.provider-donationalerts .user-name { color: #FFD700; }
+
+        /* DonationPay — синий */
+        .alert-box.provider-donationpay {
+            background: rgba(13, 26, 46, 0.9);
+            border-color: #00BFFF;
+            box-shadow: 0 0 40px rgba(0, 191, 255, 0.5),
+                        0 0 80px rgba(0, 191, 255, 0.3);
+        }
+
+        .alert-box.provider-donationpay .provider-label { color: #00BFFF; }
+        .alert-box.provider-donationpay .user-name { color: #00BFFF; }
+
+        .provider-label {
+            font-size: 14px;
+            opacity: 0.75;
+            margin-bottom: 8px;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+        }
+
+        .row-main {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 15px;
+            margin-bottom: 10px;
+        }
+
+        .user-name {
+            font-size: 36px;
+            font-weight: bold;
+            text-shadow: 0 0 20px currentColor;
+        }
+
+        .separator {
+            color: #555;
+            font-size: 36px;
+        }
+
+        .amount {
+            font-size: 36px;
+            font-weight: bold;
+            color: #FFFFFF;
+            text-shadow: 0 0 15px rgba(255,255,255,0.5);
+        }
+
+        .message {
+            font-size: 18px;
+            color: #DDD;
+            line-height: 1.4;
+            max-width: 600px;
+            word-wrap: break-word;
+            margin-top: 10px;
+        }
+
+        .message:empty {
+            display: none;
+        }
+
+        /* Анимация появления/скрытия */
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.02); }
+        }
+
+        #alert-container.visible .alert-box {
+            animation: pulse 2.5s ease-in-out infinite;
+        }
+
+        /* Скрытие */
+        #alert-container.hiding {
+            transition: opacity 0.35s ease, transform 0.35s ease;
+        }
+    </style>
+</head>
+<body>
+
+    <div id=""alert-container"">
+        <div class=""alert-box"" id=""alert-box"">
+            <div class=""provider-label"" id=""provider-label""></div>
+            <div class=""row-main"">
+                <span class=""user-name"" id=""user-name""></span>
+                <span class=""separator"">•</span>
+                <span class=""amount"" id=""amount""></span>
+            </div>
+            <div class=""message"" id=""message""></div>
+        </div>
+    </div>
+
+    <script>
+        const alertContainer = document.getElementById('alert-container');
+        const alertBox = document.getElementById('alert-box');
+        const providerLabel = document.getElementById('provider-label');
+        const userNameEl = document.getElementById('user-name');
+        const amountEl = document.getElementById('amount');
+        const messageEl = document.getElementById('message');
+
+        // Очередь алертов
+        let queue = [];
+        let isShowing = false;
+        let hideTimer = null;
+
+        function connect() {
+            const es = new EventSource('/alerts/stream');
+
+            es.onmessage = function(e) {
+                try {
+                    const data = JSON.parse(e.data);
+
+                    if (data.type === 'alert') {
+                        addToQueue(data.alert);
+                    }
+                } catch (err) {
+                    console.error('Parse error:', err);
+                }
+            };
+
+            es.onerror = function() {
+                setTimeout(connect, 3000);
+            };
+
+            es.onopen = function() {
+                console.log('✅ Alerts SSE подключён');
+            };
+        }
+
+        function addToQueue(alert) {
+            queue.push(alert);
+            console.log('🔔 Добавлен алерт в очередь:', alert.userName, 'Осталось:', queue.length);
+
+            if (!isShowing) {
+                showNext();
+            }
+        }
+
+        function showNext() {
+            if (queue.length === 0) {
+                isShowing = false;
+                return;
+            }
+
+            isShowing = true;
+            const alert = queue.shift();
+
+            // Определяем класс провайдера
+            const providerClass = 'provider-' + (alert.providerType || 'donationalerts').toLowerCase();
+
+            alertBox.className = 'alert-box ' + providerClass;
+            providerLabel.textContent = alert.providerName || 'ALERT';
+
+            userNameEl.textContent = alert.userName || 'Аноним';
+            amountEl.textContent = alert.displayAmount || '';
+
+            if (alert.message && alert.message.trim()) {
+                messageEl.textContent = alert.message;
+                messageEl.style.display = 'block';
+            } else {
+                messageEl.textContent = '';
+                messageEl.style.display = 'none';
+            }
+
+            // Показываем
+            alertContainer.className = 'visible';
+
+            // Через N секунд — скрываем
+            const duration = (alert.durationSeconds || 10) * 1000;
+
+            if (hideTimer) clearTimeout(hideTimer);
+            hideTimer = setTimeout(() => {
+                alertContainer.className = 'hiding';
+
+                setTimeout(() => {
+                    alertContainer.className = '';
+                    // Небольшая пауза между алертами
+                    setTimeout(showNext, 400);
+                }, 350);
+            }, duration);
+        }
+
+        connect();
+        console.log('🎉 SmithForge Alerts Overlay запущен');
+    </script>
+</body>
+</html>";
+
+            var bytes = Encoding.UTF8.GetBytes(alertsHtml);
+            response.ContentType = "text/html; charset=utf-8";
+            response.ContentLength64 = bytes.Length;
+            await response.OutputStream.WriteAsync(bytes);
+            response.Close();
+        }
+
+        /// <summary>
+        /// Отправить алерт в веб-оверлей /alerts (SSE)
+        /// </summary>
+        public void SendAlertToWeb(
+     string userName,
+     string message,
+     string displayAmount,
+     string providerType,
+     string providerName,
+     int durationSeconds)
+        {
+            var payload = new
+            {
+                type = "alert",
+                alert = new
+                {
+                    userName = userName ?? "Аноним",
+                    message = message ?? "",
+                    displayAmount = displayAmount ?? "",
+                    providerType = providerType ?? "donationalerts",
+                    providerName = providerName ?? "ALERT",
+                    durationSeconds = durationSeconds,
+                    timestamp = DateTime.Now.ToString("HH:mm:ss")
+                }
+            };
+
+            var json = System.Text.Json.JsonSerializer.Serialize(payload);
+            var data = $"data: {json}\n\n";
+
+            List<SseClient> snapshot;
+            lock (_alertsLock)
+            {
+                if (_alertsStreamClients.Count == 0)
+                {
+                    Debug.WriteLine("[WebServer] 🔔 Алерт сформирован, но нет активных alerts-клиентов");
+                    return;
+                }
+                snapshot = new List<SseClient>(_alertsStreamClients);
+            }
+
+            var dead = new List<SseClient>();
+            foreach (var client in snapshot)
+            {
+                if (!client.Send(data))
+                {
+                    dead.Add(client);
+                }
+            }
+
+            if (dead.Count > 0)
+            {
+                lock (_alertsLock)
+                {
+                    foreach (var d in dead) _alertsStreamClients.Remove(d);
+                }
+                foreach (var d in dead) d.Dispose();
+                Debug.WriteLine($"[WebServer] 🧹 Удалено {dead.Count} мёртвых alerts-клиентов");
+            }
+
+            Debug.WriteLine($"[WebServer] 🔔 Алерт отправлен ({_alertsStreamClients.Count} клиентов): {userName} - {displayAmount}");
+        }
+
+        /// <summary>
+        /// Закрыть все Alerts SSE-соединения
+        /// </summary>
+        public void CloseAllAlertsConnections()
+        {
+            List<SseClient> toClose;
+
+            lock (_alertsLock)
+            {
+                toClose = new List<SseClient>(_alertsStreamClients);
+                _alertsStreamClients.Clear();
+            }
+
+            foreach (var client in toClose)
+            {
+                client.Dispose();
+            }
+
+            Debug.WriteLine($"[WebServer] Все alerts-клиенты закрыты ({toClose.Count})");
+        }
         public void Dispose()
         {
             Debug.WriteLine("[WebServer] Начинаем корректное завершение...");
@@ -1410,6 +1690,8 @@ es.onmessage=e=>{
             // 1. Закрываем все SSE-соединения
             CloseAllMediaConnections();
             CloseAllInfoConnections();
+            CloseAllAlertsConnections();
+            CloseAllStreamConnections();
 
             // 2. Останавливаем сервер
             Stop();
@@ -1422,10 +1704,6 @@ es.onmessage=e=>{
             lock (_lockObject)
             {
                 _messages.Clear();
-            }
-            lock (_mediaHistoryLock)
-            {
-                _mediaMessageHistory.Clear();
             }
 
             // 5. Закрываем HttpListener
@@ -1572,37 +1850,35 @@ es.onmessage=e=>{
 
         private async Task HandleInfoStreamRequestAsync(HttpListenerContext context)
         {
-            var response = context.Response;
-
-            response.Headers.Add("Content-Type", "text/event-stream");
-            response.Headers.Add("Cache-Control", "no-cache");
-            response.Headers.Add("Connection", "keep-alive");
-            response.StatusCode = 200;
+            using var client = new SseClient(context, heartbeatIntervalMs: 15000);
+            Debug.WriteLine($"[WebServer] 📡 Info-клиент {client.Id} подключён");
 
             lock (_infoLock)
             {
-                _infoStreamClients.Add(context);
+                _infoStreamClients.Add(client);
             }
-
-            Debug.WriteLine($"[WebServer] 📡 Инфо-клиент подключен. Всего: {_infoStreamClients.Count}");
 
             try
             {
-                while (context.Request.InputStream.CanRead)
-                {
-                    await Task.Delay(1000);
-                    if (!context.Request.InputStream.CanRead)
-                        break;
-                }
+                // Приветственный пакет, чтобы браузер сразу понял, что соединение живое
+                //await client.SendAsync($"data: {{\"type\":\"hello\",\"ts\":\"{DateTime.Now:HH:mm:ss}\"}}\n\n");
+                await client.SendAsync(": ping\n\n");
+                
+
+                // Ждём, пока клиент отключится ИЛИ сервер остановится (Dispose/Stop)
+                await client.WaitUntilClosedAsync(_cts?.Token ?? CancellationToken.None);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[WebServer] Info-клиент {client.Id} ошибка: {ex.Message}");
             }
             finally
             {
                 lock (_infoLock)
                 {
-                    _infoStreamClients.Remove(context);
+                    _infoStreamClients.Remove(client);
                 }
-                Debug.WriteLine($"[WebServer] 📡 Инфо-клиент отключен. Осталось: {_infoStreamClients.Count}");
-                try { response.Close(); } catch { }
+                Debug.WriteLine($"[WebServer] 📡 Info-клиент {client.Id} отключён. Осталось: {_infoStreamClients.Count}");
             }
         }
 
@@ -1650,33 +1926,32 @@ es.onmessage=e=>{
         // ✅ НОВЫЙ МЕТОД: отправка произвольных данных
         private async Task NotifyInfoClientsRaw(string data)
         {
-            if (_infoStreamClients.Count == 0) return;
-
-            var bytes = Encoding.UTF8.GetBytes(data);
-            var disconnected = new List<HttpListenerContext>();
+            List<SseClient> snapshot;
 
             lock (_infoLock)
             {
-                foreach (var client in _infoStreamClients)
-                {
-                    try
-                    {
-                        client.Response.OutputStream.Write(bytes);
-                        client.Response.OutputStream.Flush();
-                    }
-                    catch
-                    {
-                        disconnected.Add(client);
-                    }
-                }
-
-                foreach (var client in disconnected)
-                {
-                    _infoStreamClients.Remove(client);
-                }
+                if (_infoStreamClients.Count == 0) return;
+                snapshot = new List<SseClient>(_infoStreamClients);
             }
 
-            await Task.CompletedTask;
+            var dead = new List<SseClient>();
+
+            foreach (var client in snapshot)
+            {
+                bool ok = await client.SendAsync(data);
+                if (!ok) dead.Add(client);
+            }
+
+            // Чистим мёртвых
+            if (dead.Count > 0)
+            {
+                lock (_infoLock)
+                {
+                    foreach (var d in dead) _infoStreamClients.Remove(d);
+                }
+                foreach (var d in dead) d.Dispose();
+                Debug.WriteLine($"[WebServer] 🧹 Удалено {dead.Count} мёртвых info-клиентов");
+            }
         }
 
         private string InjectInfoNavigation(string html, string pageName)
@@ -1803,64 +2078,42 @@ es.onmessage=e=>{
         // МЕДИА-ЧАТ (стикеры, GIF, видео)
         // ============================================================
 
-        private readonly List<HttpListenerContext> _mediaStreamClients = new();
+        private readonly List<SseClient> _mediaStreamClients = new();
         private readonly object _mediaLock = new object();
 
         // Обработчик для /media/stream
         private async Task HandleMediaStreamRequestAsync(HttpListenerContext context)
         {
-            Debug.WriteLine("[WebServer] 📺 HandleMediaStreamRequestAsync НАЧАЛО!");
-
-            var response = context.Response;
-
-            response.Headers.Add("Content-Type", "text/event-stream");
-            response.Headers.Add("Cache-Control", "no-cache");
-            response.Headers.Add("Connection", "keep-alive");
-            response.StatusCode = 200;
+            using var client = new SseClient(context, heartbeatIntervalMs: 15000);
+            Debug.WriteLine($"[WebServer] 📺 Медиа-клиент {client.Id} подключён");
 
             lock (_mediaLock)
             {
-                _mediaStreamClients.Add(context);
+                _mediaStreamClients.Add(client);
             }
-
-            Debug.WriteLine($"[WebServer] 📺 Медиа-клиент подключен. Всего: {_mediaStreamClients.Count}");
 
             try
             {
-                // Отправляем последние 10 медиа-сообщений
-                var mediaMessages = GetLastMediaMessages(10);
-                foreach (var msg in mediaMessages)
-                {
-                    var data = $"data: {msg}\n\n";
-                    var buffer = Encoding.UTF8.GetBytes(data);
-                    await response.OutputStream.WriteAsync(buffer);
-                    await response.OutputStream.FlushAsync();
-                }
+                // Приветствие — чтобы браузер сразу понял, что соединение живое
+                //await client.SendAsync($"data: {{\"type\":\"hello\",\"ts\":\"{DateTime.Now:HH:mm:ss}\"}}\n\n");
+                await client.SendAsync(": ping\n\n");
 
-                while (context.Request.InputStream.CanRead)
-                {
-                    await Task.Delay(1000);
-                    if (!context.Request.InputStream.CanRead)
-                        break;
-                }
+                // Ждём отключения (или остановки сервера)
+                await client.WaitUntilClosedAsync(_cts?.Token ?? CancellationToken.None);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[WebServer] Медиа-клиент {client.Id} ошибка: {ex.Message}");
             }
             finally
             {
                 lock (_mediaLock)
                 {
-                    _mediaStreamClients.Remove(context);
+                    _mediaStreamClients.Remove(client);
                 }
-                Debug.WriteLine($"[WebServer] 📺 Медиа-клиент отключен. Осталось: {_mediaStreamClients.Count}");
-                try { response.Close(); } catch { }
+                Debug.WriteLine($"[WebServer] 📺 Медиа-клиент {client.Id} отключён. Осталось: {_mediaStreamClients.Count}");
             }
         }
-
-        /// <summary>
-        /// Кэш медиа-сообщений (для истории)
-        /// </summary>
-        private readonly List<string> _mediaMessageHistory = new();
-        private readonly object _mediaHistoryLock = new();
-        private const int MAX_MEDIA_HISTORY = 50;
 
         /// <summary>
         /// Отправить медиа-сообщение (стикер или видео)
@@ -1869,48 +2122,33 @@ es.onmessage=e=>{
         {
             var data = $"data: {jsonData}\n\n";
 
-            // Сохраняем в историю
-            lock (_mediaHistoryLock)
-            {
-                _mediaMessageHistory.Add(jsonData);
-                if (_mediaMessageHistory.Count > MAX_MEDIA_HISTORY)
-                    _mediaMessageHistory.RemoveAt(0);
-            }
-
-            // Отправляем всем подключенным клиентам
-            var bytes = Encoding.UTF8.GetBytes(data);
-            var disconnected = new List<HttpListenerContext>();
-
+            List<SseClient> snapshot;
             lock (_mediaLock)
             {
-                foreach (var client in _mediaStreamClients)
-                {
-                    try
-                    {
-                        client.Response.OutputStream.Write(bytes);
-                        client.Response.OutputStream.Flush();
-                    }
-                    catch
-                    {
-                        disconnected.Add(client);
-                    }
-                }
-
-                foreach (var client in disconnected)
-                {
-                    _mediaStreamClients.Remove(client);
-                }
+                if (_mediaStreamClients.Count == 0) return;
+                snapshot = new List<SseClient>(_mediaStreamClients);
             }
-        }
 
-
-        private List<string> GetLastMediaMessages(int count)
-        {
-            lock (_mediaHistoryLock)
+            var dead = new List<SseClient>();
+            foreach (var client in snapshot)
             {
-                return _mediaMessageHistory.TakeLast(count).ToList();
+                if (!client.Send(data))
+                {
+                    dead.Add(client);
+                }
+            }
+
+            if (dead.Count > 0)
+            {
+                lock (_mediaLock)
+                {
+                    foreach (var d in dead) _mediaStreamClients.Remove(d);
+                }
+                foreach (var d in dead) d.Dispose();
+                Debug.WriteLine($"[WebServer] 🧹 Удалено {dead.Count} мёртвых media-клиентов");
             }
         }
+
 
         public void SendStickerToMedia(string userName, string stickerPath, string stickerId, bool isAnimated, string text = "")
         {
@@ -2974,29 +3212,20 @@ window.addEventListener('beforeunload', () => {
         /// </summary>
         public void CloseAllMediaConnections()
         {
+            List<SseClient> toClose;
+
             lock (_mediaLock)
             {
-                foreach (var client in _mediaStreamClients)
-                {
-                    try
-                    {
-                        // Отправляем событие о закрытии
-                        var closeData = $"data: {{\"type\":\"close\",\"message\":\"Сервер завершает работу\"}}\n\n";
-                        var buffer = Encoding.UTF8.GetBytes(closeData);
-                        client.Response.OutputStream.Write(buffer);
-                        client.Response.OutputStream.Flush();
-
-                        // Закрываем соединение
-                        client.Response.Close();
-                    }
-                    catch (Exception ex)
-                    {
-                        Debug.WriteLine($"[WebServer] Ошибка закрытия медиа-клиента: {ex.Message}");
-                    }
-                }
+                toClose = new List<SseClient>(_mediaStreamClients);
                 _mediaStreamClients.Clear();
-                Debug.WriteLine("[WebServer] Все медиа-клиенты закрыты");
             }
+
+            foreach (var client in toClose)
+            {
+                client.Dispose();
+            }
+
+            Debug.WriteLine($"[WebServer] Все media-клиенты закрыты ({toClose.Count})");
         }
 
         /// <summary>
@@ -3004,26 +3233,20 @@ window.addEventListener('beforeunload', () => {
         /// </summary>
         public void CloseAllInfoConnections()
         {
+            List<SseClient> toClose;
+
             lock (_infoLock)
             {
-                foreach (var client in _infoStreamClients)
-                {
-                    try
-                    {
-                        var closeData = $"data: {{\"type\":\"close\",\"message\":\"Сервер завершает работу\"}}\n\n";
-                        var buffer = Encoding.UTF8.GetBytes(closeData);
-                        client.Response.OutputStream.Write(buffer);
-                        client.Response.OutputStream.Flush();
-                        client.Response.Close();
-                    }
-                    catch (Exception ex)
-                    {
-                        Debug.WriteLine($"[WebServer] Ошибка закрытия инфо-клиента: {ex.Message}");
-                    }
-                }
+                toClose = new List<SseClient>(_infoStreamClients);
                 _infoStreamClients.Clear();
-                Debug.WriteLine("[WebServer] Все инфо-клиенты закрыты");
             }
+
+            foreach (var client in toClose)
+            {
+                client.Dispose(); // это и закроет Response, и отменит WaitUntilClosedAsync
+            }
+
+            Debug.WriteLine($"[WebServer] Все info-клиенты закрыты ({toClose.Count})");
         }
 
         /// <summary>
@@ -3031,10 +3254,96 @@ window.addEventListener('beforeunload', () => {
         /// </summary>
         public void CloseAllStreamConnections()
         {
-            // Для основного чата /stream соединения закрываются через MessageAdded
-            // Но можно добавить отдельный список если нужно
-            Debug.WriteLine("[WebServer] Основной чат закрывается через MessageAdded");
+            List<SseClient> toClose;
+
+            lock (_streamLock)
+            {
+                toClose = new List<SseClient>(_streamClients);
+                _streamClients.Clear();
+            }
+
+            foreach (var client in toClose)
+            {
+                client.Dispose();
+            }
+
+            Debug.WriteLine($"[WebServer] Все stream-клиенты закрыты ({toClose.Count})");
         }
+
+        /// <summary>
+        /// Обновить существующее сообщение в веб-оверлее (текст, имя, ранк и т.д.)
+        /// </summary>
+        public void UpdateMessageInWeb(string messageId, object updateData)
+        {
+            var payload = new
+            {
+                type = "message_update",
+                id = messageId,
+                update = updateData,
+                timestamp = DateTime.Now.ToString("HH:mm:ss")
+            };
+
+            var json = JsonSerializer.Serialize(payload);
+            BroadcastRawSse($"data: {json}\n\n");
+            Debug.WriteLine($"[WebServer] 📝 Обновление отправлено для сообщения {messageId}");
+        }
+
+        /// <summary>
+        /// Обновить реакции (лайки/дизлайки) на сообщении
+        /// </summary>
+        public void UpdateReactionInWeb(int messageNumber, string reactionType, int newCount)
+        {
+            var payload = new
+            {
+                type = "message_reaction",
+                messageNumber = messageNumber,
+                reaction = reactionType, // "like" или "dislike"
+                count = newCount,
+                timestamp = DateTime.Now.ToString("HH:mm:ss")
+            };
+
+            var json = JsonSerializer.Serialize(payload);
+            BroadcastRawSse($"data: {json}\n\n");
+            Debug.WriteLine($"[WebServer] 👍 Реакция {reactionType} ({newCount}) для сообщения #{messageNumber}");
+        }
+
+        /// <summary>
+        /// Запустить анимацию на сообщении (rank_up, pulse, shake и т.д.)
+        /// </summary>
+        public void TriggerAnimationInWeb(string messageId, string animationName, int durationMs = 1000)
+        {
+            var payload = new
+            {
+                type = "message_animation",
+                id = messageId,
+                animation = animationName,
+                duration = durationMs,
+                timestamp = DateTime.Now.ToString("HH:mm:ss")
+            };
+
+            var json = JsonSerializer.Serialize(payload);
+            BroadcastRawSse($"data: {json}\n\n");
+            Debug.WriteLine($"[WebServer] ✨ Анимация '{animationName}' для сообщения {messageId}");
+        }
+
+        /// <summary>
+        /// Обновить все сообщения пользователя (например, при смене ника)
+        /// </summary>
+        public void UpdateAllUserMessagesInWeb(string userId, object updateData)
+        {
+            var payload = new
+            {
+                type = "user_messages_update",
+                userId = userId,
+                update = updateData,
+                timestamp = DateTime.Now.ToString("HH:mm:ss")
+            };
+
+            var json = JsonSerializer.Serialize(payload);
+            BroadcastRawSse($"data: {json}\n\n");
+            Debug.WriteLine($"[WebServer] 👤 Обновление всех сообщений пользователя {userId}");
+        }
+
 
     }
 }

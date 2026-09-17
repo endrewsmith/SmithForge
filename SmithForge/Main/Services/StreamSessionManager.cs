@@ -18,16 +18,22 @@ public class StreamSessionManager
 
     public StreamSessionManager()
     {
-        // Загружаем активную сессию или создаём новую
-        var activeSession = DatabaseService.GetActiveSession();
-        if (activeSession != null)
+        // ✅ Восстанавливаем ПОСЛЕДНЮЮ сессию (даже завершённую)
+        // Номер НЕ меняется автоматически — только по кнопке «Следующий стрим»
+        var lastSession = DatabaseService.GetLastSession();
+
+        if (lastSession != null)
         {
-            _currentSession = activeSession;
+            _currentSession = lastSession;
+            _lastStreamNumber = lastSession.Number;
+            Debug.WriteLine($"[Stream] Восстановлена последняя сессия #{lastSession.Number} (EndTime={lastSession.EndTime})");
         }
         else
         {
-            _lastStreamNumber = DatabaseService.GetMaxStreamNumber();
+            // Первый запуск — БД пустая
+            _lastStreamNumber = 0;
             CreateNewSession();
+            Debug.WriteLine($"[Stream] Первый запуск, создана сессия #{_currentSession.Number}");
         }
     }
 

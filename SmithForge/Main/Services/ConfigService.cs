@@ -71,7 +71,7 @@ namespace SmithForge.Main.Services
 
                         if (settings.RankThresholds == null)
                         {
-                            settings.RankThresholds = new List<int> { 10, 50, 100, 200, 500, 1000 };
+                            settings.RankThresholds = new List<int> { 11, 50, 100, 200, 500, 1000 };
                             Debug.WriteLine("[ConfigService] RankThresholds был null, инициализирован значениями по умолчанию");
                         }
 

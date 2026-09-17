@@ -1,4 +1,7 @@
 <Solution>
+  <Project Path="SmithForge.AlertsEngine/SmithForge.AlertsEngine.csproj" Id="6b09febc-b528-4f83-a5c5-0f7dda147fe3" />
   <Project Path="SmithForge.ChatEngine/SmithForge.ChatEngine.csproj" Id="7a02915c-a328-4884-91d8-e43a47259829" />
-  <Project Path="SmithForge/SmithForge.csproj" />
+  <Project Path="SmithForge/SmithForge.csproj">
+    <BuildDependency Project="SmithForge.AlertsEngine/SmithForge.AlertsEngine.csproj" />
+  </Project>
 </Solution>

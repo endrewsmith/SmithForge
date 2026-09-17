@@ -17,7 +17,7 @@ namespace SmithForge.Main.Models
             "settings.xml"
         );
 
-        private static readonly List<int> DefaultRankThresholds = new List<int> { 10, 50, 100, 200, 500, 1000 };
+        private static readonly List<int> DefaultRankThresholds = new List<int> { 11, 50, 100, 200, 500, 1000 };
 
         private List<int> _rankThresholds;
 
@@ -85,7 +85,7 @@ namespace SmithForge.Main.Models
         public ChatDisplayMode ImportantChatMode { get; set; } = ChatDisplayMode.AppearAndFade;
         public ChatDisplayMode StickersChatMode { get; set; } = ChatDisplayMode.AppearAndFade;
 
-        public bool AutoOpenMediaChat { get; set; } = true; // по умолчанию включено
+        public bool AutoOpenMediaChat { get; set; } = true;
 
         // === Множители для платформ ===
         public double KarmaRateTwitch { get; set; } = 1.0;
@@ -120,10 +120,8 @@ namespace SmithForge.Main.Models
             }
         }
 
-        // === Режим воспроизведения важных сообщений ===
-        public ImportantPlaybackMode ImportantPlaybackMode { get; set; } = ImportantPlaybackMode.Auto; // ← Ошибка была здесь
+        public ImportantPlaybackMode ImportantPlaybackMode { get; set; } = ImportantPlaybackMode.Auto;
 
-        // === Горячая клавиша ===
         public string ImportantPlaybackHotkey { get; set; } = "F8";
 
         public int StickerDisplayTimeMs { get; set; } = 5000;
@@ -192,7 +190,7 @@ namespace SmithForge.Main.Models
                 ShortsChatMode = ChatDisplayMode.AppearAndFade,
                 ImportantChatMode = ChatDisplayMode.AppearAndFade,
                 StickersChatMode = ChatDisplayMode.AppearAndFade,
-                ImportantPlaybackMode = ImportantPlaybackMode.Auto, // ← Исправлено
+                ImportantPlaybackMode = ImportantPlaybackMode.Auto,
 
                 YouTube = new YouTubeSettings
                 {
@@ -214,7 +212,29 @@ namespace SmithForge.Main.Models
                 {
                     ChannelId = string.Empty,
                     AutoConnect = false
-                }
+                },
+
+                // === Оверлей алертов ===
+                AlertsOverlayTop = 200,
+                AlertsOverlayLeft = 200,
+                AlertsOverlayWidth = 500,
+                AlertsOverlayHeight = 150,
+                AlertsOverlayVisible = true,
+                AlertsAlertDuration = 10,
+
+                // === Провайдеры алертов ===
+                DonationAlertsEnabled = false,
+                DonationAlertsClientId = string.Empty,
+                DonationAlertsClientSecret = string.Empty,
+                DonationAlertsAccessToken = string.Empty,
+                DonationAlertsRefreshToken = string.Empty,
+                DonationAlertsTokenExpiresAt = DateTime.MinValue,
+                DonationAlertsUserId = 0,
+
+                DonationPayEnabled = false,
+                DonationPayApiKey = string.Empty,
+                DonationPayUserId = 0,
+                DonationPaySocketToken = string.Empty
             };
 
             settings._rankThresholds = new List<int>(DefaultRankThresholds);
@@ -332,6 +352,78 @@ namespace SmithForge.Main.Models
             YouTube != null &&
             !string.IsNullOrEmpty(YouTube.ApiKey) &&
             !string.IsNullOrEmpty(YouTube.ChannelId);
+
+
+        // ============================================================
+        // === НАСТРОЙКИ ОВЕРЛЕЯ АЛЕРТОВ (общий для всех провайдеров) ===
+        // ============================================================
+        public double AlertsOverlayTop { get; set; } = 200;
+        public double AlertsOverlayLeft { get; set; } = 200;
+        public double AlertsOverlayWidth { get; set; } = 500;
+        public double AlertsOverlayHeight { get; set; } = 150;
+        public bool AlertsOverlayVisible { get; set; } = true;
+
+        /// <summary>
+        /// Длительность показа одного алерта (в секундах)
+        /// </summary>
+        public int AlertsAlertDuration { get; set; } = 10;
+
+        // ============================================================
+        // === ПРОВАЙДЕР: DonationAlerts (OAuth) ===
+        // ============================================================
+        public bool DonationAlertsEnabled { get; set; } = false;
+
+        /// <summary>
+        /// App ID (Client ID) — пользователь копирует с сайта DonationAlerts
+        /// </summary>
+        public string DonationAlertsClientId { get; set; } = string.Empty;
+
+        /// <summary>
+        /// API Key (Client Secret) — пользователь копирует с сайта DonationAlerts
+        /// </summary>
+        public string DonationAlertsClientSecret { get; set; } = string.Empty;
+
+        /// <summary>
+        /// OAuth Access Token — получается автоматически после авторизации
+        /// </summary>
+        public string DonationAlertsAccessToken { get; set; } = string.Empty;
+
+        /// <summary>
+        /// OAuth Refresh Token — для обновления access_token
+        /// </summary>
+        public string DonationAlertsRefreshToken { get; set; } = string.Empty;
+
+        /// <summary>
+        /// Дата истечения access_token
+        /// </summary>
+        public DateTime DonationAlertsTokenExpiresAt { get; set; } = DateTime.MinValue;
+
+        /// <summary>
+        /// User ID на DonationAlerts — получается автоматически после OAuth
+        /// </summary>
+        public long DonationAlertsUserId { get; set; } = 0;
+
+        // ============================================================
+        // === ПРОВАЙДЕР: DonatePay ===
+        // ============================================================
+        public bool DonationPayEnabled { get; set; } = false;
+
+        /// <summary>
+        /// API-ключ DonatePay (из личного кабинета)
+        /// </summary>
+        public string DonationPayApiKey { get; set; } = string.Empty;
+
+        /// <summary>
+        /// User ID на DonatePay (получается автоматически при подключении)
+        /// </summary>
+        public long DonationPayUserId { get; set; } = 0;
+
+        /// <summary>
+        /// Socket-токен для Centrifugo (получается автоматически)
+        /// </summary>
+        public string DonationPaySocketToken { get; set; } = string.Empty;
+
+
     }
 
     // ============================================================
