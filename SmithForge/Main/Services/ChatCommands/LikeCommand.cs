@@ -26,14 +26,13 @@ namespace SmithForge.Main.Services.ChatCommands
                 Debug.WriteLine($"[LikeCommand] Ошибка: неверный формат номера '{messageNumberStr}'");
                 msg.Message = string.Empty;
                 msg.IsProcessedByCommand = true;
-                msg.ShouldChargeForCommand = false; // За ошибку ввода карму не списываем
+                msg.ShouldChargeForCommand = false;
                 return;
             }
 
             // 2. Проверяем автора сообщения через базу данных
             string targetAuthorId = DatabaseService.GetChaterIdByMessageNumber(messageNumber);
 
-            // Если сообщение не найдено в базе
             if (string.IsNullOrEmpty(targetAuthorId))
             {
                 Debug.WriteLine($"[LikeCommand] Сообщение #{messageNumber} не найдено в БД");
@@ -43,30 +42,54 @@ namespace SmithForge.Main.Services.ChatCommands
                 return;
             }
 
-            // 3. ПРОВЕРКА НА САМОЛАЙК
+            // 3. Проверка на самолайк
             if (targetAuthorId == chater.Id)
             {
                 Debug.WriteLine($"[LikeCommand] ЗАПРЕТ: {chater.Login} пытался лайкнуть себя (сообщение #{messageNumber})");
                 msg.Message = string.Empty;
-                msg.IsProcessedByCommand = true;   // Скрываем команду из чата
-                msg.ShouldChargeForCommand = false; // КАРМА НЕ СПИШЕТСЯ
+                msg.IsProcessedByCommand = true;
+                msg.ShouldChargeForCommand = false;
                 return;
             }
 
-            // 4. Успешное выполнение
-            Debug.WriteLine($"[LikeCommand] Лайк разрешен для #{messageNumber} от {chater.Login}");
+            // 4. ✅ НОВОЕ: Находим ChatLogs.Id и проверяем текущую реакцию
+            long chatLogId = DatabaseService.GetMessageIdByNumber(messageNumber);
+            if (chatLogId <= 0)
+            {
+                Debug.WriteLine($"[LikeCommand] Не удалось получить ChatLogs.Id для #{messageNumber}");
+                msg.Message = string.Empty;
+                msg.IsProcessedByCommand = true;
+                msg.ShouldChargeForCommand = false;
+                return;
+            }
 
-            // Формируем тег, который потом обработает UI или другой сервис
+            string? existingReaction = DatabaseService.GetUserReaction(chatLogId, chater.Id);
+            Debug.WriteLine($"[LikeCommand] Текущая реакция пользователя: {existingReaction ?? "(нет)"}");
+
+            // 5. ✅ Если уже стоит ЛАЙК — ничего не делаем, карму не списываем
+            if (existingReaction == "like")
+            {
+                Debug.WriteLine($"[LikeCommand] ⏭ У пользователя уже лайк на #{messageNumber}, пропускаем без списания");
+                msg.Message = string.Empty;
+                msg.IsProcessedByCommand = true;
+                msg.ShouldChargeForCommand = false;
+                return;
+            }
+
+            // 6. Если стоит ДИЗЛАЙК → это смена реакции, списываем карму
+            //    Если ничего не стоит → новый лайк, списываем карму
+            Debug.WriteLine($"[LikeCommand] ✅ Лайк разрешен для #{messageNumber} от {chater.Login} " +
+                            $"(было: {existingReaction ?? "ничего"} → станет: like)");
+
             msg.Message = $"<like msg='{messageNumber}' user='{chater.Id}' />";
             msg.IsProcessedByCommand = true;
-            msg.ShouldChargeForCommand = true; // Теперь процессор спишет 1 карму
+            msg.ShouldChargeForCommand = true;
 
             Debug.WriteLine($"[LikeCommand] ========== КОНЕЦ ==========");
         }
 
         public override bool ShouldCharge(ChatCommandInfo info, Chater chater, CommonMessage msg)
         {
-            // Используем флаг из сообщения, который мы установили в Execute
             return msg.ShouldChargeForCommand;
         }
     }

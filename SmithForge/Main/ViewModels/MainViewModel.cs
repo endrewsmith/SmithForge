@@ -1,6 +1,7 @@
 ﻿using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.Logging;
+using SmithForge.AlertsEngine.Core.Models;
 using SmithForge.ChatEngine.Core.Models;
 using SmithForge.ChatEngine.Platforms.YouTube;
 using SmithForge.ChatEngine.Platforms.YouTube.Models;
@@ -19,6 +20,7 @@ using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Diagnostics;
+using System.IO;
 using System.Linq;
 using System.Net.Http;
 using System.Speech.Synthesis;
@@ -29,7 +31,6 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Threading;
-using System.IO;
 
 namespace SmithForge.ViewModels
 {
@@ -128,6 +129,7 @@ namespace SmithForge.ViewModels
         private readonly DialogService _dialogService;
         private readonly ExternalChatService _chatService = new();
         private CancellationTokenSource? _pollingcts;
+        private readonly AlertsService _alertsService = new();
 
         [ObservableProperty]
         private bool _isOverlaySetupMode = true;
@@ -208,9 +210,8 @@ namespace SmithForge.ViewModels
             _dialogService = new DialogService();
 
             _webServer = new WebServerService((int)Settings.NetworkPort);
-            _webServer.MessageAdded += OnWebMessageAdded;
-            _webServer.RawSsePayloadReady += OnRawSsePayloadReady; // ✅ ДОБАВИТЬ
-            Task.Run(async () => await StartWebServerAsync());
+
+            //Task.Run(async () => await StartWebServerAsync());
 
             _infoService = new InfoService();
 
@@ -306,6 +307,10 @@ namespace SmithForge.ViewModels
             // ✅ Подписываемся на события YouTubeManager
             YouTubeManager.MessageReceived += OnYouTubeManagerMessageReceived;
 
+            // ✅ Подписываемся на события AlertsService
+            _alertsService.AlertReceived += OnAlertReceived;
+            _alertsService.StatusChanged += OnAlertStatusChanged;
+
             // ✅ Создаём ChatManagerViewModel с общей коллекцией
             _chatManager = new ChatManagerViewModel(Chats, null);
 
@@ -337,7 +342,7 @@ namespace SmithForge.ViewModels
 
             _rotationService = new InfoRotationService(infoService, pagesDir);
             _rotationService.PageSelected += OnRotationPageSelected;
-            _rotationService.Start(30);
+            //_rotationService.Start(30);
 
             _stickerPageService = new StickerPageService();
             _soundPageService = new SoundPageService();
@@ -355,12 +360,7 @@ namespace SmithForge.ViewModels
             LoadChats();
         }
 
-        private void OnRawSsePayloadReady(object? sender, string rawData)
-        {
-            // Обработчик для отправки сырых SSE-данных (например, обновление аватарок)
-            // Этот метод нужен для совместимости с WebServerService
-            Debug.WriteLine($"[MainViewModel] Получены сырые SSE-данные: {rawData.Length} символов");
-        }
+
 
         /// <summary>
         /// Корректное завершение веб-сервера
@@ -373,9 +373,6 @@ namespace SmithForge.ViewModels
 
                 if (_webServer != null)
                 {
-                    // 1. Отписываемся от событий (предотвращаем утечки памяти)
-                    _webServer.MessageAdded -= OnWebMessageAdded;
-                    _webServer.RawSsePayloadReady -= OnRawSsePayloadReady;
 
                     // 2. Вызываем Dispose (закроет все SSE-соединения и остановит сервер)
                     _webServer.Dispose();
@@ -421,6 +418,69 @@ namespace SmithForge.ViewModels
         partial void OnIsOverlayHiddenChanged(bool oldValue, bool newValue) => _settingsService.SetOverlayHidden(newValue);
         partial void OnIsStickersVisibleChanged(bool oldValue, bool newValue) => _settingsService.SetStickersVisible(newValue);
 
+        // ============================================================
+        // ОБРАБОТЧИКИ СОБЫТИЙ ALERTS SERVICE
+        // ============================================================
+
+        /// <summary>
+        /// Получен новый алерт — показываем в оверлее
+        /// </summary>
+        private void OnAlertReceived(object? sender, IncomingAlert alert)
+        {
+            if (alert == null) return;
+
+            Debug.WriteLine($"[MainViewModel] Получен алерт: [{alert.ProviderType}] {alert.DisplayText}");
+
+            // 1. Показываем в WPF-оверлее
+            Application.Current.Dispatcher.Invoke(() =>
+            {
+                _overlayManager.ShowAlert(alert);
+            });
+
+            // 2. ⭐ ОТПРАВЛЯЕМ В ВЕБ-ОВЕРЛЕЙ /alerts (для OBS)
+            if (_webServer != null)
+            {
+                try
+                {
+                    string providerName = alert.ProviderType switch
+                    {
+                        AlertProviderType.DonationAlerts => "DonationAlerts",
+                        AlertProviderType.DonationPay => "DonationPay",
+                        _ => "Alert"
+                    };
+
+                    string displayAmount = alert.Type switch
+                    {
+                        AlertType.Donation => $"{alert.Amount:F0} {alert.Currency}",
+                        AlertType.Subscription => "Подписка",
+                        AlertType.Follow => "Фолловер",
+                        _ => alert.Type.ToString()
+                    };
+
+                    _webServer.SendAlertToWeb(
+                        userName: alert.UserName,
+                        message: alert.Message,
+                        displayAmount: displayAmount,
+                        providerType: alert.ProviderType.ToString().ToLower(),
+                        providerName: providerName,
+                        durationSeconds: Settings.AlertsAlertDuration
+                    );
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine($"[MainViewModel] Ошибка отправки алерта в веб: {ex.Message}");
+                }
+            }
+        }
+
+        /// <summary>
+        /// Изменился статус провайдера алертов
+        /// </summary>
+        private void OnAlertStatusChanged(object? sender, AlertStatus status)
+        {
+            Debug.WriteLine($"[MainViewModel] Статус алертов: {status}");
+            // Можно обновить UI-индикатор статуса, если нужно
+        }
         public void SetImportantPlaybackMode(ImportantPlaybackMode mode)
         {
             if (!Application.Current.Dispatcher.CheckAccess())
@@ -579,57 +639,44 @@ namespace SmithForge.ViewModels
 
         }
 
-        private void StartPolling()
-        {
-            _pollingcts?.Cancel();
-            _pollingcts?.Dispose();
-            _pollingcts = new CancellationTokenSource();
-
-            _ = MessageService.StartListeningAsync(
-                $"ws://127.0.0.1:{Settings.NetworkPort}/chat/ws/stream",
-                msg => _messageHandler.ProcessExternalMessage(msg),
-                _pollingcts.Token,
-                () => IsProcessRunning);
-        }
-
-        //[RelayCommand(CanExecute = nameof(CanStart))]
-        //private void Start()
-        //{
-        //    int requestedNumber = CurrentSession?.Number ?? 0;
-
-        //    if (requestedNumber > 0)
-        //    {
-        //        _streamSessionManager.EnsureSessionByNumber(requestedNumber, n =>
-        //        {
-        //            LastStreamNumber = n;
-        //            Settings.LastStreamNumber = n;
-        //            ConfigService.Save(Settings);
-        //        });
-        //    }
-
-        //    if (_chatService.TryAttachExisting() || SafeStart())
-        //    {
-        //        IsProcessRunning = true;
-        //        _streamSessionManager.SetStartTime();
-        //        StartPolling();
-        //    }
-        //}
         [RelayCommand(CanExecute = nameof(CanStart))]
+
         private async Task Start()
         {
             Debug.WriteLine("[MainViewModel] Start() вызван");
 
-            // ✅ СНАЧАЛА ЗАПУСКАЕМ ВЕБ-СЕРВЕР
+            // ✅ 1. ЗАПУСК ВЕБ-СЕРВЕРА
             if (_webServer != null && !_isWebServerRunning)
             {
                 Debug.WriteLine("[MainViewModel] Запуск веб-сервера...");
-                await StartWebServerAsync();
+                Task.Run(StartWebServerAsync);
                 Debug.WriteLine($"[WebServer] Запущен на http://localhost:{Settings.NetworkPort}/");
             }
 
-            // ✅ ТЕПЕРЬ ВСЁ ОСТАЛЬНОЕ
-            int requestedNumber = CurrentSession?.Number ?? 0;
+            // ✅ 2. ЗАПУСК РОТАЦИИ ИНФО
+            if (_rotationService != null)
+            {
+                _rotationService.Start(RotationSilenceInterval);
+                Debug.WriteLine($"[MainViewModel] InfoRotationService запущен (тишина: {RotationSilenceInterval}с)");
+                UpdateRotationStatus();
+            }
 
+            // ✅ 3. ЗАПУСК ALERTS SERVICE
+            try
+            {
+                await _alertsService.StartAsync(Settings);
+                _overlayManager.SetAlertsVisible(Settings.AlertsOverlayVisible);
+                Debug.WriteLine("[MainViewModel] AlertsService запущен");
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[MainViewModel] Ошибка запуска AlertsService: {ex.Message}");
+            }
+
+
+            Debug.WriteLine($"[MainViewModel] ДО EnsureSessionByNumber: CurrentSession={CurrentSession?.Number}, LastStreamNumber={LastStreamNumber}");
+            // ✅ 4. УСТАНОВКА СЕССИИ
+            int requestedNumber = CurrentSession?.Number ?? 0;
             if (requestedNumber > 0)
             {
                 _streamSessionManager.EnsureSessionByNumber(requestedNumber, n =>
@@ -641,7 +688,6 @@ namespace SmithForge.ViewModels
                 });
             }
 
-            // ✅ Устанавливаем сессию в процессоре
             if (_streamSessionManager.CurrentSession != null)
             {
                 _messageHandler.SetSession(_streamSessionManager.CurrentSession.Id);
@@ -652,9 +698,10 @@ namespace SmithForge.ViewModels
                 Debug.WriteLine("[MainViewModel] ⚠️ CurrentSession == null, сессия НЕ установлена!");
             }
 
-            // ✅ ПОДКЛЮЧАЕМ ЧАТЫ
-            var chatsToConnect = Chats.Where(c => !c.IsConnected).ToList();
+            Debug.WriteLine($"[MainViewModel] ПОСЛЕ EnsureSessionByNumber: CurrentSession={CurrentSession?.Number}, LastStreamNumber={LastStreamNumber}");
 
+            // ✅ 5. ПОДКЛЮЧАЕМ ЧАТЫ
+            var chatsToConnect = Chats.Where(c => !c.IsConnected).ToList();
             if (chatsToConnect.Any())
             {
                 Debug.WriteLine($"[MainViewModel] Подключаем {chatsToConnect.Count} чатов параллельно...");
@@ -675,16 +722,41 @@ namespace SmithForge.ViewModels
             catch (Exception ex) { MessageBox.Show(ex.Message); return false; }
         }
 
+
         [RelayCommand(CanExecute = nameof(CanStop))]
         private async Task Stop()
         {
+            Debug.WriteLine("[MainViewModel] Stop() вызван");
 
+            // ✅ 1. ОСТАНОВКА РОТАЦИИ ИНФО
+            if (_rotationService != null)
+            {
+                _rotationService.Stop();
+                Debug.WriteLine("[MainViewModel] InfoRotationService остановлен");
+                UpdateRotationStatus();
+            }
+
+            // ✅ 2. ОСТАНОВКА ALERTS SERVICE
+            try
+            {
+                await _alertsService.StopAsync();
+                Debug.WriteLine("[MainViewModel] AlertsService остановлен");
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[MainViewModel] Ошибка остановки AlertsService: {ex.Message}");
+            }
+
+            // ✅ 3. ОТКЛЮЧЕНИЕ ЧАТОВ
             await StopAllChats();
 
+            // ✅ 4. ОСТАНОВКА ВНЕШНЕГО ПРОЦЕССА И СЕССИИ
             _pollingcts?.Cancel();
             await _chatService.StopAsync();
             _streamSessionManager.SaveSessionEndTime();
             IsProcessRunning = false;
+
+            Debug.WriteLine("[MainViewModel] Stop() завершён");
         }
 
         [RelayCommand]
@@ -705,6 +777,8 @@ namespace SmithForge.ViewModels
         public void SaveShortsPosition() => _overlayManager.SaveAllPositions(Settings);
         public void SaveImportantPosition() => _overlayManager.SaveAllPositions(Settings);
         public void SaveStickersPosition() => _overlayManager.SaveAllPositions(Settings);
+
+        public void SaveAlertsPosition() => _overlayManager.SaveAllPositions(Settings);
 
         // ============================================================
         // УПРАВЛЕНИЕ ОЧЕРЕДЬЮ ВАЖНЫХ СООБЩЕНИЙ
@@ -769,6 +843,67 @@ namespace SmithForge.ViewModels
         private void ToggleStickersOverlay()
         {
             IsStickersVisible = !IsStickersVisible;
+        }
+
+        [RelayCommand]
+        private void ToggleAlertsOverlay()
+        {
+            Settings.AlertsOverlayVisible = !Settings.AlertsOverlayVisible;
+            _overlayManager.SetAlertsVisible(Settings.AlertsOverlayVisible);
+            ConfigService.Save(Settings);
+            Debug.WriteLine($"[MainViewModel] AlertsOverlayVisible: {Settings.AlertsOverlayVisible}");
+        }
+
+        [RelayCommand]
+        private void OpenAlertsWebOverlay()
+        {
+            try
+            {
+                string url = $"http://localhost:{Settings.NetworkPort}/alerts";
+                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+                {
+                    FileName = url,
+                    UseShellExecute = true
+                });
+                Debug.WriteLine($"[MainViewModel] Открыт веб-оверлей алертов: {url}");
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[MainViewModel] Ошибка открытия веб-оверлея: {ex.Message}");
+                MessageBox.Show($"Не удалось открыть браузер: {ex.Message}", "Ошибка",
+                    MessageBoxButton.OK, MessageBoxImage.Warning);
+            }
+        }
+
+        [RelayCommand]
+        private async Task OpenAlertsSettings()
+        {
+            try
+            {
+                var window = new SmithForge.Features.AlertsSettings.AlertsSettingsWindow(Settings)
+                {
+                    Owner = Application.Current.MainWindow
+                };
+
+                var result = window.ShowDialog();
+
+                if (result == true)
+                {
+                    Debug.WriteLine("[MainViewModel] Настройки алертов сохранены, перезапускаем AlertsService...");
+
+                    // Перезапускаем сервис с новыми настройками
+                    await _alertsService.StartAsync(Settings);
+
+                    // Обновляем видимость оверлея
+                    _overlayManager.SetAlertsVisible(Settings.AlertsOverlayVisible);
+                    _overlayManager.SetAlertsDuration(Settings.AlertsAlertDuration);
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[MainViewModel] Ошибка открытия настроек алертов: {ex.Message}");
+                MessageBox.Show($"Ошибка: {ex.Message}", "Ошибка", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
         }
 
         [RelayCommand]
@@ -1100,6 +1235,8 @@ namespace SmithForge.ViewModels
 
         private async Task StartWebServerAsync()
         {
+            if (_isWebServerRunning) return;  // ← защита
+            _isWebServerRunning = true;       // ← ставим ДО запуска, чтобы второй вызов не начал работу
             try
             {
                 await _webServer!.StartAsync();
@@ -1111,33 +1248,6 @@ namespace SmithForge.ViewModels
                 Debug.WriteLine($"[WebServer] Ошибка запуска: {ex.Message}");
             }
         }
-
-        private void OnWebMessageAdded(object? sender, DisplayMessageViewModel msg)
-        {
-            // Здесь можно добавить дополнительную логику при получении сообщения
-        }
-
-        //private void AddMessageToWebOverlay(Chater chater, CommonMessage msg)
-        //{
-
-        //    // ✅ ПОКАЗЫВАЕМ ОКНО ДЛЯ ПРОВЕРКИ
-        //    Application.Current.Dispatcher.Invoke(() =>
-        //    {
-        //        MessageBox.Show($"AddMessageToWebOverlay вызван! _webServer={_webServer != null}, _isWebServerRunning={_isWebServerRunning}");
-        //    });
-
-        //    Debug.WriteLine($"[WebServer] AddMessageToWebOverlay ВЫЗВАН! _webServer={_webServer != null}, _isWebServerRunning={_isWebServerRunning}");
-
-        //    if (_webServer == null || !_isWebServerRunning)
-        //    {
-        //        Debug.WriteLine($"[WebServer] НЕ ДОБАВЛЕНО: _webServer={_webServer != null}, _isWebServerRunning={_isWebServerRunning}");
-        //        return;
-        //    }
-
-        //    var displayMsg = new DisplayMessageViewModel(chater, msg);
-        //    _webServer.AddMessage(displayMsg);
-        //    Debug.WriteLine($"[WebServer] ✅ ДОБАВЛЕНО сообщение: {chater.EffectiveName}: {msg.Message}");
-        //}
 
         [RelayCommand]
         private void OpenOverlayUrl()

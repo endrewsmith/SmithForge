@@ -272,7 +272,12 @@ namespace SmithForge.Main.Services
 
         public static StreamSession? GetActiveSession() =>
             new SqliteConnection(ConnectionString).QueryFirstOrDefault<StreamSession>(Sql.GetActiveSession);
-
+        public static StreamSession? GetLastSession()
+        {
+            using var db = new SqliteConnection(ConnectionString);
+            return db.QueryFirstOrDefault<StreamSession>(
+                "SELECT * FROM StreamSessions ORDER BY Number DESC LIMIT 1");
+        }
         public static int GetMaxStreamNumber() =>
             new SqliteConnection(ConnectionString).ExecuteScalar<int>("SELECT COALESCE(MAX(Number), 0) FROM StreamSessions");
 
@@ -654,6 +659,53 @@ namespace SmithForge.Main.Services
                 "SELECT ChaterId FROM ChatLogs WHERE MessageNumber = @number ORDER BY Timestamp DESC LIMIT 1",
                 new { number = messageNumber });
         }
+
+        /// <summary>
+        /// Получить актуальные счётчики реакций для сообщения
+        /// </summary>
+
+
+        /// <summary>
+        /// Найти Id сообщения (ChatLogs.Id) по номеру сообщения в стриме
+        /// </summary>
+        public static long GetMessageIdByNumber(int messageNumber)
+        {
+            using var db = new SqliteConnection(ConnectionString);
+            return db.QuerySingleOrDefault<long>(
+                "SELECT Id FROM ChatLogs WHERE MessageNumber = @messageNumber ORDER BY Timestamp DESC LIMIT 1",
+                new { messageNumber });
+        }
+
+        /// <summary>
+        /// Получить текущую реакцию пользователя на сообщение
+        /// Возвращает "like", "dislike" или null
+        /// </summary>
+        /// <summary>
+        /// Получить текущую реакцию пользователя на сообщение
+        /// Возвращает "like", "dislike" или null
+        /// </summary>
+        public static string? GetUserReaction(long messageId, string chaterId)
+        {
+            using var db = new SqliteConnection(ConnectionString);
+            return db.QuerySingleOrDefault<string>(
+                "SELECT Reaction FROM MessageReactions WHERE MessageId = @messageId AND ChaterId = @chaterId",
+                new { messageId, chaterId });
+        }
+
+        /// <summary>
+        /// Получить актуальные счётчики реакций для сообщения
+        /// </summary>
+        public static (int Likes, int Dislikes) GetReactionCounts(long messageId)
+        {
+            using var db = new SqliteConnection(ConnectionString);
+            var row = db.QuerySingleOrDefault(
+                "SELECT COALESCE(Likes, 0) as Likes, COALESCE(Dislikes, 0) as Dislikes FROM ChatLogs WHERE Id = @messageId",
+                new { messageId });
+
+            if (row == null) return (0, 0);
+            return ((int)(long)row.Likes, (int)(long)row.Dislikes);
+        }
+
 
     }
 }

@@ -187,7 +187,9 @@ namespace SmithForge.Main.Services.ChatCommands
                 msg.ShouldChargeForCommand = false;
                 return;
             }
-
+            // ✅ Сбрасываем кеш аватарки, чтобы WPF отпустил файл
+            caller.RefreshAvatar();
+            await Task.Delay(100);
             // ✅ Передаём forceUpdate
             string savedAvatarPath = await YouTubeAvatarService.DownloadAvatarAsync(caller.Id, avatarUrl, forceUpdate);
             if (string.IsNullOrEmpty(savedAvatarPath))
@@ -235,6 +237,10 @@ namespace SmithForge.Main.Services.ChatCommands
                 return;
             }
 
+            // ✅ Сбрасываем кеш аватарки, чтобы WPF отпустил файл
+            caller.RefreshAvatar();
+            await Task.Delay(100);
+
             // ✅ Передаём forceUpdate
             string savedAvatarPath = await TwitchAvatarService.DownloadAvatarAsync(caller.Id, avatarUrl, forceUpdate);
             if (string.IsNullOrEmpty(savedAvatarPath))
@@ -248,68 +254,102 @@ namespace SmithForge.Main.Services.ChatCommands
 
             Debug.WriteLine($"[AvatarCommand] Аватар Twitch сохранён: {savedAvatarPath}");
 
-            // Обновляем данные пользователя
+            // ✅ Обновляем только имя файла аватарки
             caller.AvatarFileName = Path.GetFileName(savedAvatarPath);
 
-            // Добавляем Twitch аккаунт если его нет
-            string externalId = $"twitch:{username}";
-            var existingAccount = caller.Accounts.FirstOrDefault(a => a.ExternalId == externalId);
-            if (existingAccount == null)
+            // ❌ УБРАНО: НЕ создаём короткий аккаунт (twitch:username).
+            // Аккаунт с ID канала (twitch:115176365) уже существует — его и используем.
+
+            // ✅ Если OriginalName у существующего аккаунта устарел — обновим его
+            // (это на случай, если пользователь сменил ник в Twitch)
+            var twitchAccount = caller.Accounts.FirstOrDefault(a =>
+                a.Platform.Equals("twitch", StringComparison.OrdinalIgnoreCase));
+
+            if (twitchAccount != null)
             {
-                caller.Accounts.Add(new ExternalAccount
+                // Обновляем OriginalName, если он изменился (ник в Twitch)
+                if (twitchAccount.OriginalName != username)
                 {
-                    ExternalId = externalId,
-                    Platform = "twitch",
-                    OriginalName = username
-                });
-                Debug.WriteLine($"[AvatarCommand] Добавлен Twitch аккаунт для {username}");
+                    Debug.WriteLine($"[AvatarCommand] Обновляем OriginalName: '{twitchAccount.OriginalName}' → '{username}'");
+                    twitchAccount.OriginalName = username;
+                }
+            }
+            else
+            {
+                Debug.WriteLine($"[AvatarCommand] ⚠️ Twitch-аккаунт не найден у {caller.Login}. Аватарка скачана, но аккаунт не создан.");
             }
 
+            // ✅ Сохраняем изменения
             ChaterStorage.AddOrUpdate(caller);
+            DatabaseService.SaveChater(caller);
             caller.RefreshAvatar();
 
-            //msg.IsProcessedByCommand = true;
-            //msg.ShouldChargeForCommand = true;
-            //msg.Message = $"✅ Аватарка Twitch для @{username} успешно загружена!";
+            Debug.WriteLine($"[AvatarCommand] Аккаунты пользователя {caller.Login}: {string.Join(", ", caller.Accounts.Select(a => a.ExternalId))}");
             Debug.WriteLine($"[AvatarCommand] Twitch аватар УСПЕШНО ЗАГРУЖЕН для {caller.Login}");
         }
 
         // 1. Меняем дефолтное значение на true, раз метод ОБЯЗАН всегда обновлять
-        private async Task LoadGoodGameAvatar(string channelId, CommonMessage msg, Chater caller, bool forceUpdate = true)
+        private async Task LoadGoodGameAvatar(string userId, CommonMessage msg, Chater caller, bool forceUpdate = true)
         {
-            Debug.WriteLine($"[AvatarCommand] Загрузка аватарки GoodGame для канала: {channelId} (Force: {forceUpdate})");
+            Debug.WriteLine($"[AvatarCommand] Загрузка аватарки GoodGame для ID: {userId} (Force: {forceUpdate})");
 
             try
             {
-                string channelName = null;
-                var account = caller.Accounts.FirstOrDefault(a =>
+                // ✅ Ищем СУЩЕСТВУЮЩИЙ GoodGame-аккаунт пользователя
+                var existingAccount = caller.Accounts.FirstOrDefault(a =>
                     a.Platform.Equals("goodgame", StringComparison.OrdinalIgnoreCase));
 
-                if (account != null && !string.IsNullOrEmpty(account.OriginalName))
+                // ✅ Определяем ID и имя канала
+                string channelId = userId;   // ID пользователя (702842)
+                string channelName = null;
+
+                if (existingAccount != null && !string.IsNullOrEmpty(existingAccount.OriginalName))
                 {
-                    channelName = account.OriginalName;
+                    // Если аккаунт есть — берём ID и OriginalName из него
+                    channelName = existingAccount.OriginalName;
+
+                    // Если userId — не число, значит это короткое имя
+                    if (!long.TryParse(userId, out _))
+                    {
+                        // Пробуем взять числовой ID из ExternalId
+                        var parts = existingAccount.ExternalId.Split(':');
+                        if (parts.Length > 1 && long.TryParse(parts[1], out long numericId))
+                        {
+                            channelId = parts[1];   // "702842"
+                        }
+                    }
+                }
+                else
+                {
+                    // Если аккаунта нет — используем userId как есть
+                    channelName = userId;
                 }
 
-                if (string.IsNullOrEmpty(channelName) && !long.TryParse(channelId, out _))
+                // Если channelId — не число, пробуем использовать channelName как имя
+                if (!long.TryParse(channelId, out _) && !string.IsNullOrEmpty(channelName))
                 {
-                    channelName = channelId;
+                    channelId = channelName;
                 }
 
-                // 🌟 ИСПРАВЛЕНИЕ 1: Передаем forceUpdate в сервис получения URL, 
-                // чтобы он сбросил свой внутренний кэш (если он там есть) и сходил в API GoodGame
+                Debug.WriteLine($"[AvatarCommand] GG: channelId={channelId}, channelName={channelName}");
+
+                // ✅ Получаем URL аватарки
                 string avatarUrl = await GoodGameAvatarService.GetAvatarUrlByChannelId(channelId, channelName);
 
                 if (string.IsNullOrEmpty(avatarUrl))
                 {
                     Debug.WriteLine($"[AvatarCommand] Не удалось получить URL аватарки GoodGame для {channelId}");
-                    msg.Message = $"❌ Не найдена аватарка для канала {channelId}";
+                    msg.Message = $"❌ Не найдена аватарка для канала {channelName ?? channelId}";
                     msg.IsProcessedByCommand = true;
                     msg.ShouldChargeForCommand = false;
                     return;
                 }
 
-                // 🌟 ИСПРАВЛЕНИЕ 2: Перед скачиванием, если forceUpdate == true, 
-                // можно принудительно удалить старый файл аватарки с диска, чтобы старый кэш не мешал
+                // ✅ Сбрасываем кеш ПЕРЕД удалением старого файла
+                caller.RefreshAvatar();
+                await Task.Delay(150);
+
+                // ✅ Удаляем старый файл
                 if (forceUpdate && !string.IsNullOrEmpty(caller.AvatarFileName))
                 {
                     var oldPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "SF_Data", "Assets", "Avatars", "custom", caller.AvatarFileName);
@@ -320,11 +360,19 @@ namespace SmithForge.Main.Services.ChatCommands
 
                     if (File.Exists(oldPath))
                     {
-                        try { File.Delete(oldPath); Debug.WriteLine($"[AvatarCommand] Старый файл аватарки удален: {oldPath}"); } catch { }
+                        try
+                        {
+                            File.Delete(oldPath);
+                            Debug.WriteLine($"[AvatarCommand] Старый файл аватарки удален: {oldPath}");
+                        }
+                        catch (Exception ex)
+                        {
+                            Debug.WriteLine($"[AvatarCommand] Не удалось удалить старый файл: {ex.Message}");
+                        }
                     }
                 }
 
-                // Скачиваем заново
+                // ✅ Скачиваем новую
                 string savedPath = await GoodGameAvatarService.DownloadAvatarAsync(caller.Id, avatarUrl, forceUpdate);
                 if (string.IsNullOrEmpty(savedPath))
                 {
@@ -337,40 +385,35 @@ namespace SmithForge.Main.Services.ChatCommands
 
                 Debug.WriteLine($"[AvatarCommand] Аватар GoodGame сохранён: {savedPath}");
 
-                // Обновляем данные пользователя
+                // ✅ Обновляем только имя файла
                 caller.AvatarFileName = Path.GetFileName(savedPath);
-                caller.RefreshAvatar(); // Метод должен пересчитать FullAvatarPath
 
-                // Синхронизируем регистр с тем, как работает ваш ChaterStorage!
-                string externalId = $"goodgame:{channelId}"; // Убрал .ToLower(), если в ChaterStorage вы его тоже убрали
-
-                var existingAccount = caller.Accounts.FirstOrDefault(a =>
-                    a.ExternalId.Equals(externalId, StringComparison.OrdinalIgnoreCase));
-
-                if (existingAccount == null)
+                // ❌ НЕ создаём новый аккаунт!
+                // Только обновляем существующий (если он есть).
+                if (existingAccount != null)
                 {
-                    caller.Accounts.Add(new ExternalAccount
+                    if (existingAccount.OriginalName != channelName)
                     {
-                        ExternalId = externalId,
-                        Platform = "goodgame",
-                        OriginalName = channelName ?? channelId
-                    });
+                        Debug.WriteLine($"[AvatarCommand] Обновляем OriginalName: '{existingAccount.OriginalName}' → '{channelName}'");
+                        existingAccount.OriginalName = channelName;
+                    }
                 }
-                else if (existingAccount.OriginalName != channelName)
+                else
                 {
-                    existingAccount.OriginalName = channelName ?? channelId;
+                    Debug.WriteLine($"[AvatarCommand] ⚠️ GG-аккаунт не найден у {caller.Login}. Аватарка сохранена, аккаунт не создан.");
                 }
 
-                // Сохраняем и ОПОВЕЩАЕМ веб-оверлей
+                // ✅ Сохраняем и оповещаем
                 DatabaseService.SaveChater(caller);
                 ChaterStorage.AddOrUpdate(caller);
-
-                // 🌟 Это вызовет SendAvatarUpdateOnly, который мы настроили в прошлом шаге
+                caller.RefreshAvatar();
                 ChaterStorage.NotifyChaterUpdated(caller);
 
                 msg.IsProcessedByCommand = true;
                 msg.ShouldChargeForCommand = true;
                 msg.Message = $"✅ Аватарка GoodGame для канала {channelName ?? channelId} успешно обновлена!";
+
+                Debug.WriteLine($"[AvatarCommand] Аккаунты пользователя {caller.Login}: {string.Join(", ", caller.Accounts.Select(a => a.ExternalId))}");
             }
             catch (Exception ex)
             {

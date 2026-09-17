@@ -1,17 +1,42 @@
 ﻿using SmithForge.Features.Dashboard;
 using SmithForge.Main.Models;
 using System;
+using System.Diagnostics;
 using System.Windows;
 
 namespace SmithForge.Main.Services
 {
-    public class DashboardService
+    class DashboardService
     {
         private DashboardWindow? _window;
         private DashboardViewModel? _viewModel;
         private bool _isInitialized = false;
+        private readonly object _initLock = new object();
 
         public void Initialize()
+        {
+            if (_isInitialized) return;
+
+            // Защита от параллельной инициализации из нескольких потоков
+            lock (_initLock)
+            {
+                if (_isInitialized) return;
+
+                // Всегда инициализируем в UI-потоке
+                if (Application.Current == null) return;
+
+                if (!Application.Current.Dispatcher.CheckAccess())
+                {
+                    Application.Current.Dispatcher.Invoke(InitializeOnUi);
+                }
+                else
+                {
+                    InitializeOnUi();
+                }
+            }
+        }
+
+        private void InitializeOnUi()
         {
             if (_isInitialized) return;
 
@@ -24,24 +49,24 @@ namespace SmithForge.Main.Services
                     Visibility = Visibility.Collapsed
                 };
 
-                // ✅ Подписываемся на закрытие окна
+                // Подписываемся на закрытие окна: не закрывать, а скрывать
                 _window.Closing += (s, e) =>
                 {
-                    // Отменяем закрытие, просто прячем окно
                     e.Cancel = true;
-                    _window.Visibility = Visibility.Collapsed;
-                    System.Diagnostics.Debug.WriteLine("[Dashboard] Окно скрыто через Closing");
+                    if (_window != null)
+                        _window.Visibility = Visibility.Collapsed;
+                    Debug.WriteLine("[Dashboard] Окно скрыто через Closing");
                 };
 
                 // Показываем окно (оно будет скрыто)
                 _window.Show();
 
                 _isInitialized = true;
-                System.Diagnostics.Debug.WriteLine("[Dashboard] Сервис инициализирован");
+                Debug.WriteLine("[Dashboard] Сервис инициализирован");
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"[Dashboard] Ошибка инициализации: {ex.Message}");
+                Debug.WriteLine($"[Dashboard] Ошибка инициализации: {ex.Message}");
             }
         }
 
@@ -49,12 +74,25 @@ namespace SmithForge.Main.Services
         {
             if (!_isInitialized || _viewModel == null)
             {
-                // Если сервис не инициализирован, инициализируем
                 Initialize();
                 if (_viewModel == null) return;
             }
 
-            _viewModel.AddMessage(user, msg);
+            if (Application.Current == null) return;
+
+            if (Application.Current.Dispatcher.CheckAccess())
+            {
+                try { _viewModel.AddMessage(user, msg); }
+                catch (Exception ex) { Debug.WriteLine($"[Dashboard] Ошибка AddMessage: {ex.Message}"); }
+            }
+            else
+            {
+                Application.Current.Dispatcher.BeginInvoke(() =>
+                {
+                    try { _viewModel?.AddMessage(user, msg); }
+                    catch (Exception ex) { Debug.WriteLine($"[Dashboard] Ошибка AddMessage: {ex.Message}"); }
+                });
+            }
         }
 
         public void Show()
@@ -66,25 +104,71 @@ namespace SmithForge.Main.Services
 
             if (_window == null) return;
 
+            if (Application.Current == null) return;
+
+            if (Application.Current.Dispatcher.CheckAccess())
+            {
+                ShowOnUi();
+            }
+            else
+            {
+                Application.Current.Dispatcher.BeginInvoke(ShowOnUi);
+            }
+        }
+
+        private void ShowOnUi()
+        {
+            if (_window == null) return;
+
             _window.Visibility = Visibility.Visible;
             _window.Topmost = true;
-
-            // Обновляем список сообщений, если они есть
             _window.InvalidateVisual();
 
-            System.Diagnostics.Debug.WriteLine("[Dashboard] Окно показано");
+            Debug.WriteLine("[Dashboard] Окно показано");
         }
 
         public void Hide()
         {
             if (_window == null) return;
+
+            if (Application.Current == null) return;
+
+            if (Application.Current.Dispatcher.CheckAccess())
+            {
+                HideOnUi();
+            }
+            else
+            {
+                Application.Current.Dispatcher.BeginInvoke(HideOnUi);
+            }
+        }
+
+        private void HideOnUi()
+        {
+            if (_window == null) return;
             _window.Visibility = Visibility.Collapsed;
-            System.Diagnostics.Debug.WriteLine("[Dashboard] Окно скрыто");
+            Debug.WriteLine("[Dashboard] Окно скрыто");
         }
 
         public void ClearMessages()
         {
-            _viewModel?.ClearMessages();
+            if (_viewModel == null) return;
+
+            if (Application.Current == null) return;
+
+            if (Application.Current.Dispatcher.CheckAccess())
+            {
+                try { _viewModel.ClearMessages(); }
+                catch (Exception ex) { Debug.WriteLine($"[Dashboard] Ошибка ClearMessages: {ex.Message}"); }
+            }
+            else
+            {
+                Application.Current.Dispatcher.BeginInvoke(() =>
+                {
+                    try { _viewModel?.ClearMessages(); }
+                    catch (Exception ex) { Debug.WriteLine($"[Dashboard] Ошибка ClearMessages: {ex.Message}"); }
+                });
+            }
         }
 
         public bool IsVisible => _window != null && _window.Visibility == Visibility.Visible;

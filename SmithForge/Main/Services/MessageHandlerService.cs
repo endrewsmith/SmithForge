@@ -27,7 +27,7 @@ namespace SmithForge.Main.Services
 
         public event Action<Chater, CommonMessage, List<ChatCommandInfo>>? OnProcessed;
 
-        public MessageHandlerService(
+        internal MessageHandlerService(
             MessageProcessor processor,
             OverlayManagerService overlayManager,
             DashboardService dashboardService,
@@ -251,6 +251,26 @@ namespace SmithForge.Main.Services
                 else if (isReactionAction)
                 {
                     Debug.WriteLine($"[Reaction] Реакция от {chater.Login}: {msg.Message}");
+
+                    // ✅ Парсим тег <like msg='N' user='...' /> или <dislike msg='N' user='...' />
+                    var likeMatch = System.Text.RegularExpressions.Regex.Match(
+                        msg.Message, @"<like\s+msg='(\d+)'\s+user='([^']+)'");
+
+                    var dislikeMatch = System.Text.RegularExpressions.Regex.Match(
+                        msg.Message, @"<dislike\s+msg='(\d+)'\s+user='([^']+)'");
+
+                    if (likeMatch.Success)
+                    {
+                        int msgNumber = int.Parse(likeMatch.Groups[1].Value);
+                        string userId = likeMatch.Groups[2].Value;
+                        HandleReaction(msgNumber, userId, "like");
+                    }
+                    else if (dislikeMatch.Success)
+                    {
+                        int msgNumber = int.Parse(dislikeMatch.Groups[1].Value);
+                        string userId = dislikeMatch.Groups[2].Value;
+                        HandleReaction(msgNumber, userId, "dislike");
+                    }
                 }
                 else if (isHideAction)
                 {
@@ -274,7 +294,50 @@ namespace SmithForge.Main.Services
                 Debug.WriteLine($"[MessageHandler] Ошибка обработки: {ex.Message}");
             }
         }
+        /// <summary>
+        /// Обработка реакции (лайк/дизлайк): запись в БД и уведомление веб-оверлея
+        /// </summary>
+        private void HandleReaction(int messageNumber, string userId, string reactionType)
+        {
+            try
+            {
+                Debug.WriteLine($"[Reaction] Обработка: #{messageNumber}, user={userId}, type={reactionType}");
 
+                // 1. Находим ChatLogs.Id по номеру сообщения
+                long chatLogId = DatabaseService.GetMessageIdByNumber(messageNumber);
+                if (chatLogId <= 0)
+                {
+                    Debug.WriteLine($"[Reaction] ⚠️ Сообщение #{messageNumber} не найдено в БД");
+                    return;
+                }
+
+                Debug.WriteLine($"[Reaction] ChatLogs.Id = {chatLogId}");
+
+                // 2. Ставим реакцию в БД
+                if (reactionType == "like")
+                    DatabaseService.LikeMessage(chatLogId, userId);
+                else
+                    DatabaseService.DislikeMessage(chatLogId, userId);
+
+                // 3. Получаем актуальные счётчики
+                var counts = DatabaseService.GetReactionCounts(chatLogId);
+
+                // 4. Отправляем обновление в веб-оверлей
+                int newCount = reactionType == "like" ? counts.Likes : counts.Dislikes;
+
+                WebServerService.Instance?.UpdateReactionInWeb(
+                    messageNumber: messageNumber,
+                    reactionType: reactionType,
+                    newCount: newCount);
+
+                Debug.WriteLine($"[Reaction] ✅ {reactionType} для #{messageNumber}: likes={counts.Likes}, dislikes={counts.Dislikes}");
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[Reaction] ❌ Ошибка: {ex.Message}");
+                Debug.WriteLine($"[Reaction] StackTrace: {ex.StackTrace}");
+            }
+        }
         public void ProcessConnectorMessage(object? sender, IncomingChatMessage message)
         {
             Debug.WriteLine($"[MessageHandler] ProcessConnectorMessage: {message.UserName}: {message.Text}");

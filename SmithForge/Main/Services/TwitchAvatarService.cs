@@ -265,12 +265,12 @@ namespace SmithForge.Main.Services
                         }
                     }
 
-                    if (!deleted)
-                    {
-                        string timestamp = DateTime.Now.Ticks.ToString();
-                        string newPath = Path.Combine(AvatarFolder, $"{userId}_{timestamp}{extension}");
-                        avatarPath = newPath;
-                    }
+                    //if (!deleted)
+                    //{
+                    //    string timestamp = DateTime.Now.Ticks.ToString();
+                    //    string newPath = Path.Combine(AvatarFolder, $"{userId}_{timestamp}{extension}");
+                    //    avatarPath = newPath;
+                    //}
                 }
 
                 // ✅ Если файл уже существует и не нужно принудительно обновлять - возвращаем путь
