@@ -1,5 +1,6 @@
 ﻿using SmithForge.Main.Models;
 using SmithForge.Main.Services.WebServer;
+using SmithForge.Main.Services.WebServer.Handlers;
 using System.Diagnostics;
 using System.IO;
 using System.Net;
@@ -37,6 +38,7 @@ namespace SmithForge.Main.Services
 
         // === SSE-клиенты основного чата /stream ===
         private readonly SseClientManager _streamManager = new("Stream");
+        private readonly ChatStreamHandler _chatStreamHandler;
 
         // === Alerts Overlay (веб-оверлей алертов) ===
         private readonly SseClientManager _alertsManager = new("Alerts");
@@ -73,6 +75,8 @@ namespace SmithForge.Main.Services
 
             // Создаем дефолтные страницы если их нет
             EnsureInfoPagesExist();
+
+            _chatStreamHandler = new ChatStreamHandler(_streamManager);
         }
 
         private void EnsureInfoPagesExist()
@@ -732,28 +736,9 @@ namespace SmithForge.Main.Services
         }
         private async Task HandleStreamRequestAsync(HttpListenerContext context)
         {
-            using var client = new SseClient(context, heartbeatIntervalMs: 15000);
-            Debug.WriteLine($"[WebServer] 💬 Stream-клиент {client.Id} подключён");
-
-            _streamManager.Add(client);
-
-            try
-            {
-                // Приветствие — чтобы браузер сразу понял, что соединение живо
-                //await client.SendAsync($"data: {{\"type\":\"hello\",\"ts\":\"{DateTime.Now:HH:mm:ss}\"}}\n\n");
-                await client.SendAsync(": ping\n\n");
-
-                // Ждём отключения клиента или остановки сервера
-                await client.WaitUntilClosedAsync(_cts?.Token ?? CancellationToken.None);
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine($"[WebServer] Stream-клиент {client.Id} ошибка: {ex.Message}");
-            }
-            finally
-            {
-                _streamManager.Remove(client);
-            }
+            await _chatStreamHandler.HandleConnectionAsync(
+                context,
+                _cts?.Token ?? CancellationToken.None);
         }
 
         private async Task HandleApiRequestAsync(HttpListenerContext context)
@@ -874,7 +859,7 @@ namespace SmithForge.Main.Services
         /// </summary>
         public void BroadcastRawSse(string sseData)
         {
-            _streamManager.Broadcast(sseData);
+            _chatStreamHandler.BroadcastRawSse(sseData);
         }
 
         private string GetRankTemplate(int rank)
