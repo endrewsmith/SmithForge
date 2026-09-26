@@ -1,6 +1,5 @@
 ﻿using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using SmithForge.AlertsEngine.Core.Models;
 using SmithForge.ChatEngine.Core.Models;
 using SmithForge.Features.ChatManager;
 using SmithForge.Features.InfoSystem;
@@ -29,15 +28,6 @@ namespace SmithForge.ViewModels
         private StickerPageService _stickerPageService;
         private SoundPageService _soundPageService;
 
-        [ObservableProperty]
-        private ImportantPlaybackMode _importantPlaybackMode = ImportantPlaybackMode.Auto;
-
-        [ObservableProperty]
-        private string _importantPlaybackHotkey = "F8";
-
-        [ObservableProperty]
-        private int _importantQueueCount = 0;
-
         private readonly DashboardService _dashboardService = new();
         private readonly SmithForge.Features.MediaDashboard.MediaDashboardService _mediaDashboardService = new();
         private readonly MessageHandlerService _messageHandler;
@@ -46,7 +36,6 @@ namespace SmithForge.ViewModels
         private readonly DialogService _dialogService;
         private readonly ExternalChatService _chatService = new();
         private CancellationTokenSource? _pollingcts;
-        private readonly AlertsService _alertsService = new();
 
         [ObservableProperty]
         [NotifyCanExecuteChangedFor(nameof(StartCommand))]
@@ -67,9 +56,6 @@ namespace SmithForge.ViewModels
 
         [ObservableProperty]
         private int _lastStreamNumber;
-
-        [ObservableProperty]
-        private bool _isAutoSwitchingEnabled = true;
 
         public ObservableCollection<Chater> Users { get; } = new();
 
@@ -270,84 +256,8 @@ namespace SmithForge.ViewModels
         }
 
         // ============================================================
-        // ОСТАЛЬНЫЕ МЕТОДЫ
+        // LOAD INITIAL DATA
         // ============================================================
-
-        partial void OnImportantPlaybackModeChanged(ImportantPlaybackMode value) => _settingsService.SetImportantPlaybackMode(value);
-        partial void OnImportantPlaybackHotkeyChanged(string value) => _settingsService.SetImportantPlaybackHotkey(value);
-
-        partial void OnIsAutoSwitchingEnabledChanged(bool value) => _settingsService.SetIsAutoSwitchingEnabled(value, ImportantQueueCount, ImportantPlaybackMode);
-
-        // ============================================================
-        // ОБРАБОТЧИКИ СОБЫТИЙ ALERTS SERVICE
-        // ============================================================
-
-        private void OnAlertReceived(object? sender, IncomingAlert alert)
-        {
-            if (alert == null) return;
-
-            Debug.WriteLine($"[MainViewModel] Получен алерт: [{alert.ProviderType}] {alert.DisplayText}");
-
-            Application.Current.Dispatcher.Invoke(() =>
-            {
-                _overlayManager.ShowAlert(alert);
-            });
-
-            if (_webServer != null)
-            {
-                try
-                {
-                    string providerName = alert.ProviderType switch
-                    {
-                        AlertProviderType.DonationAlerts => "DonationAlerts",
-                        AlertProviderType.DonationPay => "DonationPay",
-                        _ => "Alert"
-                    };
-
-                    string displayAmount = alert.Type switch
-                    {
-                        AlertType.Donation => $"{alert.Amount:F0} {alert.Currency}",
-                        AlertType.Subscription => "Подписка",
-                        AlertType.Follow => "Фолловер",
-                        _ => alert.Type.ToString()
-                    };
-
-                    _webServer.SendAlertToWeb(
-                        userName: alert.UserName,
-                        message: alert.Message,
-                        displayAmount: displayAmount,
-                        providerType: alert.ProviderType.ToString().ToLower(),
-                        providerName: providerName,
-                        durationSeconds: Settings.AlertsAlertDuration
-                    );
-                }
-                catch (Exception ex)
-                {
-                    Debug.WriteLine($"[MainViewModel] Ошибка отправки алерта в веб: {ex.Message}");
-                }
-            }
-        }
-
-        private void OnAlertStatusChanged(object? sender, AlertStatus status)
-        {
-            Debug.WriteLine($"[MainViewModel] Статус алертов: {status}");
-        }
-
-        public void SetImportantPlaybackMode(ImportantPlaybackMode mode)
-        {
-            if (!Application.Current.Dispatcher.CheckAccess())
-            {
-                Application.Current.Dispatcher.Invoke(() => SetImportantPlaybackMode(mode));
-                return;
-            }
-
-            if (ImportantPlaybackMode != mode)
-            {
-                ImportantPlaybackMode = mode;
-                Debug.WriteLine($"[MainViewModel] Режим принудительно установлен: {mode}");
-            }
-        }
-
         private void LoadInitialData()
         {
             var history = DatabaseService.LoadAll();
@@ -544,96 +454,15 @@ namespace SmithForge.ViewModels
         [RelayCommand]
         private void SaveSettings() => _settingsService.SaveSettings();
 
-        public void SaveAlertsPosition() => _overlayManager.SaveAllPositions(Settings);
-
-        public void UpdateImportantQueueCount(int count)
-        {
-            _settingsService.UpdateImportantQueueCount(count, IsAutoSwitchingEnabled, ImportantPlaybackMode,
-                (c, mode) =>
-                {
-                    ImportantQueueCount = c;
-                    ImportantPlaybackMode = mode;
-                });
-        }
-
         private void OnProcessExited() => Application.Current.Dispatcher.Invoke(() => { IsProcessRunning = false; });
         private bool CanStart() => !IsProcessRunning;
         private bool CanStop() => IsProcessRunning;
-
-        [RelayCommand]
-        private async Task PlayNextImportant()
-        {
-            if (ImportantPlaybackMode == ImportantPlaybackMode.Manual)
-            {
-                await _overlayManager.PlayNextFromQueueAsync();
-                UpdateImportantQueueCount(_overlayManager.QueueSize);
-            }
-        }
 
         [RelayCommand]
         private void Launch()
         {
             if (System.IO.File.Exists(ProgramPath))
                 Process.Start(new ProcessStartInfo(ProgramPath) { UseShellExecute = true });
-        }
-
-        [RelayCommand]
-        private void ToggleAlertsOverlay()
-        {
-            Settings.AlertsOverlayVisible = !Settings.AlertsOverlayVisible;
-            _overlayManager.SetAlertsVisible(Settings.AlertsOverlayVisible);
-            ConfigService.Save(Settings);
-            Debug.WriteLine($"[MainViewModel] AlertsOverlayVisible: {Settings.AlertsOverlayVisible}");
-        }
-
-        [RelayCommand]
-        private void OpenAlertsWebOverlay()
-        {
-            try
-            {
-                string url = $"http://localhost:{Settings.NetworkPort}/alerts";
-                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
-                {
-                    FileName = url,
-                    UseShellExecute = true
-                });
-                Debug.WriteLine($"[MainViewModel] Открыт веб-оверлей алертов: {url}");
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine($"[MainViewModel] Ошибка открытия веб-оверлея: {ex.Message}");
-                MessageBox.Show($"Не удалось открыть браузер: {ex.Message}", "Ошибка",
-                    MessageBoxButton.OK, MessageBoxImage.Warning);
-            }
-        }
-
-        [RelayCommand]
-        private async Task OpenAlertsSettings()
-        {
-            try
-            {
-                var window = new SmithForge.Features.AlertsSettings.AlertsSettingsWindow(Settings)
-                {
-                    Owner = Application.Current.MainWindow
-                };
-
-                var result = window.ShowDialog();
-
-                if (result == true)
-                {
-                    Debug.WriteLine("[MainViewModel] Настройки алертов сохранены, перезапускаем AlertsService...");
-
-                    await _alertsService.StartAsync(Settings);
-
-                    _overlayManager.SetAlertsVisible(Settings.AlertsOverlayVisible);
-                    _overlayManager.SetAlertsDuration(Settings.AlertsAlertDuration);
-                }
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine($"[MainViewModel] Ошибка открытия настроек алертов: {ex.Message}");
-                MessageBox.Show($"Ошибка: {ex.Message}", "Ошибка", MessageBoxButton.OK, MessageBoxImage.Error);
-            }
         }
 
         [RelayCommand]
