@@ -19,11 +19,16 @@ namespace SmithForge.Main.Services.WebServer.Handlers
     {
         private readonly SseClientManager _infoManager;
         private readonly string _infoPagesDir;
+        private readonly Dictionary<string, string> _infoPageCache;
 
-        public InfoStreamHandler(SseClientManager infoManager, string infoPagesDir)
+        public InfoStreamHandler(
+            SseClientManager infoManager,
+            string infoPagesDir,
+            Dictionary<string, string> infoPageCache)
         {
             _infoManager = infoManager ?? throw new ArgumentNullException(nameof(infoManager));
             _infoPagesDir = infoPagesDir ?? throw new ArgumentNullException(nameof(infoPagesDir));
+            _infoPageCache = infoPageCache ?? throw new ArgumentNullException(nameof(infoPageCache));
         }
 
         /// <summary>
@@ -160,6 +165,67 @@ namespace SmithForge.Main.Services.WebServer.Handlers
         public async Task HandleInfoPageRequestAsync(HttpListenerContext context, string pageName)
         {
             await ServeInfoPageAsync(context, pageName);
+        }
+
+        /// <summary>
+        /// Поиск по страницам справочника. Отдаёт HTML с результатами.
+        /// </summary>
+        public async Task HandleInfoSearchRequestAsync(HttpListenerContext context, string query)
+        {
+            var response = context.Response;
+
+            if (string.IsNullOrEmpty(query))
+            {
+                await SendHtmlResponse(response, "<p>❌ Введите текст для поиска</p>");
+                return;
+            }
+
+            var results = new List<(string PageId, string Title, string Snippet)>();
+            string lowerQuery = query.ToLower();
+
+            foreach (var page in _infoPageCache)
+            {
+                if (page.Value.ToLower().Contains(lowerQuery))
+                {
+                    string title = ExtractTitle(page.Value) ?? page.Key;
+                    string snippet = ExtractSnippet(page.Value, query);
+                    results.Add((page.Key, title, snippet));
+                }
+            }
+
+            if (results.Count == 0)
+            {
+                await SendHtmlResponse(response, $"<p>❌ По запросу '<b>{query}</b>' ничего не найдено</p>");
+                return;
+            }
+
+            var sb = new StringBuilder();
+            sb.AppendLine($"<div class='search-results'>");
+            sb.AppendLine($"  <h2>🔍 Результаты поиска: '{query}'</h2>");
+            sb.AppendLine($"  <p>Найдено: {results.Count}</p>");
+            sb.AppendLine($"  <hr/>");
+
+            foreach (var (id, title, snippet) in results.Take(20))
+            {
+                sb.AppendLine($"  <div class='result-item'>");
+                sb.AppendLine($"    <a href='#' onclick='loadPage(\"{id}\")'><b>{title}</b></a>");
+                if (!string.IsNullOrEmpty(snippet))
+                {
+                    sb.AppendLine($"    <p class='snippet'>{snippet}</p>");
+                }
+                sb.AppendLine($"  </div>");
+            }
+
+            if (results.Count > 20)
+            {
+                sb.AppendLine($"  <p>... и еще {results.Count - 20} результатов</p>");
+            }
+
+            sb.AppendLine($"  <hr/>");
+            sb.AppendLine($"  <a href='#' onclick='loadPage(\"help\")'>🏠 Главная</a>");
+            sb.AppendLine($"</div>");
+
+            await SendHtmlResponse(response, sb.ToString());
         }
         // ============================================================
         // РЕНДЕРИНГ HTML-СТРАНИЦ (пока не используется)

@@ -78,7 +78,7 @@ namespace SmithForge.Main.Services
             EnsureInfoPagesExist();
 
             _chatStreamHandler = new ChatStreamHandler(_streamManager);
-            _infoStreamHandler = new InfoStreamHandler(_infoManager, _infoPagesDir);
+            _infoStreamHandler = new InfoStreamHandler(_infoManager, _infoPagesDir, _infoPageCache);
         }
 
         private void EnsureInfoPagesExist()
@@ -1201,111 +1201,17 @@ int durationSeconds)
 
         private async Task ServeInfoPageAsync(HttpListenerContext context, string pageName)
         {
-            var response = context.Response;
-
-            // ============================================================
-            // index.html — каркас /info, из Html/Overlays/
-            // ============================================================
-            if (pageName == "index.html" || pageName == "index")
-            {
-                string indexHtml = HtmlProvider.GetOverlay("info.html");
-                await SendHtmlResponse(response, indexHtml);
-                return;
-            }
-
-            // ============================================================
-            // Страницы справочника: сначала пользовательская из SF_Data,
-            // потом дефолтная из Html/Overlays/pages/
-            // ============================================================
-
-            // 1. Пользовательская версия
-            string userPagePath = Path.Combine(_infoPagesDir, $"{pageName}.html");
-            if (File.Exists(userPagePath))
-            {
-                string html = await File.ReadAllTextAsync(userPagePath, Encoding.UTF8);
-                html = InjectInfoNavigation(html, pageName);
-                await SendHtmlResponse(response, html);
-                await NotifyInfoClients(pageName);
-                return;
-            }
-
-            // 2. Дефолтная из проекта
-            string defaultHtml = HtmlProvider.GetPage($"{pageName}.html");
-
-            // HtmlProvider возвращает заглушку "<h2>❌ Шаблон не найден: ..." если файла нет
-            if (defaultHtml.Contains("Шаблон не найден"))
-            {
-                response.StatusCode = 404;
-                await SendHtmlResponse(response, "<h2>❌ Страница не найдена</h2>");
-                return;
-            }
-
-            defaultHtml = InjectInfoNavigation(defaultHtml, pageName);
-            await SendHtmlResponse(response, defaultHtml);
-            await NotifyInfoClients(pageName);
+            await _infoStreamHandler.ServeInfoPageAsync(context, pageName);
         }
 
         private async Task HandleInfoPageRequestAsync(HttpListenerContext context, string pageName)
         {
-            await ServeInfoPageAsync(context, pageName);
+            await _infoStreamHandler.HandleInfoPageRequestAsync(context, pageName);
         }
 
         private async Task HandleInfoSearchRequestAsync(HttpListenerContext context, string query)
         {
-            var response = context.Response;
-
-            if (string.IsNullOrEmpty(query))
-            {
-                await SendHtmlResponse(response, "<p>❌ Введите текст для поиска</p>");
-                return;
-            }
-
-            var results = new List<(string PageId, string Title, string Snippet)>();
-            string lowerQuery = query.ToLower();
-
-            foreach (var page in _infoPageCache)
-            {
-                if (page.Value.ToLower().Contains(lowerQuery))
-                {
-                    string title = ExtractTitle(page.Value) ?? page.Key;
-                    string snippet = ExtractSnippet(page.Value, query);
-                    results.Add((page.Key, title, snippet));
-                }
-            }
-
-            if (results.Count == 0)
-            {
-                await SendHtmlResponse(response, $"<p>❌ По запросу '<b>{query}</b>' ничего не найдено</p>");
-                return;
-            }
-
-            var sb = new StringBuilder();
-            sb.AppendLine($"<div class='search-results'>");
-            sb.AppendLine($"  <h2>🔍 Результаты поиска: '{query}'</h2>");
-            sb.AppendLine($"  <p>Найдено: {results.Count}</p>");
-            sb.AppendLine($"  <hr/>");
-
-            foreach (var (id, title, snippet) in results.Take(20))
-            {
-                sb.AppendLine($"  <div class='result-item'>");
-                sb.AppendLine($"    <a href='#' onclick='loadPage(\"{id}\")'><b>{title}</b></a>");
-                if (!string.IsNullOrEmpty(snippet))
-                {
-                    sb.AppendLine($"    <p class='snippet'>{snippet}</p>");
-                }
-                sb.AppendLine($"  </div>");
-            }
-
-            if (results.Count > 20)
-            {
-                sb.AppendLine($"  <p>... и еще {results.Count - 20} результатов</p>");
-            }
-
-            sb.AppendLine($"  <hr/>");
-            sb.AppendLine($"  <a href='#' onclick='loadPage(\"help\")'>🏠 Главная</a>");
-            sb.AppendLine($"</div>");
-
-            await SendHtmlResponse(response, sb.ToString());
+            await _infoStreamHandler.HandleInfoSearchRequestAsync(context, query);
         }
 
         private async Task HandleInfoStreamRequestAsync(HttpListenerContext context)
@@ -1324,86 +1230,6 @@ int durationSeconds)
         private async Task NotifyInfoClientsRaw(string data)
         {
             await _infoStreamHandler.NotifyInfoClientsRaw(data);
-        }
-
-        private string InjectInfoNavigation(string html, string pageName)
-        {
-            if (html.Contains("<!--navigation-->") || html.Contains("{{navigation}}"))
-                return html;
-
-            string parent = GetParentPage(pageName);
-
-            var nav = new StringBuilder();
-            nav.AppendLine("<div class='info-nav'>");
-            nav.AppendLine("  <hr/>");
-
-            if (parent != null && parent != pageName)
-            {
-                nav.AppendLine($"  <a href='#' onclick='loadPage(\"{parent}\")'>⬅️ Назад</a>");
-            }
-
-            nav.AppendLine($"  <a href='#' onclick='loadPage(\"help\")'>🏠 Главная</a>");
-            nav.AppendLine("</div>");
-
-            if (html.Contains("</body>"))
-                html = html.Replace("</body>", nav.ToString() + "</body>");
-            else
-                html += nav.ToString();
-
-            return html;
-        }
-
-        private string GetParentPage(string pageName)
-        {
-            var parentMap = new Dictionary<string, string>
-            {
-                ["formatting"] = "help",
-                ["interaction"] = "help",
-                ["important"] = "help",
-                ["stickers"] = "help",
-                ["profile"] = "help",
-                ["commands"] = "help",
-                ["karma"] = "help",
-                ["rules"] = "help"
-            };
-
-            return parentMap.TryGetValue(pageName, out string? parent) ? parent : "help";
-        }
-
-        private string ExtractTitle(string html)
-        {
-            var match = Regex.Match(html, @"<title>(.*?)</title>", RegexOptions.IgnoreCase);
-            if (match.Success) return match.Groups[1].Value;
-
-            match = Regex.Match(html, @"<h1[^>]*>(.*?)</h1>", RegexOptions.IgnoreCase);
-            return match.Success ? match.Groups[1].Value : null;
-        }
-
-        private string ExtractSnippet(string html, string query)
-        {
-            int index = html.IndexOf(query, StringComparison.OrdinalIgnoreCase);
-            if (index < 0) return "";
-
-            int start = Math.Max(0, index - 60);
-            int end = Math.Min(html.Length, index + query.Length + 60);
-            string snippet = html.Substring(start, end - start);
-
-            snippet = Regex.Replace(snippet, @"<[^>]*>", " ");
-            snippet = Regex.Replace(snippet, @"\s+", " ").Trim();
-
-            if (start > 0) snippet = "..." + snippet;
-            if (end < html.Length) snippet = snippet + "...";
-
-            return snippet;
-        }
-
-        private async Task SendHtmlResponse(HttpListenerResponse response, string html)
-        {
-            var bytes = Encoding.UTF8.GetBytes(html);
-            response.ContentType = "text/html; charset=utf-8";
-            response.ContentLength64 = bytes.Length;
-            await response.OutputStream.WriteAsync(bytes);
-            response.Close();
         }
 
         /// <summary>
