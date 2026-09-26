@@ -17,9 +17,10 @@ namespace SmithForge.Main.Services
         private readonly int _port;
         private readonly List<DisplayMessageViewModel> _messages = new();
         private readonly object _lockObject = new();
+
         private readonly Dictionary<string, string> _infoPageCache = new();
-        private readonly List<SseClient> _infoStreamClients = new();
-        private readonly object _infoLock = new object();
+        private readonly SseClientManager _infoManager = new("Info");
+        private readonly object _infoPageCacheLock = new object();
         private readonly string _infoPagesDir;
 
         private static string HtmlRoot =>
@@ -35,8 +36,7 @@ namespace SmithForge.Main.Services
             Path.Combine(HtmlRoot, "Ranks", "css");
 
         // === SSE-клиенты основного чата /stream ===
-        private readonly List<SseClient> _streamClients = new();
-        private readonly object _streamLock = new object();
+        private readonly SseClientManager _streamManager = new("Stream");
 
         // === Alerts Overlay (веб-оверлей алертов) ===
         private readonly List<SseClient> _alertsStreamClients = new();
@@ -736,10 +736,7 @@ namespace SmithForge.Main.Services
             using var client = new SseClient(context, heartbeatIntervalMs: 15000);
             Debug.WriteLine($"[WebServer] 💬 Stream-клиент {client.Id} подключён");
 
-            lock (_streamLock)
-            {
-                _streamClients.Add(client);
-            }
+            _streamManager.Add(client);
 
             try
             {
@@ -756,11 +753,7 @@ namespace SmithForge.Main.Services
             }
             finally
             {
-                lock (_streamLock)
-                {
-                    _streamClients.Remove(client);
-                }
-                Debug.WriteLine($"[WebServer] 💬 Stream-клиент {client.Id} отключён. Осталось: {_streamClients.Count}");
+                _streamManager.Remove(client);
             }
         }
 
@@ -882,31 +875,7 @@ namespace SmithForge.Main.Services
         /// </summary>
         public void BroadcastRawSse(string sseData)
         {
-            List<SseClient> snapshot;
-            lock (_streamLock)
-            {
-                if (_streamClients.Count == 0) return;
-                snapshot = new List<SseClient>(_streamClients);
-            }
-
-            var dead = new List<SseClient>();
-            foreach (var client in snapshot)
-            {
-                if (!client.Send(sseData))
-                {
-                    dead.Add(client);
-                }
-            }
-
-            if (dead.Count > 0)
-            {
-                lock (_streamLock)
-                {
-                    foreach (var d in dead) _streamClients.Remove(d);
-                }
-                foreach (var d in dead) d.Dispose();
-                Debug.WriteLine($"[WebServer] 🧹 Удалено {dead.Count} мёртвых stream-клиентов");
-            }
+            _streamManager.Broadcast(sseData);
         }
 
         private string GetRankTemplate(int rank)
@@ -1439,17 +1408,13 @@ namespace SmithForge.Main.Services
             using var client = new SseClient(context, heartbeatIntervalMs: 15000);
             Debug.WriteLine($"[WebServer] 📡 Info-клиент {client.Id} подключён");
 
-            lock (_infoLock)
-            {
-                _infoStreamClients.Add(client);
-            }
+            _infoManager.Add(client);
 
             try
             {
                 // Приветственный пакет, чтобы браузер сразу понял, что соединение живое
                 //await client.SendAsync($"data: {{\"type\":\"hello\",\"ts\":\"{DateTime.Now:HH:mm:ss}\"}}\n\n");
                 await client.SendAsync(": ping\n\n");
-
 
                 // Ждём, пока клиент отключится ИЛИ сервер остановится (Dispose/Stop)
                 await client.WaitUntilClosedAsync(_cts?.Token ?? CancellationToken.None);
@@ -1460,18 +1425,14 @@ namespace SmithForge.Main.Services
             }
             finally
             {
-                lock (_infoLock)
-                {
-                    _infoStreamClients.Remove(client);
-                }
-                Debug.WriteLine($"[WebServer] 📡 Info-клиент {client.Id} отключён. Осталось: {_infoStreamClients.Count}");
+                _infoManager.Remove(client);
             }
         }
 
         // Оставляем старый метод для обратной совместимости
         private async Task NotifyInfoClients(string pageName)
         {
-            if (_infoStreamClients.Count == 0) return;
+            if (_infoManager.Count == 0) return;
 
             var json = $"{{\"type\":\"page_update\",\"page\":\"{pageName}\"}}";
             var data = $"data: {json}\n\n";
@@ -1481,32 +1442,7 @@ namespace SmithForge.Main.Services
         // ✅ НОВЫЙ МЕТОД: отправка произвольных данных
         private async Task NotifyInfoClientsRaw(string data)
         {
-            List<SseClient> snapshot;
-
-            lock (_infoLock)
-            {
-                if (_infoStreamClients.Count == 0) return;
-                snapshot = new List<SseClient>(_infoStreamClients);
-            }
-
-            var dead = new List<SseClient>();
-
-            foreach (var client in snapshot)
-            {
-                bool ok = await client.SendAsync(data);
-                if (!ok) dead.Add(client);
-            }
-
-            // Чистим мёртвых
-            if (dead.Count > 0)
-            {
-                lock (_infoLock)
-                {
-                    foreach (var d in dead) _infoStreamClients.Remove(d);
-                }
-                foreach (var d in dead) d.Dispose();
-                Debug.WriteLine($"[WebServer] 🧹 Удалено {dead.Count} мёртвых info-клиентов");
-            }
+            await _infoManager.BroadcastAsync(data);
         }
 
         private string InjectInfoNavigation(string html, string pageName)
@@ -1622,7 +1558,7 @@ namespace SmithForge.Main.Services
 
         public void ClearPageCache()
         {
-            lock (_infoLock)
+            lock (_infoPageCacheLock)
             {
                 _infoPageCache.Clear();
                 Debug.WriteLine("[WebServer] 🗑 Кеш страниц очищен");
@@ -1825,20 +1761,7 @@ namespace SmithForge.Main.Services
         /// </summary>
         public void CloseAllInfoConnections()
         {
-            List<SseClient> toClose;
-
-            lock (_infoLock)
-            {
-                toClose = new List<SseClient>(_infoStreamClients);
-                _infoStreamClients.Clear();
-            }
-
-            foreach (var client in toClose)
-            {
-                client.Dispose(); // это и закроет Response, и отменит WaitUntilClosedAsync
-            }
-
-            Debug.WriteLine($"[WebServer] Все info-клиенты закрыты ({toClose.Count})");
+            _infoManager.CloseAll();
         }
 
         /// <summary>
@@ -1846,20 +1769,7 @@ namespace SmithForge.Main.Services
         /// </summary>
         public void CloseAllStreamConnections()
         {
-            List<SseClient> toClose;
-
-            lock (_streamLock)
-            {
-                toClose = new List<SseClient>(_streamClients);
-                _streamClients.Clear();
-            }
-
-            foreach (var client in toClose)
-            {
-                client.Dispose();
-            }
-
-            Debug.WriteLine($"[WebServer] Все stream-клиенты закрыты ({toClose.Count})");
+            _streamManager.CloseAll();
         }
 
         /// <summary>

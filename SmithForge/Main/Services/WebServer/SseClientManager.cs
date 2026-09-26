@@ -128,5 +128,41 @@ namespace SmithForge.Main.Services.WebServer
             Debug.WriteLine($"[{_name}] Все клиенты закрыты ({toClose.Count})");
             ClientCountChanged?.Invoke(this, 0);
         }
+
+        /// <summary>
+        /// Асинхронная версия Broadcast.
+        /// Используется потоками, которые исторически работали через SendAsync
+        /// (например, /info/stream).
+        /// </summary>
+        public async Task BroadcastAsync(string sseData)
+        {
+            if (string.IsNullOrEmpty(sseData)) return;
+
+            List<SseClient> snapshot;
+            lock (_lock)
+            {
+                if (_clients.Count == 0) return;
+                snapshot = new List<SseClient>(_clients);
+            }
+
+            var dead = new List<SseClient>();
+            foreach (var client in snapshot)
+            {
+                if (!await client.SendAsync(sseData))
+                {
+                    dead.Add(client);
+                }
+            }
+
+            if (dead.Count > 0)
+            {
+                lock (_lock)
+                {
+                    foreach (var d in dead) _clients.Remove(d);
+                }
+                foreach (var d in dead) d.Dispose();
+                Debug.WriteLine($"[{_name}] 🧹 Удалено {dead.Count} мёртвых клиентов (async). Осталось: {Count}");
+            }
+        }
     }
 }
