@@ -29,7 +29,7 @@ namespace SmithForge.Features.InfoSystem
 
             _pagesDir = Path.Combine(
                 AppDomain.CurrentDomain.BaseDirectory,
-                "SF_Data", "InfoWeb", "Pages");
+                "Html", "InfoPages");
 
             _soundsPagesDir = Path.Combine(_pagesDir, "sounds");
 

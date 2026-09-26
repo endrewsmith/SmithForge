@@ -9,6 +9,7 @@ namespace SmithForge.Main.Services.ChatCommands
 {
     public class VideoCommand : BaseCommand
     {
+        public override bool IsDashboardVisible => false;
         public override string Name => "video";
         public override IEnumerable<string> Aliases => new[] { "vid", "видео", "клип" };
         public override string Description => "Отправить видео в медиа-чат: !!video:название_видео.mp4";

@@ -287,6 +287,20 @@ namespace SmithForge.Main.Views
                 vm.ToggleDashboardCommand?.Execute(null);
             }
         }
+        private void ToggleMediaDashboard_Click(object sender, RoutedEventArgs e)
+        {
+            if (DataContext is SmithForge.ViewModels.MainViewModel vm)
+            {
+                vm.ToggleMediaDashboardCommand?.Execute(null);
+            }
+        }
+        private void ToggleTechOverlay_Click(object sender, RoutedEventArgs e)
+        {
+            if (DataContext is SmithForge.ViewModels.MainViewModel vm)
+            {
+                vm.ToggleTechOverlayCommand?.Execute(null);
+            }
+        }
 
         private void IntegerValidationTextBox(object sender, TextCompositionEventArgs e)
         {
@@ -339,35 +353,6 @@ namespace SmithForge.Main.Views
                     (DataContext as MainViewModel)?.PlayNextImportantCommand.Execute(null);
                     e.Handled = true;
                 }
-            }
-        }
-
-        private void OpenYouTubeManager_Click(object sender, RoutedEventArgs e)
-        {
-            try
-            {
-                // Создаем View и ViewModel
-                var view = new SmithForge.Features.YouTubeManager.Views.YouTubeManagerView();
-                var viewModel = new SmithForge.Features.YouTubeManager.ViewModels.YouTubeManagerViewModel();
-                view.DataContext = viewModel;
-
-                // Открываем в отдельном окне
-                var window = new Window
-                {
-                    Title = "YouTube Manager - Добавление чата",
-                    Content = view,
-                    Width = 900,
-                    Height = 700,
-                    Owner = this,
-                    WindowStartupLocation = WindowStartupLocation.CenterOwner,
-                    ShowInTaskbar = false
-                };
-                window.ShowDialog();
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show($"Ошибка открытия YouTube Manager: {ex.Message}", "Ошибка",
-                                MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
 

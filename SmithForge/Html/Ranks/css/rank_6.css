@@ -1,0 +1,277 @@
+/* ==========================================================================
+   РАНГ 6 — изолированные стили + реакции с анимацией
+   Только .rank-6-container
+   ========================================================================== */
+
+/* Главный контейнер карточки */
+.rank-6-container {
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: stretch !important;
+    background-color: #000000 !important;
+    border: 1px solid #757575 !important;
+    border-radius: 5px !important;
+    padding: 2px 0px 4px 10px !important;   /* справа 0 — карма у края */
+    margin: 0px !important;
+    box-sizing: border-box;
+    width: 100%;
+}
+
+/* Ранг (звёзды) */
+.rank-6-container .rank-display {
+    font-size: 11px !important;
+    font-weight: normal !important;
+    color: #FFD700 !important;
+    letter-spacing: 1px !important;
+}
+
+/* Блок кармы */
+.rank-6-container .karma-container {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: flex-end !important;
+    margin-left: auto !important;   /* ✅ прижать вправо */
+}
+
+/* Ключ кармы (#N) */
+.rank-6-container .karma-key {
+    color: #FFD700 !important;
+    font-size: 11px !important;
+    font-weight: normal !important;
+    padding: 0px !important;
+    margin-right: 12px !important;
+}
+
+.rank-6-container .karma-value {
+    color: #00FFFF !important;
+    font-size: 11px !important;
+    font-weight: normal !important;
+}
+
+.rank-6-container .karma-icon {
+    color: #00FFFF !important;
+    margin-left: 2px !important;
+    font-size: 11px !important;
+    display: inline-block !important;
+    filter: sepia(1) hue-rotate(150deg) saturate(10) brightness(1.2) !important;
+}
+
+/* ==========================================================================
+   ДВУХКОЛОНОЧНАЯ СЕТКА ШАПКИ
+   ========================================================================== */
+
+.rank-6-container .msg-top-grid {
+    display: flex !important;
+    flex-direction: row !important;
+    align-items: flex-start !important;
+    width: 100% !important;
+    margin-bottom: 0px !important;
+}
+
+/* Рамка аватара 24×24 */
+.rank-6-container .avatar-border-v5 {
+    width: 24px !important;
+    height: 24px !important;
+    border: 1px solid rgba(255, 255, 255, 0.15) !important;
+    background-color: transparent !important;
+    margin: 2px 8px 0px 0px !important;
+    padding: 0px !important;
+    box-sizing: border-box !important;
+    overflow: hidden !important;
+    flex-shrink: 0 !important;
+}
+
+/* ✅ Заглушка-рамка, если аватарки нет */
+.rank-6-container .avatar-border-v5.empty {
+    border: 1px solid rgba(255, 255, 255, 0.25) !important;
+    background-color: rgba(255, 255, 255, 0.05) !important;
+    border-radius: 3px !important;
+}
+
+.rank-6-container .user-avatar-v5 {
+    width: 100% !important;
+    height: 100% !important;
+    object-fit: cover !important;
+    display: block !important;
+}
+
+/* Правая часть: ранг/карма/имя */
+.rank-6-container .msg-meta-block {
+    display: flex !important;
+    flex-direction: column !important;
+    flex-grow: 1 !important;
+}
+
+.rank-6-container .msg-header-line {
+    display: flex !important;
+    justify-content: space-between !important;
+    align-items: center !important;
+    height: 12px !important;
+    margin-top: 0px !important;
+}
+
+/* Имя пользователя */
+.rank-6-container .name-block {
+    font-family: 'Spectral SC', serif !important;
+    font-size: 15px !important;
+    line-height: 18px !important;
+    margin-top: 0px !important;
+    text-align: left !important;
+}
+
+.rank-6-container .name {
+    font-weight: bold !important;
+}
+
+/* Тело сообщения (под аватаркой) */
+.rank-6-container .msg-body-v5 {
+    font-family: 'Spectral SC', serif !important;
+    font-size: 15px !important;
+    color: #FFFFFF !important;
+    line-height: 18px !important;
+    word-break: break-word !important;
+    margin-top: 0px !important;   /* ← уменьшенный отступ */
+    text-align: left !important;
+}
+
+.rank-6-container .msg-body-v5 .text {
+    font-weight: normal !important;
+}
+
+/* ==========================================================================
+   НИЖНЯЯ ОБЛАСТЬ (футер)
+   ========================================================================== */
+
+.rank-6-container .msg-footer {
+    display: flex !important;
+    justify-content: space-between !important;
+    align-items: center !important;
+    margin-top: 4px !important;
+    text-transform: none !important;
+}
+
+.rank-6-container .msg-number-container {
+    display: flex !important;
+    align-items: center !important;
+}
+
+.rank-6-container .hash-symbol {
+    display: inline-block !important;
+    color: #AAAAAA !important;
+    font-size: 10px !important;
+    font-weight: bold !important;
+    margin-right: 4px !important;
+}
+
+.rank-6-container .msg-number {
+    display: inline-block !important;
+    color: #CCCCCC !important;
+    font-size: 10px !important;
+    font-weight: normal !important;
+}
+
+/* ✅ Реакции — прижаты вправо + отступ от края */
+.rank-6-container .reactions-container {
+    display: flex !important;
+    align-items: center !important;
+    gap: 6px !important;
+    margin-left: auto !important;
+    margin-right: 6px !important;
+}
+
+.rank-6-container .reaction-panel {
+    display: flex !important;
+    align-items: center !important;
+    gap: 2px !important;
+}
+
+.rank-6-container .reaction-panel.hidden {
+    display: none !important;
+}
+
+.rank-6-container .like-count {
+    color: #3ba7cf !important;
+    font-size: 11px !important;
+    font-weight: normal !important;
+}
+
+.rank-6-container .dislike-count {
+    color: #d75ebf !important;
+    font-size: 11px !important;
+    font-weight: normal !important;
+}
+
+/* ==========================================================================
+   РЕАКЦИИ — иконки + весёлая анимация
+   ========================================================================== */
+
+.reaction-icon {
+    display: inline-block;
+    font-size: 10px;
+    line-height: 1;
+    vertical-align: middle;
+    transform: translateY(-1px);
+    transition: transform 0.2s ease;
+    will-change: transform;
+}
+
+.reaction-panel:hover .reaction-icon {
+    transform: translateY(-1px) scale(1.2);
+}
+
+/* ✅ ВЕСЁЛОЕ ПОЯВЛЕНИЕ */
+.reaction-panel.just-appeared .reaction-icon {
+    animation: reactionBounce 0.7s cubic-bezier(0.34, 1.56, 0.64, 1);
+    transform-origin: bottom center;
+}
+
+@keyframes reactionBounce {
+    0%   { transform: translateY(6px) scale(0.3) rotate(-25deg); opacity: 0; }
+    30%  { transform: translateY(-4px) scale(1.5) rotate(20deg); opacity: 1; }
+    55%  { transform: translateY(0) scale(0.95) rotate(-8deg); }
+    80%  { transform: translateY(-2px) scale(1.1) rotate(4deg); }
+    100% { transform: translateY(-1px) scale(1) rotate(0deg); }
+}
+
+/* Пульсация цифры */
+.reaction-count.bump {
+    animation: countBump 0.5s ease;
+}
+
+@keyframes countBump {
+    0%   { transform: scale(1); }
+    50%  { transform: scale(1.4); color: #FFD700; }
+    100% { transform: scale(1); }
+}
+
+/* Подсветка активной панели */
+.reaction-panel.active .reaction-icon {
+    filter: drop-shadow(0 0 6px currentColor);
+}
+
+.like-panel.active .reaction-icon {
+    filter: drop-shadow(0 0 8px rgba(76, 175, 80, 0.9));
+}
+
+.dislike-panel.active .reaction-icon {
+    filter: drop-shadow(0 0 8px rgba(244, 67, 54, 0.9));
+}
+
+/* ==========================================================================
+   ТРИГГЕРЫ ПЛАТФОРМ — ИЗОЛИРОВАННЫЕ
+   ========================================================================== */
+
+.rank-6-container.platform-tw .name,
+.rank-6-container.platform-twitch .name {
+    color: #b483fb !important;
+}
+
+.rank-6-container.platform-yt .name,
+.rank-6-container.platform-youtube .name {
+    color: #f58f8f !important;
+}
+
+.rank-6-container.platform-gg .name,
+.rank-6-container.platform-goodgame .name {
+    color: #7faeef !important;
+}

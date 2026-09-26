@@ -16,6 +16,8 @@ namespace SmithForge.Main.Models
         public int Likes { get; set; }
         public int Dislikes { get; set; }
 
+        public bool IsVisible { get; set; } = true;
+
         // Вычисляемые поля
         public string Author => ChaterStorage.GetById(ChaterId)?.EffectiveName ?? "Unknown";
 

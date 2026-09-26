@@ -1,4 +1,7 @@
-﻿using SmithForge.Main.Models;
+﻿using SmithForge.Features.TechOverlay;
+using SmithForge.Main.Models;
+using SmithForge.Main.Services;
+using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
@@ -7,6 +10,7 @@ namespace SmithForge.Main.Services.ChatCommands
 {
     public class DislikeCommand : BaseCommand
     {
+        public override bool IsTechnical => true;
         public override string Name => "dislike";
         public override IEnumerable<string> Aliases => new[] { "дизлайк", "d", "👎" };
         public override string Description => "Поставить дизлайк на сообщение: !!dislike:42";
@@ -76,7 +80,32 @@ namespace SmithForge.Main.Services.ChatCommands
             Debug.WriteLine($"[DislikeCommand] ✅ Дизлайк разрешен для #{messageNumber} от {chater.Login} " +
                             $"(было: {existingReaction ?? "ничего"} → станет: dislike)");
 
-            msg.Message = $"<dislike msg='{messageNumber}' user='{chater.Id}' />";
+            // ✅ СТАВИМ ДИЗЛАЙК СРАЗУ В БД
+            try
+            {
+                DatabaseService.DislikeMessage(chatLogId, chater.Id);
+
+                var counts = DatabaseService.GetReactionCounts(chatLogId);
+                Debug.WriteLine($"[DislikeCommand] 👎 Дизлайк поставлен. Likes={counts.Likes}, Dislikes={counts.Dislikes}");
+
+                // ✅ УВЕДОМЛЯЕМ ВЕБ-ОВЕРЛЕЙ
+                WebServerService.Instance?.UpdateReactionInWeb(
+                    messageNumber: messageNumber,
+                    reactionType: "dislike",
+                    newCount: counts.Dislikes);
+
+                // ✅ Событие в технический оверлей
+                int actualKarma = GetCostForRank(chater.Rank);
+                WebServerService.Instance?.SendTechnicalEvent(
+                    TechEventFactory.Dislike(chater, messageNumber, actualKarma));
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[DislikeCommand] ❌ Ошибка постановки дизлайка: {ex.Message}");
+            }
+
+            // Техническое сообщение — пустое, чтобы не шло в оверлей
+            msg.Message = string.Empty;
             msg.IsProcessedByCommand = true;
             msg.ShouldChargeForCommand = true;
 

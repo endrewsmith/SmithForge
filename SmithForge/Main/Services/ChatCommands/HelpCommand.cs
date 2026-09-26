@@ -1,4 +1,6 @@
-﻿using SmithForge.Main.Models;
+﻿using SmithForge.Features.TechOverlay;
+using SmithForge.Main.Models;
+using SmithForge.Main.Services;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
@@ -9,6 +11,7 @@ namespace SmithForge.Main.Services.ChatCommands
     {
         private readonly Dictionary<string, IChatCommand> _allCommands;
 
+        public override bool IsTechnical => true;
         public override string Name => "help";
         public override IEnumerable<string> Aliases => new[] { "хелп", "помощь", "h", "х" };
         public override string Description => "Справка по командам: !!help [имя_команды]";
@@ -20,7 +23,15 @@ namespace SmithForge.Main.Services.ChatCommands
 
         public override void Execute(ChatCommandInfo info, Chater chater, CommonMessage msg, AppSettings settings)
         {
+            Debug.WriteLine($"[HelpCommand] ========== НАЧАЛО ==========");
+
+            // Команда техническая — в основной чат и дашборд не идёт
+            msg.Message = string.Empty;
+            msg.IsProcessedByCommand = true;
+            msg.ShouldChargeForCommand = false; // бесплатно
+
             string target = GetArg(info, 0).ToLower();
+            string responseText;
 
             if (string.IsNullOrEmpty(target))
             {
@@ -28,24 +39,59 @@ namespace SmithForge.Main.Services.ChatCommands
                 var availableCommands = _allCommands.Values
                     .Distinct()
                     .Where(c => c.CanExecute(chater))
-                    .Cast<BaseCommand>() // Приводим к BaseCommand
+                    .Cast<BaseCommand>()
                     .OrderBy(c => c.Cost)
                     .ToList();
 
-                string helpText = "📋 Доступные команды:\n";
+                var sb = new System.Text.StringBuilder();
+                sb.AppendLine("📋 Доступные команды:");
+                sb.AppendLine();
                 foreach (var cmd in availableCommands)
                 {
-                    helpText += $"!!{cmd.Name} - {cmd.Description} (💰 {cmd.Cost} кармы, 👑 {cmd.MinRank}+ ранг)\n";
+                    sb.AppendLine($"<b>!!{cmd.Name}</b> — {cmd.Description}");
+                    sb.AppendLine($"  💰 {cmd.Cost} кармы, 👑 {cmd.MinRank}+ ранг");
                 }
 
-                msg.Message = helpText;
-                Debug.WriteLine($"[CMD] Help показан для ранга {chater.Rank}");
+                responseText = sb.ToString();
+                Debug.WriteLine($"[HelpCommand] Список команд для ранга {chater.Rank} ({availableCommands.Count} шт.)");
             }
             else if (_allCommands.TryGetValue(target, out var cmd) && cmd is BaseCommand baseCmd)
             {
-                string aliases = baseCmd.Aliases != null ? $" (алиасы: {string.Join(", ", baseCmd.Aliases)})" : "";
-                msg.Message = $"!!{baseCmd.Name}{aliases}\n{baseCmd.Description}\n💰 Стоимость: {baseCmd.Cost}\n👑 Требуемый ранг: {baseCmd.MinRank}+";
+                string aliases = baseCmd.Aliases != null && baseCmd.Aliases.Any()
+                    ? $" (алиасы: {string.Join(", ", baseCmd.Aliases)})"
+                    : "";
+
+                responseText = $@"<b>!!{baseCmd.Name}</b>{aliases}
+{baseCmd.Description}
+💰 Стоимость: {baseCmd.Cost}
+👑 Требуемый ранг: {baseCmd.MinRank}+";
+
+                Debug.WriteLine($"[HelpCommand] Справка по команде: {baseCmd.Name}");
             }
+            else
+            {
+                responseText = $"❌ Команда '<b>{target}</b>' не найдена";
+                Debug.WriteLine($"[HelpCommand] Команда не найдена: {target}");
+            }
+
+            // ✅ Отправляем в инфо-канал
+            var webServer = WebServerService.Instance;
+            if (webServer != null)
+            {
+                webServer.SendInfoMessage(responseText, "help");
+                Debug.WriteLine($"[HelpCommand] Отправлено в /info/stream: help");
+
+                // ✅ Событие в технический оверлей
+                int actualKarma = GetCostForRank(chater.Rank);
+                webServer.SendTechnicalEvent(
+                    TechEventFactory.Help(chater, target, actualKarma));
+            }
+            else
+            {
+                Debug.WriteLine($"[HelpCommand] ⚠️ WebServerService.Instance == null, ответ не отправлен");
+            }
+
+            Debug.WriteLine($"[HelpCommand] ========== КОНЕЦ ==========");
         }
     }
 }

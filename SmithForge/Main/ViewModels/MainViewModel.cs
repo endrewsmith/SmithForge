@@ -11,7 +11,7 @@ using SmithForge.Features.ChatOverlayShorts;
 using SmithForge.Features.ImportantOverlay;
 using SmithForge.Features.InfoSystem;
 using SmithForge.Features.StickersOverlay;
-using SmithForge.Features.YouTubeManager.ViewModels;
+using SmithForge.Features.TechOverlay;
 using SmithForge.Main.Models;
 using SmithForge.Main.Models.ChatModes;
 using SmithForge.Main.Services;
@@ -36,6 +36,10 @@ namespace SmithForge.ViewModels
 {
     public partial class MainViewModel : ObservableObject
     {
+
+        [ObservableProperty]
+        private string _karmaAmountText = "10";
+
         [ObservableProperty]
         private int _voiceRate = 3;
 
@@ -60,8 +64,6 @@ namespace SmithForge.ViewModels
         [ObservableProperty]
         private int _rotationShownPages = 0; // ← НОВОЕ СВОЙСТВО
 
-        // ✅ Интегрированный YouTube-менеджер
-        public YouTubeManagerViewModel YouTubeManager { get; } = new();
         
         [ObservableProperty]
         private string _youTubeApiKey = string.Empty;
@@ -123,6 +125,7 @@ namespace SmithForge.ViewModels
         public List<SmithForge.Main.Models.ChatDisplayModeInfo> AvailableModes { get; } = ChatDisplayModeFactory.GetAvailableModes();
 
         private readonly DashboardService _dashboardService = new();
+        private readonly SmithForge.Features.MediaDashboard.MediaDashboardService _mediaDashboardService = new();
         private readonly MessageHandlerService _messageHandler;
         private readonly OverlayManagerService _overlayManager;
         private readonly SettingsService _settingsService;
@@ -164,6 +167,8 @@ namespace SmithForge.ViewModels
         private bool _isAutoSwitchingEnabled = true;
 
         public ObservableCollection<Chater> Users { get; } = new();
+
+        public TechOverlayService TechOverlay { get; }
 
 
         // ✅ ДОБАВИТЬ:
@@ -210,11 +215,10 @@ namespace SmithForge.ViewModels
             _dialogService = new DialogService();
 
             _webServer = new WebServerService((int)Settings.NetworkPort);
+            // ✅ Фича: технический оверлей
+            TechOverlay = new TechOverlayService(_webServer);
 
             //Task.Run(async () => await StartWebServerAsync());
-
-            _infoService = new InfoService();
-
 
 
             // ============================================================
@@ -276,6 +280,7 @@ namespace SmithForge.ViewModels
             _chatService.ProcessExited += (s, e) => OnProcessExited();
 
             _dashboardService.Initialize();
+            _mediaDashboardService.Initialize();
             _stickerDisplayTime = Settings.StickerDisplayTimeMs;
 
             _importantSoundVolume = Settings.ImportantSoundVolume;
@@ -305,7 +310,7 @@ namespace SmithForge.ViewModels
             // ============================================================
 
             // ✅ Подписываемся на события YouTubeManager
-            YouTubeManager.MessageReceived += OnYouTubeManagerMessageReceived;
+            //YouTubeManager.MessageReceived += OnYouTubeManagerMessageReceived;
 
             // ✅ Подписываемся на события AlertsService
             _alertsService.AlertReceived += OnAlertReceived;
@@ -335,17 +340,23 @@ namespace SmithForge.ViewModels
             // ============================================================
             // ИНИЦИАЛИЗАЦИЯ РОТАЦИИ
             // ============================================================
-            var infoService = new InfoService();
+            _stickerPageService = new StickerPageService();
+            _stickerPageService.ScanPacks();  // ← ДОБАВЛЕНО: заполняет _packNumberToId
+
+            _soundPageService = new SoundPageService();
+
+            // ✅ ЕДИНЫЙ InfoService с StickerPageService — используется везде
+            _infoService = new InfoService(_stickerPageService);
+
             var pagesDir = Path.Combine(
                 AppDomain.CurrentDomain.BaseDirectory,
-                "SF_Data", "InfoWeb", "Pages");
+                "Html", "InfoPages");
 
-            _rotationService = new InfoRotationService(infoService, pagesDir);
+            _rotationService = new InfoRotationService(_infoService, pagesDir);
             _rotationService.PageSelected += OnRotationPageSelected;
             //_rotationService.Start(30);
 
-            _stickerPageService = new StickerPageService();
-            _soundPageService = new SoundPageService();
+
 
             // Обновляем статус
             UpdateRotationStatus();
@@ -353,8 +364,13 @@ namespace SmithForge.ViewModels
             Debug.WriteLine("[MainViewModel] InfoRotationService инициализирован");
 
             // ✅ Инициализация сервиса обработки сообщений
-            var processor = new MessageProcessor(Settings, infoService, _stickerPageService, _soundPageService);
-            _messageHandler = new MessageHandlerService(processor, _overlayManager, _dashboardService, _webServer);
+            var processor = new MessageProcessor(Settings, _infoService, _stickerPageService, _soundPageService);
+            _messageHandler = new MessageHandlerService(
+    processor,
+    _overlayManager,
+    _dashboardService,
+    _mediaDashboardService,
+    _webServer);
             _messageHandler.OnProcessed += OnMessageProcessed;
 
             LoadChats();
@@ -780,6 +796,7 @@ namespace SmithForge.ViewModels
 
         public void SaveAlertsPosition() => _overlayManager.SaveAllPositions(Settings);
 
+
         // ============================================================
         // УПРАВЛЕНИЕ ОЧЕРЕДЬЮ ВАЖНЫХ СООБЩЕНИЙ
         // ============================================================
@@ -825,6 +842,22 @@ namespace SmithForge.ViewModels
                 _dashboardService.Hide();
             else
                 _dashboardService.Show();
+        }
+
+        [RelayCommand]
+        private void ToggleMediaDashboard()
+        {
+            _mediaDashboardService.Initialize();
+
+            if (_mediaDashboardService.IsVisible)
+                _mediaDashboardService.Hide();
+            else
+                _mediaDashboardService.Show();
+        }
+        [RelayCommand]
+        private void ToggleTechOverlay()
+        {
+            TechOverlay?.Toggle();
         }
 
         [RelayCommand]
@@ -909,39 +942,58 @@ namespace SmithForge.ViewModels
         [RelayCommand]
         private async Task AddKarmaToAll()
         {
+            // 1. Парсим число из текстового поля
+            if (!int.TryParse(KarmaAmountText?.Trim(), out int amount))
+            {
+                MessageBox.Show("Введите целое число", "Ошибка",
+                    MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            if (amount <= 0)
+            {
+                MessageBox.Show("Число должно быть больше нуля", "Ошибка",
+                    MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            if (amount > 100000)
+            {
+                MessageBox.Show("Слишком большое число (максимум 100000)", "Ошибка",
+                    MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            // 2. Подтверждение
+            var allChaters = ChaterStorage.GetAll();
+
             var result = MessageBox.Show(
-                $"Начислить 10 кармы всем {Users.Count} зрителям, которые были в чате за текущий стрим?",
+                $"Начислить {amount} кармы всем {allChaters.Count} зрителям?",
                 "Подтверждение",
                 MessageBoxButton.YesNo,
                 MessageBoxImage.Question);
 
             if (result != MessageBoxResult.Yes) return;
 
+            // 3. Начисление
             try
             {
                 int count = 0;
-                foreach (var chater in Users)
+
+                foreach (var chater in allChaters)
                 {
-                    chater.Karma += 10;
-                    chater.TotalKarma += 10;
+                    chater.Karma += amount;
+                    chater.TotalKarma += amount;
 
                     DatabaseService.UpdateChaterStats(chater);
-                    ChaterStorage.AddOrUpdate(chater);
                     count++;
                 }
 
-                LastMessageText = $"✅ Начислено 10 кармы {count} зрителям!";
-                Debug.WriteLine($"[Karma] Начислено 10 кармы {count} пользователям");
+                LastMessageText = $"✅ Начислено {amount} кармы {count} зрителям!";
+                Debug.WriteLine($"[Karma] Начислено {amount} кармы {count} пользователям");
 
-                Application.Current.Dispatcher.Invoke(() =>
-                {
-                    var temp = Users.ToList();
-                    Users.Clear();
-                    foreach (var user in temp)
-                    {
-                        Users.Add(user);
-                    }
-                });
+                // ✅ Отправляем техническое событие
+                TechOverlay?.Emit(TechEventFactory.KarmaGrant(amount, count));
 
                 await VoiceService.PlayImportantSoundAsync();
             }
@@ -949,7 +1001,8 @@ namespace SmithForge.ViewModels
             {
                 Debug.WriteLine($"[Karma] Ошибка начисления: {ex.Message}");
                 LastMessageText = $"❌ Ошибка начисления: {ex.Message}";
-                MessageBox.Show($"Ошибка: {ex.Message}", "Ошибка", MessageBoxButton.OK, MessageBoxImage.Error);
+                MessageBox.Show($"Ошибка: {ex.Message}", "Ошибка",
+                    MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
 
@@ -957,26 +1010,26 @@ namespace SmithForge.ViewModels
         // YOUTUBE КОМАНДЫ
         // ============================================================
 
-        [RelayCommand]
-        private async Task LoadYouTubeStreams()
-        {
-            // ✅ Делегируем YouTubeManager
-            await YouTubeManager.FindStreamsViaHtmlAsync();
-        }
+        //[RelayCommand]
+        //private async Task LoadYouTubeStreams()
+        //{
+        //    // ✅ Делегируем YouTubeManager
+        //    await YouTubeManager.FindStreamsViaHtmlAsync();
+        //}
 
-        [RelayCommand]
-        private async Task ConnectYouTubeChat()
-        {
-            // ✅ Делегируем YouTubeManager
-            await YouTubeManager.ConnectSelectedAsync();
-        }
+        //[RelayCommand]
+        //private async Task ConnectYouTubeChat()
+        //{
+        //    // ✅ Делегируем YouTubeManager
+        //    await YouTubeManager.ConnectSelectedAsync();
+        //}
 
-        [RelayCommand]
-        private void DisconnectYouTubeChat()
-        {
-            // ✅ Делегируем YouTubeManager
-            YouTubeManager.DisconnectAll();
-        }
+        //[RelayCommand]
+        //private void DisconnectYouTubeChat()
+        //{
+        //    // ✅ Делегируем YouTubeManager
+        //    YouTubeManager.DisconnectAll();
+        //}
 
         [RelayCommand]
         private async Task SendYouTubeMessage(string message)
@@ -1369,12 +1422,10 @@ namespace SmithForge.ViewModels
         {
             try
             {
-                // Загружаем HTML (уже загружен через InfoService.Render)
                 var webServer = WebServerService.Instance;
-                if (webServer != null)
+                if (webServer != null && _infoService != null)
                 {
-                    var infoService = new InfoService();
-                    var html = infoService.Render(pageName, "system");
+                    var html = _infoService.Render(pageName, "system");
                     webServer.SendInfoMessage(html, pageName);
                 }
             }

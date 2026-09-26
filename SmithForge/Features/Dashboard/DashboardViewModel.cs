@@ -126,12 +126,24 @@ namespace SmithForge.Features.Dashboard
                 while (DisplayMessages.Count > 1000)
                     DisplayMessages.RemoveAt(0);
 
+                // ✅ Если пользователь внизу — автоматически прокрутить к новому сообщению
                 if (AutoScrollEnabled)
                 {
-                    SmoothScrollToBottom();
-                }
+                    var window = Application.Current.Windows.OfType<DashboardWindow>().FirstOrDefault();
+                    var scrollViewer = window?.FindName("MainScrollViewer") as ScrollViewer;
 
-                System.Diagnostics.Debug.WriteLine($"[Dashboard] Добавлено сообщение от {user.Login}");
+                    if (scrollViewer != null)
+                    {
+                        // Через BeginInvoke с низким приоритетом — layout уже пересчитан,
+                        // ScrollableHeight актуален, ScrollToEnd сработает корректно.
+                        Application.Current.Dispatcher.BeginInvoke(
+                            new Action(() =>
+                            {
+                                scrollViewer.ScrollToEnd();
+                            }),
+                            System.Windows.Threading.DispatcherPriority.Loaded);
+                    }
+                }
             });
         }
 
@@ -160,7 +172,7 @@ namespace SmithForge.Features.Dashboard
             SmoothScrollToBottom();
         }
 
-        private async void SmoothScrollToBottom()
+        public async void SmoothScrollToBottom()
         {
             // Устанавливаем флаг, чтобы не срабатывал автоскролл от событий
             _isScrolling = true;
@@ -292,6 +304,15 @@ namespace SmithForge.Features.Dashboard
             Application.Current.Dispatcher.Invoke(() =>
             {
                 DisplayMessages.Clear();
+
+                // ✅ Принудительно обновляем layout, чтобы ScrollViewer сразу
+                // пересчитал ScrollableHeight = 0. Иначе следующее добавленное
+                // сообщение получит в Tag устаревшее (большое) значение
+                // ScrollableHeight, и анимация входа не сработает.
+                var window = Application.Current.Windows.OfType<DashboardWindow>().FirstOrDefault();
+                var scrollViewer = window?.FindName("MainScrollViewer") as ScrollViewer;
+                scrollViewer?.UpdateLayout();
+
                 System.Diagnostics.Debug.WriteLine("[Dashboard] Сообщения очищены");
             });
         }

@@ -7,26 +7,15 @@ using System.Threading.Tasks;
 
 namespace SmithForge.Main.Services
 {
-    /// <summary>
-    /// Обёртка над одним SSE-соединением (Server-Sent Events).
-    /// Управляет жизненным циклом: heartbeat, отмена, безопасное закрытие.
-    /// </summary>
     internal sealed class SseClient : IDisposable
     {
         private readonly HttpListenerContext _context;
         private readonly CancellationTokenSource _cts;
         private readonly Timer _heartbeatTimer;
-        private readonly object _writeLock = new object();
+        private readonly SemaphoreSlim _writeSemaphore = new(1, 1);
         private bool _disposed;
 
-        /// <summary>
-        /// Уникальный ID клиента (для логов).
-        /// </summary>
         public string Id { get; } = Guid.NewGuid().ToString("N").Substring(0, 8);
-
-        /// <summary>
-        /// Указывает, живо ли соединение.
-        /// </summary>
         public bool IsAlive { get; private set; } = true;
 
         public SseClient(HttpListenerContext context, int heartbeatIntervalMs = 15000)
@@ -34,15 +23,13 @@ namespace SmithForge.Main.Services
             _context = context ?? throw new ArgumentNullException(nameof(context));
             _cts = new CancellationTokenSource();
 
-            // Ставим SSE-заголовки
             var response = _context.Response;
             response.Headers.Add("Content-Type", "text/event-stream");
             response.Headers.Add("Cache-Control", "no-cache");
             response.Headers.Add("Connection", "keep-alive");
-            response.Headers.Add("X-Accel-Buffering", "no"); // отключает буферизацию в nginx/прокси
+            response.Headers.Add("X-Accel-Buffering", "no");
             response.StatusCode = 200;
 
-            // Запускаем heartbeat
             _heartbeatTimer = new Timer(
                 callback: _ => SendHeartbeat(),
                 state: null,
@@ -50,23 +37,18 @@ namespace SmithForge.Main.Services
                 period: heartbeatIntervalMs);
         }
 
-        /// <summary>
-        /// Отправить произвольные SSE-данные (уже включая "data: ...\n\n").
-        /// Возвращает false, если соединение мертво.
-        /// </summary>
         public bool Send(string sseData)
         {
             if (_disposed || !IsAlive) return false;
 
+            _writeSemaphore.Wait();
             try
             {
+                if (_disposed || !IsAlive) return false;
+
                 var bytes = Encoding.UTF8.GetBytes(sseData);
-                lock (_writeLock)
-                {
-                    if (_disposed || !IsAlive) return false;
-                    _context.Response.OutputStream.Write(bytes, 0, bytes.Length);
-                    _context.Response.OutputStream.Flush();
-                }
+                _context.Response.OutputStream.Write(bytes, 0, bytes.Length);
+                _context.Response.OutputStream.Flush();
                 return true;
             }
             catch (Exception ex)
@@ -75,17 +57,29 @@ namespace SmithForge.Main.Services
                 MarkDead();
                 return false;
             }
+            finally
+            {
+                _writeSemaphore.Release();
+            }
         }
 
-        /// <summary>
-        /// То же, что Send, но с await (используйте в async-методах).
-        /// </summary>
         public async Task<bool> SendAsync(string sseData, CancellationToken externalToken = default)
         {
             if (_disposed || !IsAlive) return false;
 
             try
             {
+                await _writeSemaphore.WaitAsync(externalToken);
+            }
+            catch (OperationCanceledException)
+            {
+                return false;
+            }
+
+            try
+            {
+                if (_disposed || !IsAlive) return false;
+
                 var bytes = Encoding.UTF8.GetBytes(sseData);
                 using var linked = CancellationTokenSource.CreateLinkedTokenSource(_cts.Token, externalToken);
                 await _context.Response.OutputStream.WriteAsync(bytes, 0, bytes.Length, linked.Token);
@@ -103,12 +97,12 @@ namespace SmithForge.Main.Services
                 MarkDead();
                 return false;
             }
+            finally
+            {
+                _writeSemaphore.Release();
+            }
         }
 
-        /// <summary>
-        /// Ждать, пока клиент не отключится или не будет отменён внешний токен.
-        /// Используется внутри обработчиков SSE.
-        /// </summary>
         public async Task WaitUntilClosedAsync(CancellationToken externalToken = default)
         {
             try
@@ -125,7 +119,7 @@ namespace SmithForge.Main.Services
         private void SendHeartbeat()
         {
             if (_disposed || !IsAlive) return;
-            Send(": ping\n\n"); // SSE-комментарий, не доставляется в onmessage
+            Send(": ping\n\n");
         }
 
         private void MarkDead()
@@ -137,13 +131,31 @@ namespace SmithForge.Main.Services
         public void Dispose()
         {
             if (_disposed) return;
-            _disposed = true;
-            IsAlive = false;
 
+            // 1. Останавливаем таймер и отменяем токен — SendAsync сразу выйдет по exception
             try { _heartbeatTimer?.Dispose(); } catch { }
             try { _cts?.Cancel(); } catch { }
+
+            // 2. Берём lock на запись — гарантируем, что Write/Flush не идут параллельно
+            // (если Send висит внутри Write — Abort ниже его разбудит)
+            _writeSemaphore.Wait();
+            try
+            {
+                if (_disposed) return;
+                _disposed = true;
+                IsAlive = false;
+
+                // 3. ✅ Abort — не ждёт flush, принудительно рвёт TCP-соединение
+                try { _context?.Response?.Abort(); } catch { }
+            }
+            finally
+            {
+                _writeSemaphore.Release();
+            }
+
+            // 4. Освобождаем ресурсы
             try { _cts?.Dispose(); } catch { }
-            try { _context?.Response?.Close(); } catch { }
+            try { _writeSemaphore?.Dispose(); } catch { }
         }
     }
 }

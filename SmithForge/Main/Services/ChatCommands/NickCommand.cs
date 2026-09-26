@@ -1,4 +1,6 @@
-﻿using SmithForge.Main.Models;
+﻿using SmithForge.Features.TechOverlay;
+using SmithForge.Main.Models;
+using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 
@@ -6,6 +8,7 @@ namespace SmithForge.Main.Services.ChatCommands
 {
     public class NickCommand : BaseCommand
     {
+        public override bool IsTechnical => true;
         public override string Name => "nick";
         public override IEnumerable<string> Aliases => new[] { "n", "имя", "ник" };
         public override string Description => "Сменить отображаемое имя: !!nick:НовоеИмя";
@@ -19,49 +22,47 @@ namespace SmithForge.Main.Services.ChatCommands
             Debug.WriteLine($"[NickCommand] ========== НАЧАЛО ==========");
             Debug.WriteLine($"[NickCommand] Аргументы: {string.Join(", ", info.Arguments)}");
 
-            // Получаем новое имя из аргументов (первый после двоеточия)
+            // Команда техническая — сообщение не идёт в оверлей
+            msg.Message = string.Empty;
+            msg.IsProcessedByCommand = true;
+
             string newName = GetArg(info, 0, "").Trim();
 
             if (string.IsNullOrEmpty(newName))
             {
                 Debug.WriteLine($"[NickCommand] Ошибка: имя не указано");
-                msg.Message = "❌ Укажите новое имя: !!nick:НовоеИмя";
-                msg.IsProcessedByCommand = true;
                 msg.ShouldChargeForCommand = false;
                 return;
             }
 
-            // Проверяем длину имени
             if (newName.Length > 30)
             {
                 Debug.WriteLine($"[NickCommand] Ошибка: имя слишком длинное");
-                msg.Message = "❌ Имя не должно превышать 30 символов";
-                msg.IsProcessedByCommand = true;
                 msg.ShouldChargeForCommand = false;
                 return;
             }
 
-            // Проверяем на недопустимые символы
             if (newName.Contains("<") || newName.Contains(">") || newName.Contains("&") || newName.Contains(":"))
             {
                 Debug.WriteLine($"[NickCommand] Ошибка: недопустимые символы");
-                msg.Message = "❌ Имя содержит недопустимые символы (<, >, &, :)";
-                msg.IsProcessedByCommand = true;
                 msg.ShouldChargeForCommand = false;
                 return;
             }
 
             string oldName = chater.DisplayName ?? chater.Login;
             chater.DisplayName = newName;
-            chater.IsDisplayNameCustom = true; // ✅ Помечаем, что имя установлено вручную через команду
+            chater.IsDisplayNameCustom = true;
 
             DatabaseService.SaveChater(chater);
             ChaterStorage.AddOrUpdate(chater);
 
             Debug.WriteLine($"[NickCommand] Имя изменено: '{oldName}' -> '{newName}'");
 
-            msg.Message = $"<nick old='{oldName}' new='{newName}'></nick>";
-            msg.IsProcessedByCommand = true;
+            // ✅ Событие в технический оверлей
+            int actualKarma = GetCostForRank(chater.Rank);
+            WebServerService.Instance?.SendTechnicalEvent(
+                TechEventFactory.Nick(chater, oldName, newName, actualKarma));
+
             msg.ShouldChargeForCommand = true;
 
             Debug.WriteLine($"[NickCommand] ========== КОНЕЦ ==========");

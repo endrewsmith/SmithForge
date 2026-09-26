@@ -4,6 +4,7 @@ using SmithForge.Main.Services.ChatCommands;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.IO;
 using System.Linq;
 using System.Text.RegularExpressions;
 
@@ -12,6 +13,7 @@ namespace SmithForge.Main.Services
     public class MessageProcessor
     {
         private readonly AppSettings _settings;
+        private readonly StickerPageService _stickerPageService;
         private string? _currentSessionId;
         private readonly Dictionary<string, IChatCommand> _commandMap;
         private static readonly Regex CommandRegex = new Regex(@"!!([^\s]+)", RegexOptions.Compiled);
@@ -22,6 +24,7 @@ namespace SmithForge.Main.Services
         public MessageProcessor(AppSettings settings, InfoService infoService, StickerPageService stickerPageService, SoundPageService soundPageService)
         {
             _settings = settings ?? throw new ArgumentNullException(nameof(settings));
+            _stickerPageService = stickerPageService;
             _commandMap = new Dictionary<string, IChatCommand>(StringComparer.OrdinalIgnoreCase);
             // ИСПРАВЛЕНО: загружаем сокращения из настроек
             if (settings.CommandShortcuts != null && settings.CommandShortcuts.Any())
@@ -55,7 +58,6 @@ namespace SmithForge.Main.Services
             {
                 new SoundCommand(soundPageService),
                 new InfoCommand(infoService, stickerPageService),
-                new HelpCommand(_commandMap),
                 new BoldCommand(),
                 new ItalicCommand(),
                 new ColorCommand(),
@@ -88,13 +90,103 @@ namespace SmithForge.Main.Services
 
         public event Action<Chater, CommonMessage, List<ChatCommandInfo>>? OnProcessed;
         public void SetSession(string sessionId) => _currentSessionId = sessionId;
+        public string? GetSessionId() => _currentSessionId;
 
         // ДОБАВЛЯЕМ: метод замены сокращений
         private string ReplaceShortcuts(string message)
         {
             if (string.IsNullOrWhiteSpace(message))
                 return message;
+            // ✅ ШАГ 1e: Паттерн iiN / ииN → !!info:NN_xxx (открыть страницу по номеру)
+            // ii1 → !!info:01_profile
+            // ии1 → !!info:01_profile
+            message = System.Text.RegularExpressions.Regex.Replace(
+                message,
+                @"\b[іiи]{2}(\d+)\b",
+                match =>
+                {
+                    string numStr = match.Groups[1].Value;
 
+                    if (!int.TryParse(numStr, out int pageNumber) || pageNumber <= 0)
+                    {
+                        Debug.WriteLine($"[Shortcuts] iiN: неверный номер '{numStr}'");
+                        return match.Value;
+                    }
+
+                    string prefix = pageNumber.ToString("D2");  // 1 → "01"
+
+                    var pagesDir = Path.Combine(
+                        AppDomain.CurrentDomain.BaseDirectory,
+                        "Html", "InfoPages");
+
+                    if (!Directory.Exists(pagesDir))
+                    {
+                        Debug.WriteLine($"[Shortcuts] iiN: папка не найдена: {pagesDir}");
+                        return match.Value;
+                    }
+
+                    var candidates = Directory.GetFiles(pagesDir, $"{prefix}_*.html")
+                        .OrderBy(f => f)
+                        .ToArray();
+
+                    if (candidates.Length > 0)
+                    {
+                        string fileName = Path.GetFileNameWithoutExtension(candidates[0]);
+                        string replacement = $"!!info:{fileName}";
+                        Debug.WriteLine($"[Shortcuts] ПАТТЕРН (iiN/ииN)! '{match.Value}' -> '{replacement}'");
+                        return replacement;
+                    }
+
+                    Debug.WriteLine($"[Shortcuts] iiN: страница с номером {pageNumber} (префикс {prefix}_) не найдена");
+                    return match.Value;
+                },
+                System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+            // ✅ ШАГ 1c: Паттерн ссс → !!info:stickers (общая страница паков)
+            // ссс → !!info:stickers
+            message = System.Text.RegularExpressions.Regex.Replace(
+                message,
+                @"\b[сc][сc][сc]\b",
+                match =>
+                {
+                    string replacement = "!!info:stickers";
+                    Debug.WriteLine($"[Shortcuts] ПАТТЕРН (справка общая)! '{match.Value}' -> '{replacement}'");
+                    return replacement;
+                },
+                System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+            // ✅ ШАГ 1d: Паттерн ссN → !!info:stickers:N (конкретный пак)
+            // сс86 → !!info:stickers:86
+            // сс98 → !!info:stickers (если пак №98 не существует, открываем общий список)
+            message = System.Text.RegularExpressions.Regex.Replace(
+                message,
+                @"\b[сc][сc](\d+)\b",
+                match =>
+                {
+                    string packNumberStr = match.Groups[1].Value;
+
+                    if (!int.TryParse(packNumberStr, out int packNumber))
+                    {
+                        Debug.WriteLine($"[Shortcuts] Не удалось распарсить номер: '{packNumberStr}'");
+                        return match.Value;
+                    }
+
+                    // ✅ Проверяем, существует ли пак с таким номером
+                    string packId = _stickerPageService?.GetPackIdByNumber(packNumber);
+
+                    if (!string.IsNullOrEmpty(packId))
+                    {
+                        string replacement = $"!!info:stickers:{packNumber}";
+                        Debug.WriteLine($"[Shortcuts] ПАТТЕРН (пак #{packNumber})! '{match.Value}' -> '{replacement}'");
+                        return replacement;
+                    }
+                    else
+                    {
+                        // Пак не найден — открываем общий список паков
+                        string replacement = "!!info:stickers";
+                        Debug.WriteLine($"[Shortcuts] ПАТТЕРН (пак #{packNumber} НЕ НАЙДЕН, общая)! '{match.Value}' -> '{replacement}'");
+                        return replacement;
+                    }
+                },
+                System.Text.RegularExpressions.RegexOptions.IgnoreCase);
             // ✅ ШАГ 1a: Паттерн сXсY → !!st:X:Y (конкретный стикер)
             // с2с2 → !!st:2:2
             message = System.Text.RegularExpressions.Regex.Replace(
@@ -123,7 +215,70 @@ namespace SmithForge.Main.Services
                     return replacement;
                 },
                 System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+            // ✅ ШАГ 1c: Паттерн abN → !!info:about:{файл с префиксом NN_}
+            // ab4 → about/04_*.html
+            message = System.Text.RegularExpressions.Regex.Replace(
+                message,
+                @"\bab(\d+)\b",
+                match =>
+                {
+                    string numStr = match.Groups[1].Value;
 
+                    // Формируем двузначный префикс: 4 → "04"
+                    string prefix = numStr.PadLeft(2, '0');
+
+                    string aboutDir = Path.Combine(
+                        AppDomain.CurrentDomain.BaseDirectory,
+                        "Html", "InfoPages", "about");
+
+                    if (Directory.Exists(aboutDir))
+                    {
+                        // Ищем файл, начинающийся на "04_"
+                        var files = Directory.GetFiles(aboutDir, $"{prefix}_*.html");
+                        if (files.Length > 0)
+                        {
+                            string fileName = Path.GetFileNameWithoutExtension(files[0]);
+                            string replacement = $"!!info:about:{fileName}";
+                            Debug.WriteLine($"[Shortcuts] ПАТТЕРН! '{match.Value}' -> '{replacement}'");
+                            return replacement;
+                        }
+                    }
+
+                    Debug.WriteLine($"[Shortcuts] Страница ab{numStr} (префикс {prefix}_) не найдена");
+                    return "!!info:about";
+                },
+                System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+            // ✅ ПАТТЕРН (русский): проN → !!info:about:{файл с префиксом NN_}
+            // про4 → about/04_*.html
+            message = System.Text.RegularExpressions.Regex.Replace(
+                message,
+                @"\b[пp][рr][оo](\d+)\b",
+                match =>
+                {
+                    string numStr = match.Groups[1].Value;
+
+                    string prefix = numStr.PadLeft(2, '0');
+
+                    string aboutDir = Path.Combine(
+                        AppDomain.CurrentDomain.BaseDirectory,
+                        "Html", "InfoPages", "about");
+
+                    if (Directory.Exists(aboutDir))
+                    {
+                        var files = Directory.GetFiles(aboutDir, $"{prefix}_*.html");
+                        if (files.Length > 0)
+                        {
+                            string fileName = Path.GetFileNameWithoutExtension(files[0]);
+                            string replacement = $"!!info:about:{fileName}";
+                            Debug.WriteLine($"[Shortcuts] ПАТТЕРН (рус)! '{match.Value}' -> '{replacement}'");
+                            return replacement;
+                        }
+                    }
+
+                    Debug.WriteLine($"[Shortcuts] Страница про{numStr} (префикс {prefix}_) не найдена");
+                    return "!!info:about";
+                },
+                System.Text.RegularExpressions.RegexOptions.IgnoreCase);
             // ✅ ШАГ 2: Обычные сокращения из словаря
             if (_shortcuts.Count == 0)
                 return message;
@@ -194,32 +349,51 @@ namespace SmithForge.Main.Services
                     KarmaService.AddExperience(chater, msg, _settings);
                 }
 
-                // ✅ ДОБАВЛЯЕМ: проверка сессии перед сохранением
+                // ✅ РАЗДЕЛЕНИЕ: техническое или визуальное?
+                // Техническое = среди выполненных команд есть хотя бы одна с IsTechnical = true
+                bool isTechnical = commandsFound.Any(c =>
+                    _commandMap.TryGetValue(c.Name, out var cmd) &&
+                    cmd is BaseCommand baseCmd &&
+                    baseCmd.IsTechnical);
+
+                bool isDashboardVisible = !commandsFound.Any(c =>
+                    _commandMap.TryGetValue(c.Name, out var cmd) &&
+                    cmd is BaseCommand baseCmd &&
+                    !baseCmd.IsDashboardVisible);
+
+                msg.IsVisible = !isTechnical && isDashboardVisible;
+
                 Debug.WriteLine($"[MessageProcessor] Проверка сессии: _currentSessionId = '{_currentSessionId ?? "NULL"}'");
+                Debug.WriteLine($"[MessageProcessor] Команды: [{string.Join(", ", commandsFound.Select(c => c.Name))}]");
+                Debug.WriteLine($"[MessageProcessor] Тип: {(isTechnical ? "ТЕХНИЧЕСКОЕ" : "ВИЗУАЛЬНОЕ")}");
 
                 if (!string.IsNullOrEmpty(_currentSessionId))
                 {
-                    Debug.WriteLine($"[MessageProcessor] Сохраняем сообщение в сессию: {_currentSessionId}");
-
                     var logMessage = new ChatLogMessage
                     {
                         SessionId = _currentSessionId,
                         ChaterId = chater.Id,
                         Message = msg.Message,
                         Timestamp = DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
-                        Likes = 0,
-                        Dislikes = 0
                     };
 
-                    DatabaseService.SaveChatMessage(logMessage);
-                    msg.MessageNumber = logMessage.MessageNumber;
-
-                    Debug.WriteLine($"[Message] ✅ Стрим #{_currentSessionId}, Сообщение #{msg.MessageNumber} от {chater.EffectiveName}");
+                    if (isTechnical)
+                    {
+                        DatabaseService.SaveTechnicalMessage(logMessage);
+                        msg.MessageNumber = 0;
+                        Debug.WriteLine($"[Message] 🔧 ТЕХНИЧЕСКОЕ без номера: {msg.Message}");
+                    }
+                    else
+                    {
+                        DatabaseService.SaveChatMessage(logMessage);
+                        msg.MessageNumber = logMessage.MessageNumber;
+                        Debug.WriteLine($"[Message] ✅ ВИЗУАЛЬНОЕ #{msg.MessageNumber} от {chater.EffectiveName}");
+                    }
                 }
                 else
                 {
                     Debug.WriteLine($"[MessageProcessor] ⚠️ СЕССИЯ НЕ УСТАНОВЛЕНА! Сообщение НЕ СОХРАНЕНО!");
-                    Debug.WriteLine($"[MessageProcessor] msg.MessageNumber остаётся: {msg.MessageNumber}");
+                    msg.MessageNumber = 0;
                 }
 
                 if (!string.IsNullOrWhiteSpace(msg.Message) && msg.Message.Length >= _settings.MinMessageLength)
@@ -479,5 +653,6 @@ namespace SmithForge.Main.Services
         {
             return Regex.Replace(input, @"<[^>]*>", string.Empty);
         }
+
     }
 }

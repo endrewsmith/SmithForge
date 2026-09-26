@@ -60,6 +60,7 @@ public class ChatConnectionService
 
         chat.Status = "🔄 Подключение...";
         chat.IsConnected = false;
+        await Task.Yield();
 
         try
         {

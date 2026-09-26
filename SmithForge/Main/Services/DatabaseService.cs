@@ -221,38 +221,78 @@ namespace SmithForge.Main.Services
         public static void SaveSession(StreamSession s) =>
             new SqliteConnection(ConnectionString).Execute(Sql.SaveSession, s);
 
-        // НОВЫЙ МЕТОД: Сохранение сообщения с автоматической нумерацией
+        /// <summary>
+        /// Сохранить ВИЗУАЛЬНОЕ сообщение. Присваивает MessageNumber.
+        /// Используется для обычных сообщений и команд с видимым текстом (!!b, !!i, !!color, !!st, !!voice).
+        /// </summary>
         public static void SaveChatMessage(ChatLogMessage msg)
         {
             using var db = new SqliteConnection(ConnectionString);
 
-            // Получаем следующий номер сообщения для этого стрима
+            // Получаем следующий номер сообщения для этого стрима (только по визуальным)
             int nextNumber = GetNextMessageNumber(msg.SessionId);
             msg.MessageNumber = nextNumber;
+            msg.IsVisible = true;
 
-            Debug.WriteLine($"[DB] Сохраняем сообщение #{nextNumber} для стрима {msg.SessionId}");
+            Debug.WriteLine($"[DB] 💬 Сохраняем ВИЗУАЛЬНОЕ сообщение #{nextNumber} для стрима {msg.SessionId}");
 
             db.Execute(@"
-                INSERT INTO ChatLogs (SessionId, ChaterId, Message, Timestamp, MessageNumber, Likes, Dislikes)
-                VALUES (@SessionId, @ChaterId, @Message, @Timestamp, @MessageNumber, @Likes, @Dislikes)",
+        INSERT INTO ChatLogs (SessionId, ChaterId, Message, Timestamp, MessageNumber, Likes, Dislikes, IsVisible)
+        VALUES (@SessionId, @ChaterId, @Message, @Timestamp, @MessageNumber, @Likes, @Dislikes, 1)",
+                msg);
+        }
+
+        /// <summary>
+        /// Сохранить СЛУЖЕБНОЕ сообщение. НЕ присваивает MessageNumber (остаётся 0).
+        /// Используется для !!nick, !!ava, !!like, !!dislike, !!hide.
+        /// </summary>
+        public static void SaveTechnicalMessage(ChatLogMessage msg)
+        {
+            using var db = new SqliteConnection(ConnectionString);
+
+            msg.MessageNumber = 0;
+            msg.IsVisible = false;
+            msg.Likes = 0;
+            msg.Dislikes = 0;
+
+            Debug.WriteLine($"[DB] 🔧 Сохраняем СЛУЖЕБНОЕ сообщение для стрима {msg.SessionId}: {msg.Message}");
+
+            db.Execute(@"
+        INSERT INTO ChatLogs (SessionId, ChaterId, Message, Timestamp, MessageNumber, Likes, Dislikes, IsVisible)
+        VALUES (@SessionId, @ChaterId, @Message, @Timestamp, 0, 0, 0, 0)",
                 msg);
         }
 
         // НОВЫЙ МЕТОД: Получение следующего номера сообщения для стрима
+        // Получение следующего номера сообщения для стрима (только по визуальным!)
         public static int GetNextMessageNumber(string sessionId)
         {
             using var db = new SqliteConnection(ConnectionString);
             return db.ExecuteScalar<int>(
-                "SELECT COALESCE(MAX(MessageNumber), 0) + 1 FROM ChatLogs WHERE SessionId = @sessionId",
+                "SELECT COALESCE(MAX(MessageNumber), 0) + 1 FROM ChatLogs WHERE SessionId = @sessionId AND IsVisible = 1",
                 new { sessionId });
         }
 
-        // НОВЫЙ МЕТОД: Получение всех сообщений стрима
+        /// <summary>
+        /// Получить ВИЗУАЛЬНЫЕ сообщения стрима (для ChatLogWindow).
+        /// Служебные (!!nick, !!ava, !!like) НЕ включаются.
+        /// </summary>
         public static List<ChatLogMessage> GetSessionMessages(string sessionId)
         {
             using var db = new SqliteConnection(ConnectionString);
             return db.Query<ChatLogMessage>(
-                "SELECT * FROM ChatLogs WHERE SessionId = @sessionId ORDER BY MessageNumber ASC",
+                "SELECT * FROM ChatLogs WHERE SessionId = @sessionId AND IsVisible = 1 ORDER BY MessageNumber ASC",
+                new { sessionId }).ToList();
+        }
+
+        /// <summary>
+        /// Получить ВСЕ сообщения стрима, включая служебные (для отладки / тех-логов).
+        /// </summary>
+        public static List<ChatLogMessage> GetAllSessionMessages(string sessionId)
+        {
+            using var db = new SqliteConnection(ConnectionString);
+            return db.Query<ChatLogMessage>(
+                "SELECT * FROM ChatLogs WHERE SessionId = @sessionId ORDER BY Timestamp ASC",
                 new { sessionId }).ToList();
         }
 
@@ -327,23 +367,20 @@ namespace SmithForge.Main.Services
             Debug.WriteLine("[DB] Таблица MessageReactions инициализирована");
         }
 
-        /// <summary>
-        /// Получение сообщений стрима с реакциями пользователя
-        /// </summary>
         public static List<ChatLogMessage> GetChatLogsWithReactions(string sessionId, string currentChaterId)
         {
             using var db = new SqliteConnection(ConnectionString);
 
             string sql = @"
-                SELECT 
-                    c.Id, c.SessionId, c.ChaterId, c.Message, c.Timestamp, c.MessageNumber,
-                    COALESCE(c.Likes, 0) as Likes,
-                    COALESCE(c.Dislikes, 0) as Dislikes,
-                    r.Reaction as UserReaction
-                FROM ChatLogs c
-                LEFT JOIN MessageReactions r ON c.Id = r.MessageId AND r.ChaterId = @currentChaterId
-                WHERE c.SessionId = @sessionId
-                ORDER BY c.MessageNumber ASC";
+        SELECT 
+            c.Id, c.SessionId, c.ChaterId, c.Message, c.Timestamp, c.MessageNumber,
+            COALESCE(c.Likes, 0) as Likes,
+            COALESCE(c.Dislikes, 0) as Dislikes,
+            r.Reaction as UserReaction
+        FROM ChatLogs c
+        LEFT JOIN MessageReactions r ON c.Id = r.MessageId AND r.ChaterId = @currentChaterId
+        WHERE c.SessionId = @sessionId AND c.IsVisible = 1
+        ORDER BY c.MessageNumber ASC";
 
             return db.Query<ChatLogMessage>(sql, new { sessionId, currentChaterId }).ToList();
         }
@@ -562,7 +599,8 @@ namespace SmithForge.Main.Services
         Timestamp INTEGER,
         MessageNumber INTEGER DEFAULT 0,
         Likes INTEGER DEFAULT 0,
-        Dislikes INTEGER DEFAULT 0
+        Dislikes INTEGER DEFAULT 0,
+        IsVisible INTEGER DEFAULT 1
     );";
 
             public const string LoadBase = @"
@@ -654,36 +692,24 @@ namespace SmithForge.Main.Services
         public static string? GetChaterIdByMessageNumber(int messageNumber)
         {
             using var db = new Microsoft.Data.Sqlite.SqliteConnection(ConnectionString);
-            // Ищем ID автора последнего сообщения с таким номером
+            // ✅ Ищем ТОЛЬКО среди визуальных (служебные не должны получать реакции)
             return db.QueryFirstOrDefault<string>(
-                "SELECT ChaterId FROM ChatLogs WHERE MessageNumber = @number ORDER BY Timestamp DESC LIMIT 1",
+                "SELECT ChaterId FROM ChatLogs WHERE MessageNumber = @number AND IsVisible = 1 ORDER BY Timestamp DESC LIMIT 1",
                 new { number = messageNumber });
         }
 
         /// <summary>
-        /// Получить актуальные счётчики реакций для сообщения
-        /// </summary>
-
-
-        /// <summary>
-        /// Найти Id сообщения (ChatLogs.Id) по номеру сообщения в стриме
+        /// Найти Id сообщения (ChatLogs.Id) по номеру сообщения в стриме.
+        /// ✅ Ищет ТОЛЬКО среди визуальных — служебные не получают реакций.
         /// </summary>
         public static long GetMessageIdByNumber(int messageNumber)
         {
             using var db = new SqliteConnection(ConnectionString);
             return db.QuerySingleOrDefault<long>(
-                "SELECT Id FROM ChatLogs WHERE MessageNumber = @messageNumber ORDER BY Timestamp DESC LIMIT 1",
+                "SELECT Id FROM ChatLogs WHERE MessageNumber = @messageNumber AND IsVisible = 1 ORDER BY Timestamp DESC LIMIT 1",
                 new { messageNumber });
         }
 
-        /// <summary>
-        /// Получить текущую реакцию пользователя на сообщение
-        /// Возвращает "like", "dislike" или null
-        /// </summary>
-        /// <summary>
-        /// Получить текущую реакцию пользователя на сообщение
-        /// Возвращает "like", "dislike" или null
-        /// </summary>
         public static string? GetUserReaction(long messageId, string chaterId)
         {
             using var db = new SqliteConnection(ConnectionString);

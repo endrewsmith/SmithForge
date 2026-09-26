@@ -1,0 +1,532 @@
+﻿<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>🎨 Медиа-чат SmithForge</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', sans-serif;
+            background: transparent;
+            color: #eee;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+        }
+
+        #media-container {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        /* Единственное сообщение-стикер по центру */
+        .media-message {
+            position: absolute;
+            background: rgba(26, 26, 46, 0.88);
+            border: 2px solid rgba(255, 215, 0, 0.3);
+            border-radius: 20px;
+            padding: 24px 32px;
+            max-width: 80%;
+            min-width: 200px;
+            backdrop-filter: blur(12px);
+            box-shadow: 0 8px 40px rgba(0,0,0,0.7);
+            text-align: center;
+            opacity: 0;
+            transform: scale(0.7) rotate(-5deg);
+            transition: opacity 0.4s ease, transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+            pointer-events: none;
+        }
+
+            .media-message.visible {
+                opacity: 1;
+                transform: scale(1) rotate(0deg);
+            }
+
+            .media-message.hiding {
+                opacity: 0;
+                transform: scale(0.7) rotate(5deg);
+            }
+
+            .media-message .msg-header {
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                margin-bottom: 10px;
+                font-size: 14px;
+                color: #888;
+                border-bottom: 1px solid rgba(255,255,255,0.05);
+                padding-bottom: 8px;
+            }
+
+                .media-message .msg-header .user-name {
+                    color: #ffd700;
+                    font-weight: bold;
+                    font-size: 16px;
+                }
+
+                .media-message .msg-header .timestamp {
+                    color: #555;
+                    font-size: 11px;
+                }
+
+            .media-message .msg-body {
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                gap: 10px;
+            }
+
+        /* Стикер */
+        .sticker-image {
+            max-width: 300px;
+            max-height: 300px;
+            border-radius: 16px;
+            object-fit: contain;
+            background: rgba(0,0,0,0.2);
+            padding: 10px;
+        }
+
+            .sticker-image.animated {
+                border: 3px solid #ff6b6b;
+            }
+
+        /* Видео */
+        .video-container {
+            width: 100%;
+            max-width: 500px;
+            border-radius: 16px;
+            overflow: hidden;
+            background: #000;
+        }
+
+            .video-container video {
+                width: 100%;
+                display: block;
+            }
+
+        /* Текст под стикером */
+        .media-text {
+            color: #ccc;
+            font-size: 16px;
+            text-align: center;
+            word-break: break-word;
+            margin-top: 8px;
+            padding: 0 4px;
+            line-height: 1.4;
+            max-width: 300px;
+            width: 100%;
+            box-sizing: border-box;
+            overflow-wrap: break-word;
+            word-wrap: break-word;
+            hyphens: auto;
+            display: -webkit-box;
+            -webkit-line-clamp: 3;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            max-height: calc(1.4em * 3);
+        }
+
+            .media-text .user-name-inline {
+                color: #ffd700;
+                font-weight: bold;
+                white-space: nowrap;
+                display: inline-block;
+                margin-right: 4px;
+            }
+
+            .media-text .highlight {
+                color: #ffd700;
+                font-weight: bold;
+            }
+
+        /* Статус-бар */
+        #status-bar {
+            position: fixed;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            padding: 6px 18px;
+            background: rgba(0,0,0,0.5);
+            border-radius: 20px;
+            font-size: 11px;
+            color: #666;
+            text-align: center;
+            backdrop-filter: blur(4px);
+            border: 1px solid rgba(255,255,255,0.05);
+            pointer-events: none;
+            z-index: 100;
+        }
+
+        /* Анимация для появления */
+        @keyframes stickerPop {
+            0% {
+                opacity: 0;
+                transform: scale(0.5) rotate(-10deg);
+            }
+
+            70% {
+                transform: scale(1.05) rotate(1deg);
+            }
+
+            100% {
+                opacity: 1;
+                transform: scale(1) rotate(0deg);
+            }
+        }
+
+        @keyframes stickerFadeOut {
+            0% {
+                opacity: 1;
+                transform: scale(1) rotate(0deg);
+            }
+
+            100% {
+                opacity: 0;
+                transform: scale(0.7) rotate(5deg);
+            }
+        }
+
+        .media-message.pop-in {
+            animation: stickerPop 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+        }
+
+        .media-message.fade-out {
+            animation: stickerFadeOut 0.4s ease forwards;
+        }
+
+        /* Счетчик очереди */
+        #queue-badge {
+            position: fixed;
+            top: 15px;
+            right: 15px;
+            background: rgba(255, 215, 0, 0.15);
+            border: 1px solid rgba(255, 215, 0, 0.2);
+            border-radius: 12px;
+            padding: 4px 14px;
+            font-size: 12px;
+            color: #ffd700;
+            backdrop-filter: blur(4px);
+            pointer-events: none;
+            z-index: 100;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <div id="media-container">
+        <div id="current-message" class="media-message"></div>
+    </div>
+    <div id="queue-badge">📦 0</div>
+
+    <script>
+        const container = document.getElementById('media-container');
+        const currentMessageEl = document.getElementById('current-message');
+        const statusBar = document.getElementById('status-bar');
+        const queueBadge = document.getElementById('queue-badge');
+
+        // ⚙️ НАСТРОЙКИ
+        const DISPLAY_TIME_MS = 5000;
+        const MAX_MESSAGES = 50;
+
+        // Очередь стикеров
+        let messageQueue = [];
+        let isDisplaying = false;
+        let displayTimer = null;
+        let resizeTimer = null;
+        let hideTimer = null;
+        let es = null;                    // ✅ ГЛОБАЛЬНЫЙ EventSource
+
+        // ============================================================
+        // SSE ПОДКЛЮЧЕНИЕ
+        // ============================================================
+        function connectMediaStream() {
+        if (es) {
+        es.close();
+        es = null;
+        }
+
+        es = new EventSource('/media/stream');
+
+        es.onmessage = function(e) {
+        try {
+        const data = JSON.parse(e.data);
+
+        // Обработка закрытия
+        if (data.type === 'close') {
+        console.log('Сервер закрывает соединение:', data.message);
+        if (es) {
+        es.close();
+        es = null;
+        }
+        return;
+        }
+
+        addToQueue(data);
+        } catch (ex) {
+        console.error('SSE parse error:', ex);
+        }
+        };
+
+        es.onerror = function() {
+        // ✅ Если соединение закрыто (сервером или нами) — не переподключаемся
+        if (es && es.readyState === EventSource.CLOSED) {
+        console.log('Media SSE закрыт — переподключение не требуется');
+        return;
+        }
+
+        // Иначе — временный обрыв, пробуем переподключиться
+        setTimeout(connectMediaStream, 3000);
+        };
+
+        es.onopen = function() {
+        console.log('✅ Media SSE подключён');
+        };
+        }
+
+        // ============================================================
+        // ДОБАВЛЕНИЕ В ОЧЕРЕДЬ
+        // ============================================================
+        function addToQueue(data) {
+        if (data.type !== 'sticker') {
+        return;
+        }
+
+        console.log(`📝 Получен стикер: ${data.stickerId}, текст: "${data.text || '(пусто)'}"`);
+
+        if (messageQueue.length >= MAX_MESSAGES) {
+        messageQueue.shift();
+        }
+
+        messageQueue.push(data);
+        updateQueueBadge();
+
+        console.log(`📦 Добавлен стикер в очередь (${messageQueue.length}):`, data.stickerId, 'текст:', data.text);
+
+        if (!isDisplaying) {
+        showNextSticker();
+        }
+        }
+
+        // ============================================================
+        // ПОКАЗАТЬ СЛЕДУЮЩИЙ СТИКЕР
+        // ============================================================
+        function showNextSticker() {
+        if (isDisplaying) return;
+
+        if (messageQueue.length === 0) {
+        currentMessageEl.className = 'media-message';
+        currentMessageEl.innerHTML = '';
+        isDisplaying = false;
+        updateQueueBadge();
+        return;
+        }
+
+        isDisplaying = true;
+
+        const data = messageQueue.shift();
+        updateQueueBadge();
+
+        console.log(`🖼 Показываем стикер: ${data.stickerId}, текст: "${data.text || '(пусто)'}"`);
+
+        let content = '';
+        let textHtml = '';
+
+        // ✅ СТИКЕР
+        if (data.type === 'sticker') {
+        const isAnimated = data.isAnimated || false;
+        const imgUrl = data.stickerPath;
+
+        if (imgUrl) {
+        content = `
+        <img src="${imgUrl}"
+        class="sticker-image ${isAnimated ? 'animated' : ''}"
+        alt="Стикер ${data.stickerId}"
+        loading="lazy"
+        onerror="this.style.display='none'" />
+        `;
+        }
+        }
+
+        // ✅ ВСЕГДА ПОКАЗЫВАЕМ НИК
+        const userName = data.userName || 'Аноним';
+
+        let displayText = data.text?.trim() || '';
+
+        const MAX_CHARS = 200;
+        if (displayText.length > MAX_CHARS) {
+        displayText = displayText.substring(0, MAX_CHARS) + '...';
+        }
+
+        if (displayText.length > 0) {
+        textHtml = `<div class="media-text"><span class="user-name-inline">${userName}</span>:  ${displayText}</div>`;
+        console.log(`📝 Добавляем: "${userName}: ${displayText}"`);
+        } else {
+        textHtml = `<div class="media-text"><span class="user-name-inline">${userName}</span></div>`;
+        console.log(`📝 Добавляем только ник: "${userName}"`);
+        }
+
+        if (!content) {
+        console.warn('⚠️ Нет стикера для отображения');
+        isDisplaying = false;
+        if (messageQueue.length > 0) {
+        showNextSticker();
+        } else {
+        currentMessageEl.className = 'media-message';
+        currentMessageEl.innerHTML = '';
+        updateQueueBadge();
+        }
+        return;
+        }
+
+        // ✅ СОБИРАЕМ HTML
+        currentMessageEl.className = 'media-message pop-in';
+        currentMessageEl.innerHTML = `
+        <div class="msg-body">
+        ${content}
+        ${textHtml}
+        </div>
+        `;
+
+        // ✅ ПОДСТРАИВАЕМ ШИРИНУ ТЕКСТА ПОД СТИКЕР
+        if (resizeTimer) {
+        clearTimeout(resizeTimer);
+        resizeTimer = null;
+        }
+
+        resizeTimer = setTimeout(() => {
+        resizeTimer = null;
+
+        const img = currentMessageEl.querySelector('.sticker-image');
+        const textEl = currentMessageEl.querySelector('.media-text');
+
+        if (img && textEl) {
+        const imgWidth = img.naturalWidth || img.clientWidth || 280;
+        textEl.style.maxWidth = Math.min(imgWidth, 280) + 'px';
+        }
+        }, 50);
+
+        // ✅ ТАЙМЕР ДЛЯ СКРЫТИЯ
+        if (displayTimer) {
+        clearTimeout(displayTimer);
+        displayTimer = null;
+        }
+
+        displayTimer = setTimeout(() => {
+        displayTimer = null;
+        hideCurrentSticker();
+        }, DISPLAY_TIME_MS);
+        }
+
+        // ============================================================
+        // СКРЫТЬ ТЕКУЩИЙ СТИКЕР
+        // ============================================================
+        function hideCurrentSticker() {
+        if (!isDisplaying) return;
+
+        // ✅ Обнуляем таймер показа — он уже не нужен
+        if (displayTimer) {
+        clearTimeout(displayTimer);
+        displayTimer = null;
+        }
+
+        // ✅ Отменяем отложенную подгонку ширины
+        if (resizeTimer) {
+        clearTimeout(resizeTimer);
+        resizeTimer = null;
+        }
+
+        currentMessageEl.className = 'media-message fade-out';
+
+        if (hideTimer) {
+        clearTimeout(hideTimer);
+        hideTimer = null;
+        }
+
+        hideTimer = setTimeout(() => {
+        hideTimer = null;
+
+        if (messageQueue.length > 0) {
+        isDisplaying = false;
+        showNextSticker();
+        } else {
+        currentMessageEl.className = 'media-message';
+        currentMessageEl.innerHTML = '';
+        isDisplaying = false;
+        updateQueueBadge();
+        }
+        }, 400);
+        }
+
+        // ============================================================
+        // ОБНОВИТЬ БЕЙДЖ ОЧЕРЕДИ
+        // ============================================================
+        function updateQueueBadge() {
+        queueBadge.textContent = `📦 ${messageQueue.length}`;
+
+        if (messageQueue.length > 0) {
+        queueBadge.style.display = 'block';
+        } else {
+        queueBadge.style.display = 'none';
+        }
+        }
+
+        // ============================================================
+        // ПРИНУДИТЕЛЬНО ПОКАЗАТЬ СЛЕДУЮЩИЙ
+        // ============================================================
+        function forceNext() {
+        if (displayTimer) {
+        clearTimeout(displayTimer);
+        displayTimer = null;
+        }
+        hideCurrentSticker();
+        }
+
+        window.forceNext = forceNext;
+        window.getQueue = () => messageQueue;
+
+        // ============================================================
+        // ЗАПУСК
+        // ============================================================
+        connectMediaStream();
+        console.log('🎨 Медиа-чат запущен (режим: один стикер в центре)');
+        console.log(`⏱ Время отображения: ${DISPLAY_TIME_MS}мс`);
+
+        // ============================================================
+        // ОЧИСТКА ПРИ ЗАКРЫТИИ
+        // ============================================================
+        window.addEventListener('beforeunload', function() {
+        if (es) {
+        es.close();
+        es = null;
+        console.log('Media SSE соединение принудительно закрыто перед обновлением.');
+        }
+
+        if (displayTimer) {
+        clearTimeout(displayTimer);
+        displayTimer = null;
+        }
+        if (resizeTimer) {
+        clearTimeout(resizeTimer);
+        resizeTimer = null;
+        }
+        if (hideTimer) {
+        clearTimeout(hideTimer);
+        hideTimer = null;
+        }
+        });
+    </script>
+</body>
+</html>
