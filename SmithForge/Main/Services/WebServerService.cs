@@ -1,19 +1,11 @@
-﻿using Google.Apis.YouTube.v3.Data;
-using SmithForge.Main.Models;
-using System;
-using System.Collections.Generic;
-using System.ComponentModel;
+﻿using SmithForge.Main.Models;
+using SmithForge.Main.Services.WebServer;
 using System.Diagnostics;
 using System.IO;
 using System.Net;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
-using System.Threading;
-using System.Threading.Tasks;
-using System.Windows.Documents;
-using TwitchLib.Client.Models.Internal;
-using static Google.Apis.Requests.BatchRequest;
 
 namespace SmithForge.Main.Services
 {
@@ -51,8 +43,7 @@ namespace SmithForge.Main.Services
         private readonly object _alertsLock = new object();
 
         // === Tech events stream (/tech/stream) ===
-        private readonly List<SseClient> _techStreamClients = new();
-        private readonly object _techLock = new object();
+        private readonly SseClientManager _techManager = new("Tech");
 
         public static WebServerService? Instance { get; private set; }
         /// <summary>
@@ -1131,10 +1122,7 @@ namespace SmithForge.Main.Services
             using var client = new SseClient(context, heartbeatIntervalMs: 15000);
             Debug.WriteLine($"[WebServer] 🔧 Tech-клиент {client.Id} подключён");
 
-            lock (_techLock)
-            {
-                _techStreamClients.Add(client);
-            }
+            _techManager.Add(client);
 
             try
             {
@@ -1147,11 +1135,7 @@ namespace SmithForge.Main.Services
             }
             finally
             {
-                lock (_techLock)
-                {
-                    _techStreamClients.Remove(client);
-                }
-                Debug.WriteLine($"[WebServer] 🔧 Tech-клиент {client.Id} отключён. Осталось: {_techStreamClients.Count}");
+                _techManager.Remove(client);
             }
         }
         /// <summary>
@@ -1274,34 +1258,9 @@ namespace SmithForge.Main.Services
             var json = JsonSerializer.Serialize(payload);
             var data = $"data: {json}\n\n";
 
-            List<SseClient> snapshot;
-            lock (_techLock)
-            {
-                if (_techStreamClients.Count == 0)
-                {
-                    Debug.WriteLine($"[WebServer] 🔧 Tech-событие сформировано, клиентов нет: {evt.UserName} → {evt.Text}");
-                    return;
-                }
-                snapshot = new List<SseClient>(_techStreamClients);
-            }
+            _techManager.Broadcast(data);
 
-            var dead = new List<SseClient>();
-            foreach (var c in snapshot)
-            {
-                if (!c.Send(data)) dead.Add(c);
-            }
-
-            if (dead.Count > 0)
-            {
-                lock (_techLock)
-                {
-                    foreach (var d in dead) _techStreamClients.Remove(d);
-                }
-                foreach (var d in dead) d.Dispose();
-                Debug.WriteLine($"[WebServer] 🧹 Удалено {dead.Count} мёртвых tech-клиентов");
-            }
-
-            Debug.WriteLine($"[WebServer] 🔧 Tech-событие отправлено ({_techStreamClients.Count} клиентов): {evt.UserName} → {evt.Text}");
+            Debug.WriteLine($"[WebServer] 🔧 Tech-событие отправлено ({_techManager.Count} клиентов): {evt.UserName} → {evt.Text}");
         }
 
         /// <summary>
@@ -1309,14 +1268,7 @@ namespace SmithForge.Main.Services
         /// </summary>
         public void CloseAllTechConnections()
         {
-            List<SseClient> toClose;
-            lock (_techLock)
-            {
-                toClose = new List<SseClient>(_techStreamClients);
-                _techStreamClients.Clear();
-            }
-            foreach (var c in toClose) c.Dispose();
-            Debug.WriteLine($"[WebServer] Все tech-клиенты закрыты ({toClose.Count})");
+            _techManager.CloseAll();
         }
         /// <summary>
         /// Закрыть все Alerts SSE-соединения
@@ -1497,7 +1449,7 @@ namespace SmithForge.Main.Services
                 // Приветственный пакет, чтобы браузер сразу понял, что соединение живое
                 //await client.SendAsync($"data: {{\"type\":\"hello\",\"ts\":\"{DateTime.Now:HH:mm:ss}\"}}\n\n");
                 await client.SendAsync(": ping\n\n");
-                
+
 
                 // Ждём, пока клиент отключится ИЛИ сервер остановится (Dispose/Stop)
                 await client.WaitUntilClosedAsync(_cts?.Token ?? CancellationToken.None);
