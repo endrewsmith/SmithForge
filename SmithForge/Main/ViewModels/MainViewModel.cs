@@ -60,6 +60,7 @@ namespace SmithForge.ViewModels
         // КООРДИНАТОРЫ
         // ============================================================
         public InfoRotationCoordinator InfoRotation { get; private set; } = null!;
+        public AudioSettingsCoordinator AudioSettings { get; private set; } = null!;
 
         public MainViewModel()
         {
@@ -72,6 +73,11 @@ namespace SmithForge.ViewModels
             _overlayManager = new OverlayManagerService(Settings);
             _settingsService = new SettingsService(Settings, _overlayManager);
             _dialogService = new DialogService();
+
+            VoiceService.Initialize(Dispatcher.CurrentDispatcher);
+
+            // ✅ Создаём координатор голоса ДО OverlayManager.Initialize
+            AudioSettings = new AudioSettingsCoordinator(_settingsService, Settings);
 
             _webServer = new WebServerService((int)Settings.NetworkPort);
             TechOverlay = new TechOverlayService(_webServer);
@@ -104,9 +110,9 @@ namespace SmithForge.ViewModels
                 ImportantChatMode,
                 StickersChatMode,
                 ImportantPlaybackMode,
-                ImportantSoundVolume,
-                VoiceVolume,
-                StickerDisplayTime);
+                AudioSettings.ImportantSoundVolume,
+                AudioSettings.VoiceVolume,
+                AudioSettings.StickerDisplayTime);
             _overlayManager.ImportantQueueChanged += (s, count) =>
             {
                 Application.Current.Dispatcher.BeginInvoke(() =>
@@ -135,16 +141,8 @@ namespace SmithForge.ViewModels
             _dashboardService.Initialize();
             _mediaDashboardService.Initialize();
 
-            _stickerDisplayTime = Settings.StickerDisplayTimeMs;
-            _importantSoundVolume = Settings.ImportantSoundVolume;
-            _voiceVolume = Settings.VoiceVolume;
-            VoiceService.SetImportantSoundVolume(_importantSoundVolume);
-            VoiceService.SetVoiceVolume(_voiceVolume);
-
             _importantPlaybackMode = Settings.ImportantPlaybackMode;
             _importantPlaybackHotkey = Settings.ImportantPlaybackHotkey;
-
-            VoiceService.Initialize(Dispatcher.CurrentDispatcher);
 
             if (IsAutoSwitchingEnabled && ImportantQueueCount == 0 && _importantPlaybackMode == ImportantPlaybackMode.Manual)
             {
@@ -171,12 +169,6 @@ namespace SmithForge.ViewModels
             _chatConnectionService.MessageReceived += OnConnectorMessageReceived;
 
             _chatManager = new ChatManagerViewModel(Chats, _chatConnectionService);
-
-            _voiceRate = Settings.VoiceRate;
-            VoiceService.SetVoiceRate(_voiceRate);
-
-            Debug.WriteLine($"🎙️ [MainViewModel] СТАРТОВАЯ СКОРОСТЬ: {_voiceRate}");
-            Debug.WriteLine($"🎙️ [MainViewModel] VoiceService.GetVoiceRate() = {VoiceService.GetVoiceRate()}");
 
             // ============================================================
             // ИНИЦИАЛИЗАЦИЯ РОТАЦИИ
@@ -311,7 +303,6 @@ namespace SmithForge.ViewModels
                 _overlayManager.AddMessage(chater, overlayMsg);
             }
 
-            // ✅ Уведомляем ротацию об активности
             InfoRotation?.NotifyUserActivity();
         }
 
@@ -417,6 +408,15 @@ namespace SmithForge.ViewModels
 
         [RelayCommand]
         private void SaveSettings() => _settingsService.SaveSettings();
+
+        /// <summary>
+        /// Уведомить систему ротации об активности пользователя.
+        /// Делегируется в InfoRotationCoordinator.
+        /// </summary>
+        public void NotifyUserActivity()
+        {
+            InfoRotation?.NotifyUserActivity();
+        }
 
         private void OnProcessExited() => Application.Current.Dispatcher.Invoke(() => { IsProcessRunning = false; });
         private bool CanStart() => !IsProcessRunning;
@@ -525,11 +525,6 @@ namespace SmithForge.ViewModels
                 MessageBox.Show($"Не удалось открыть браузер: {ex.Message}", "Ошибка",
                                 MessageBoxButton.OK, MessageBoxImage.Warning);
             }
-        }
-
-        public void NotifyUserActivity()
-        {
-            InfoRotation?.NotifyUserActivity();
         }
     }
 }
