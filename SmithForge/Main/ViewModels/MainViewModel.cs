@@ -56,6 +56,11 @@ namespace SmithForge.ViewModels
 
         private InfoService _infoService;
 
+        // ============================================================
+        // КООРДИНАТОРЫ
+        // ============================================================
+        public InfoRotationCoordinator InfoRotation { get; private set; } = null!;
+
         public MainViewModel()
         {
             FolderManager.EnsureDirectoriesExist();
@@ -187,12 +192,11 @@ namespace SmithForge.ViewModels
                 AppDomain.CurrentDomain.BaseDirectory,
                 "Html", "InfoPages");
 
-            _rotationService = new InfoRotationService(_infoService, pagesDir);
-            _rotationService.PageSelected += OnRotationPageSelected;
+            var rotationService = new InfoRotationService(_infoService, pagesDir);
+            InfoRotation = new InfoRotationCoordinator(rotationService, _infoService, _webServer);
+            InfoRotation.UpdateStatus();
 
-            UpdateRotationStatus();
-
-            Debug.WriteLine("[MainViewModel] InfoRotationService инициализирован");
+            Debug.WriteLine("[MainViewModel] InfoRotationCoordinator инициализирован");
 
             var processor = new MessageProcessor(Settings, _infoService, _stickerPageService, _soundPageService);
             _messageHandler = new MessageHandlerService(
@@ -306,6 +310,9 @@ namespace SmithForge.ViewModels
             {
                 _overlayManager.AddMessage(chater, overlayMsg);
             }
+
+            // ✅ Уведомляем ротацию об активности
+            InfoRotation?.NotifyUserActivity();
         }
 
         [RelayCommand(CanExecute = nameof(CanStart))]
@@ -320,11 +327,10 @@ namespace SmithForge.ViewModels
                 Debug.WriteLine($"[WebServer] Запущен на http://localhost:{Settings.NetworkPort}/");
             }
 
-            if (_rotationService != null)
+            if (InfoRotation != null)
             {
-                _rotationService.Start(RotationSilenceInterval);
-                Debug.WriteLine($"[MainViewModel] InfoRotationService запущен (тишина: {RotationSilenceInterval}с)");
-                UpdateRotationStatus();
+                InfoRotation.StartCommand.Execute(null);
+                Debug.WriteLine($"[MainViewModel] InfoRotation запущен (тишина: {InfoRotation.SilenceInterval}с)");
             }
 
             try
@@ -383,11 +389,10 @@ namespace SmithForge.ViewModels
         {
             Debug.WriteLine("[MainViewModel] Stop() вызван");
 
-            if (_rotationService != null)
+            if (InfoRotation != null)
             {
-                _rotationService.Stop();
-                Debug.WriteLine("[MainViewModel] InfoRotationService остановлен");
-                UpdateRotationStatus();
+                InfoRotation.StopCommand.Execute(null);
+                Debug.WriteLine("[MainViewModel] InfoRotation остановлен");
             }
 
             try
@@ -520,6 +525,11 @@ namespace SmithForge.ViewModels
                 MessageBox.Show($"Не удалось открыть браузер: {ex.Message}", "Ошибка",
                                 MessageBoxButton.OK, MessageBoxImage.Warning);
             }
+        }
+
+        public void NotifyUserActivity()
+        {
+            InfoRotation?.NotifyUserActivity();
         }
     }
 }
