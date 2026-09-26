@@ -1569,8 +1569,7 @@ namespace SmithForge.Main.Services
         // МЕДИА-ЧАТ (стикеры, GIF, видео)
         // ============================================================
 
-        private readonly List<SseClient> _mediaStreamClients = new();
-        private readonly object _mediaLock = new object();
+        private readonly SseClientManager _mediaManager = new("Media");
 
         // Обработчик для /media/stream
         private async Task HandleMediaStreamRequestAsync(HttpListenerContext context)
@@ -1578,10 +1577,7 @@ namespace SmithForge.Main.Services
             using var client = new SseClient(context, heartbeatIntervalMs: 15000);
             Debug.WriteLine($"[WebServer] 📺 Медиа-клиент {client.Id} подключён");
 
-            lock (_mediaLock)
-            {
-                _mediaStreamClients.Add(client);
-            }
+            _mediaManager.Add(client);
 
             try
             {
@@ -1598,11 +1594,7 @@ namespace SmithForge.Main.Services
             }
             finally
             {
-                lock (_mediaLock)
-                {
-                    _mediaStreamClients.Remove(client);
-                }
-                Debug.WriteLine($"[WebServer] 📺 Медиа-клиент {client.Id} отключён. Осталось: {_mediaStreamClients.Count}");
+                _mediaManager.Remove(client);
             }
         }
 
@@ -1612,35 +1604,8 @@ namespace SmithForge.Main.Services
         public void SendMediaMessage(string jsonData)
         {
             var data = $"data: {jsonData}\n\n";
-
-            List<SseClient> snapshot;
-            lock (_mediaLock)
-            {
-                if (_mediaStreamClients.Count == 0) return;
-                snapshot = new List<SseClient>(_mediaStreamClients);
-            }
-
-            var dead = new List<SseClient>();
-            foreach (var client in snapshot)
-            {
-                if (!client.Send(data))
-                {
-                    dead.Add(client);
-                }
-            }
-
-            if (dead.Count > 0)
-            {
-                lock (_mediaLock)
-                {
-                    foreach (var d in dead) _mediaStreamClients.Remove(d);
-                }
-                foreach (var d in dead) d.Dispose();
-                Debug.WriteLine($"[WebServer] 🧹 Удалено {dead.Count} мёртвых media-клиентов");
-            }
+            _mediaManager.Broadcast(data);
         }
-
-
         public void SendStickerToMedia(string userName, string stickerPath, string stickerId, bool isAnimated, string text = "")
         {
             try
@@ -1740,20 +1705,7 @@ namespace SmithForge.Main.Services
         /// </summary>
         public void CloseAllMediaConnections()
         {
-            List<SseClient> toClose;
-
-            lock (_mediaLock)
-            {
-                toClose = new List<SseClient>(_mediaStreamClients);
-                _mediaStreamClients.Clear();
-            }
-
-            foreach (var client in toClose)
-            {
-                client.Dispose();
-            }
-
-            Debug.WriteLine($"[WebServer] Все media-клиенты закрыты ({toClose.Count})");
+            _mediaManager.CloseAll();
         }
 
         /// <summary>
