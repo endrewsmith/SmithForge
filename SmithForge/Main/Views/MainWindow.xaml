@@ -22,7 +22,6 @@
         <converters:YouTubeMethodNotToVisibilityConverter x:Key="YouTubeMethodNotToVisibilityConverter"/>
         <BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter"/>
 
-        <!-- Стиль для ToggleButton -->
         <Style x:Key="AutoSwitchToggleButtonStyle" TargetType="ToggleButton">
             <Setter Property="Background" Value="#E0E0E0"/>
             <Setter Property="Foreground" Value="#333"/>
@@ -238,7 +237,6 @@
                     <RowDefinition Height="Auto"/>
                 </Grid.RowDefinitions>
 
-                <!-- Заголовок секции -->
                 <Grid Grid.Row="0" Margin="0,0,0,5">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto"/>
@@ -248,7 +246,7 @@
 
                     <TextBlock Grid.Column="0" Text="📡 Мои чаты" FontSize="14" FontWeight="Bold" Foreground="#2C3E50"/>
 
-                    <TextBlock Grid.Column="1" Text="{Binding Chats.Count, StringFormat='Всего: {0}'}" 
+                    <TextBlock Grid.Column="1" Text="{Binding ChatsManager.Chats.Count, StringFormat='Всего: {0}'}" 
                        FontSize="12" Foreground="Gray" VerticalAlignment="Center" Margin="10,0,0,0"/>
 
                     <Button Grid.Column="2" Content="➕ Добавить чат" 
@@ -260,9 +258,8 @@
                     Cursor="Hand"/>
                 </Grid>
 
-                <!-- Список чатов -->
                 <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" MaxHeight="120">
-                    <ItemsControl ItemsSource="{Binding Chats}">
+                    <ItemsControl ItemsSource="{Binding ChatsManager.Chats}">
                         <ItemsControl.ItemTemplate>
                             <DataTemplate>
                                 <Border BorderBrush="#444" BorderThickness="1" CornerRadius="4" Margin="0,2" Padding="6,4" Background="#2D2D30">
@@ -321,7 +318,7 @@
                         BorderThickness="0"
                         Cursor="Hand"
                         ToolTip="Подключиться по Video ID"
-                        Command="{Binding DataContext.ConnectByVideoIdCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                        Command="{Binding DataContext.ChatsManager.ConnectByVideoIdCommand, RelativeSource={RelativeSource AncestorType=Window}}"
                         CommandParameter="{Binding}"
                         Visibility="{Binding IsYouTube, Converter={StaticResource BooleanToVisibilityConverter}}"/>
 
@@ -362,7 +359,7 @@
                         BorderThickness="0"
                         Cursor="Hand"
                         ToolTip="Сменить метод подключения"
-                        Command="{Binding DataContext.ChangeMethodCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                        Command="{Binding DataContext.ChatsManager.ChangeMethodCommand, RelativeSource={RelativeSource AncestorType=Window}}"
                         CommandParameter="{Binding}"
                         Visibility="{Binding Platform, Converter={StaticResource PlatformToVisibilityConverter}, ConverterParameter='youtube'}"/>
                                     </Grid>
@@ -375,9 +372,9 @@
                 <StackPanel Grid.Row="2" Orientation="Horizontal" Margin="0,5,0,0">
                     <TextBlock FontSize="11" Foreground="Gray">
                 <Run Text="Активных: "/>
-                <Run Text="{Binding ConnectedChatsCount}" FontWeight="Bold" Foreground="#4CAF50"/>
+                <Run Text="{Binding ChatsManager.ConnectedChatsCount}" FontWeight="Bold" Foreground="#4CAF50"/>
                 <Run Text=" | Сообщений: "/>
-                <Run Text="{Binding TotalMessagesCount}" FontWeight="Bold" Foreground="#2196F3"/>
+                <Run Text="{Binding ChatsManager.TotalMessagesCount}" FontWeight="Bold" Foreground="#2196F3"/>
                     </TextBlock>
                 </StackPanel>
             </Grid>
@@ -467,7 +464,7 @@
             <StackPanel>
                 <TextBlock Text="УПРАВЛЕНИЕ ОКНАМИ ЧАТОВ" FontSize="12" FontWeight="Bold" Foreground="#5C6BC0" Margin="0,0,0,8"/>
 
-                <!-- Управление скоростью скролла -->
+                <!-- Инфо-чат: скорости -->
                 <Border Grid.Row="8" Background="#F0F4FF" BorderBrush="#BBDEFB" BorderThickness="0,1,0,1" Padding="10" Margin="0,5,0,0">
                     <StackPanel>
                         <TextBlock Text="📚 Инфо-чат (витрина)" FontSize="14" FontWeight="Bold" Foreground="#1565C0" Margin="0,0,0,10"/>
@@ -496,6 +493,7 @@
                        VerticalAlignment="Center" 
                        Margin="10,0,0,0"/>
                         </Grid>
+
                         <Grid>
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="Auto"/>
@@ -523,6 +521,7 @@
                     </StackPanel>
                 </Border>
 
+                <!-- Ротация инфо-страниц -->
                 <StackPanel>
                     <Grid Margin="0,0,0,8">
                         <Grid.ColumnDefinitions>
@@ -586,7 +585,7 @@
                     </Grid>
                 </StackPanel>
 
-                <!-- Кнопка генерации страниц стикеров -->
+                <!-- Кнопки генерации страниц стикеров/звуков -->
                 <Border Grid.Row="8" Background="#FFF3E0" BorderBrush="#FFE0B2" BorderThickness="0,1,0,1" Padding="10" Margin="0,5,0,0">
                     <StackPanel>
                         <Grid>
@@ -619,7 +618,6 @@
                             <ColumnDefinition Width="Auto"/>
                             <ColumnDefinition Width="*"/>
                             <ColumnDefinition Width="Auto"/>
-                            <ColumnDefinition Width="Auto"/>
                         </Grid.ColumnDefinitions>
                         <TextBlock Grid.Column="0" Text="💬" FontSize="16" Margin="0,0,8,0" VerticalAlignment="Center"/>
                         <TextBlock Grid.Column="1" Text="Главный чат" FontWeight="SemiBold" VerticalAlignment="Center"/>
@@ -632,14 +630,6 @@
                   Margin="0,0,10,0"
                   VerticalAlignment="Center"
                   ToolTip="Выберите режим отображения"/>
-                        <StackPanel Grid.Column="3" Orientation="Horizontal">
-                            <Button Content="👁️" Width="30" Height="30" Margin="0,0,5,0" 
-                    ToolTip="Показать/скрыть"
-                    Command="{Binding ToggleMainChatCommand}"/>
-                            <Button Content="⚙️" Width="30" Height="30" 
-                    ToolTip="Настройки"
-                    Command="{Binding ConfigureMainChatCommand}"/>
-                        </StackPanel>
                     </Grid>
                 </Border>
 
@@ -727,6 +717,7 @@
                            FontSize="11" FontWeight="Bold"/>
                             </Border>
                         </StackPanel>
+
                         <ToggleButton Grid.Row="1" Grid.Column="1" Content="🔄 Режим чтения" 
               IsChecked="{Binding Alerts.IsAutoSwitchingEnabled}"
               Style="{StaticResource AutoSwitchToggleButtonStyle}"
@@ -751,7 +742,7 @@
                        FontSize="10" Margin="5,0,0,0" Width="35"/>
                         </StackPanel>
 
-                        <StackPanel Orientation="Horizontal">
+                        <StackPanel Grid.Row="1" Grid.Column="4" Orientation="Horizontal" VerticalAlignment="Center" Margin="10,0,0,0">
                             <TextBlock Text="🚀" FontSize="16" VerticalAlignment="Center" Margin="0,0,5,0"/>
                             <TextBlock Text="Скорость" VerticalAlignment="Center" Margin="0,0,5,0"/>
                             <Slider 
@@ -777,14 +768,14 @@
                         <StackPanel Grid.Row="0" Grid.Column="3" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,10,0"
                     Visibility="{Binding Alerts.ImportantPlaybackMode, Converter={StaticResource EnumToVisibilityConverter}, ConverterParameter=Manual}">
                             <TextBlock Text="⌨️" FontSize="14" VerticalAlignment="Center" Margin="0,0,5,0"/>
-                            <ComboBox Width="70" Height="24" 
-                      ItemsSource="{Binding AvailableHotkeys}"
-                      SelectedItem="{Binding Alerts.ImportantPlaybackHotkey}"
-                      IsEditable="True"
-                      ToolTip="Выберите горячую клавишу для воспроизведения"/>
+                            <TextBox Width="70" Height="24" 
+                      Text="{Binding Alerts.ImportantPlaybackHotkey, UpdateSourceTrigger=PropertyChanged}"
+                      ToolTip="Горячая клавиша (например, F8)"
+                      VerticalContentAlignment="Center"
+                      HorizontalContentAlignment="Center"/>
                         </StackPanel>
 
-                        <ComboBox Grid.Row="1" Grid.Column="4" Grid.ColumnSpan="2"
+                        <ComboBox Grid.Row="1" Grid.Column="5"
                   ItemsSource="{Binding Overlays.AvailableModes}"
                   SelectedValue="{Binding Overlays.ImportantChatMode}"
                   SelectedValuePath="Mode"
@@ -793,16 +784,13 @@
                   Margin="20,10,0,0"
                   VerticalAlignment="Top"/>
 
-                        <StackPanel Grid.Row="0" Grid.Column="4" Grid.ColumnSpan="2" 
+                        <StackPanel Grid.Row="0" Grid.Column="5" 
                     Orientation="Horizontal" 
                     HorizontalAlignment="Right" 
                     Margin="0,5,0,0">
                             <Button Content="👁️" Width="30" Height="30" Margin="0,0,5,0" 
                     ToolTip="Показать/скрыть"
                     Command="{Binding Overlays.ToggleImportantOverlayCommand}"/>
-                            <Button Content="⚙️" Width="30" Height="30" 
-                    ToolTip="Настройки"
-                    Command="{Binding ConfigureImportantCommand}"/>
                         </StackPanel>
                     </Grid>
                 </Border>
@@ -870,9 +858,6 @@
                             <Button Content="👁️" Width="30" Height="30" Margin="0,0,5,0" 
                     ToolTip="Показать/скрыть"
                     Command="{Binding Overlays.ToggleShortsOverlayCommand}"/>
-                            <Button Content="⚙️" Width="30" Height="30" 
-                    ToolTip="Настройки"
-                    Command="{Binding ConfigureShortsCommand}"/>
                         </StackPanel>
                     </Grid>
                 </Border>
@@ -909,9 +894,6 @@
                             <Button Content="👁️" Width="30" Height="30" Margin="0,0,5,0" 
                     ToolTip="Показать/скрыть"
                     Command="{Binding Overlays.ToggleStickersOverlayCommand}"/>
-                            <Button Content="⚙️" Width="30" Height="30" 
-                    ToolTip="Настройки"
-                    Command="{Binding ConfigureStickersCommand}"/>
                         </StackPanel>
                     </Grid>
                 </Border>
@@ -930,9 +912,6 @@
                             <Button Content="👁️" Width="30" Height="30" Margin="0,0,5,0" 
                                     ToolTip="Показать/скрыть"
                                     Command="{Binding Overlays.ToggleDashboardCommand}"/>
-                            <Button Content="⚙️" Width="30" Height="30" 
-                                    ToolTip="Настройки"
-                                    Command="{Binding ConfigureDashboardCommand}"/>
                         </StackPanel>
                     </Grid>
                 </Border>
@@ -946,29 +925,15 @@
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto"/>
                         <ColumnDefinition Width="*"/>
-                        <ColumnDefinition Width="Auto"/>
                     </Grid.ColumnDefinitions>
                     <TextBlock Grid.Column="0" Text="🔴 YouTube" FontSize="14" FontWeight="Bold" Foreground="#C62828" Margin="0,0,15,0"/>
                     <TextBlock Grid.Column="1" Text="{Binding YouTube.Status}" FontWeight="SemiBold" Foreground="#666"/>
-                    <Border Grid.Column="2" CornerRadius="3" Background="#E53935">
-                        <Button Content="🔄 Обновить" Command="{Binding LoadYouTubeStreamsCommand}" 
-            Width="100" Height="25" Background="Transparent" 
-            Foreground="White" BorderThickness="0">
-                            <Button.Style>
-                                <Style TargetType="Button">
-                                    <Setter Property="Border.CornerRadius" Value="3"/>
-                                </Style>
-                            </Button.Style>
-                        </Button>
-                    </Border>
                 </Grid>
 
                 <Grid Margin="0,8,0,0">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto"/>
                         <ColumnDefinition Width="*"/>
-                        <ColumnDefinition Width="Auto"/>
-                        <ColumnDefinition Width="Auto"/>
                     </Grid.ColumnDefinitions>
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto"/>
@@ -988,17 +953,6 @@
                               Content="Автоподключение к первому стриму" 
                               IsChecked="{Binding Settings.YouTube.AutoConnect}"
                               VerticalAlignment="Center" Margin="0,2,0,2"/>
-
-                    <StackPanel Grid.Row="0" Grid.Column="2" Grid.RowSpan="3" Orientation="Horizontal" Margin="10,0,0,0">
-                        <Button Content="💾 Сохранить" Command="{Binding SaveSettingsCommand}" 
-                                Width="90" Height="30" Margin="0,0,5,0"/>
-                        <Button Content="🎯 Выбрать стрим" Command="{Binding LoadYouTubeStreamsCommand}" 
-                                Width="100" Height="30" Margin="0,0,5,0"/>
-                        <Button Content="🔗 Подключиться" Command="{Binding ConnectYouTubeChatCommand}" 
-                                Width="100" Height="30" Margin="0,0,5,0" Background="#43A047" Foreground="White"/>
-                        <Button Content="⏹ Отключиться" Command="{Binding DisconnectYouTubeChatCommand}" 
-                                Width="100" Height="30" Background="#E53935" Foreground="White"/>
-                    </StackPanel>
                 </Grid>
 
                 <Border Background="White" CornerRadius="4" BorderBrush="#DDD" BorderThickness="1" Margin="0,8,0,0">

@@ -1,6 +1,5 @@
 ﻿using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using SmithForge.Features.ChatManager;
 using SmithForge.Features.InfoSystem;
 using SmithForge.Features.TechOverlay;
 using SmithForge.Main.Models;
@@ -69,6 +68,7 @@ namespace SmithForge.ViewModels
         public SessionCoordinator Session { get; private set; } = null!;
         public AlertsCoordinator Alerts { get; private set; } = null!;
         public OverlayTogglesCoordinator Overlays { get; private set; } = null!;
+        public ChatCoordinator ChatsManager { get; private set; } = null!;
 
         public MainViewModel()
         {
@@ -100,7 +100,6 @@ namespace SmithForge.ViewModels
                 TechOverlay,
                 Settings);
 
-            // Подписка на событие сохранения позиций
             Overlays.PositionsSaved += (s, e) => LastMessageText = "✅ Позиции окон сохранены";
 
             DatabaseService.Initialize();
@@ -156,18 +155,6 @@ namespace SmithForge.ViewModels
             }
 
             // ============================================================
-            // ЗАГРУЗКА ЧАТОВ
-            // ============================================================
-
-            _chatManager = new ChatManagerViewModel(Chats, null);
-            _chatManager.LoadChatsFromFile();
-
-            _chatConnectionService = new ChatConnectionService(_chatManager);
-            _chatConnectionService.MessageReceived += OnConnectorMessageReceived;
-
-            _chatManager = new ChatManagerViewModel(Chats, _chatConnectionService);
-
-            // ============================================================
             // ИНИЦИАЛИЗАЦИЯ РОТАЦИИ
             // ============================================================
             _stickerPageService = new StickerPageService();
@@ -198,7 +185,9 @@ namespace SmithForge.ViewModels
                 _webServer);
             _messageHandler.OnProcessed += OnMessageProcessed;
 
-            LoadChats();
+            // ✅ Создаём координатор чатов ПОСЛЕ MessageHandler
+            ChatsManager = new ChatCoordinator(_dialogService, _messageHandler);
+            ChatsManager.Initialize();
         }
 
         public void ShutdownWebServer()
@@ -339,14 +328,8 @@ namespace SmithForge.ViewModels
 
             Debug.WriteLine($"[MainViewModel] ПОСЛЕ EnsureSession: CurrentSession={Session.CurrentSession?.Number}, LastStreamNumber={Session.LastStreamNumber}");
 
-            var chatsToConnect = Chats.Where(c => !c.IsConnected).ToList();
-            if (chatsToConnect.Any())
-            {
-                Debug.WriteLine($"[MainViewModel] Подключаем {chatsToConnect.Count} чатов параллельно...");
-                var connectTasks = chatsToConnect.Select(chat => ConnectChat(chat));
-                await Task.WhenAll(connectTasks);
-                Debug.WriteLine("[MainViewModel] Все чаты подключены (или попытки завершены)");
-            }
+            // ✅ Подключаем все чаты через координатор
+            await ChatsManager.ConnectAllAsync();
 
             IsProcessRunning = true;
             Session.SetStartTime();
@@ -374,7 +357,8 @@ namespace SmithForge.ViewModels
                 Debug.WriteLine($"[MainViewModel] Ошибка остановки AlertsService: {ex.Message}");
             }
 
-            await StopAllChats();
+            // ✅ Отключаем все чаты через координатор
+            await ChatsManager.StopAllAsync();
 
             _pollingcts?.Cancel();
             await _chatService.StopAsync();
@@ -387,42 +371,26 @@ namespace SmithForge.ViewModels
         [RelayCommand]
         private void SaveSettings() => _settingsService.SaveSettings();
 
-        /// <summary>
-        /// Уведомить систему ротации об активности пользователя.
-        /// Делегируется в InfoRotationCoordinator.
-        /// </summary>
         public void NotifyUserActivity()
         {
             InfoRotation?.NotifyUserActivity();
         }
 
-        /// <summary>
-        /// Установить режим воспроизведения важных сообщений (делегируется в AlertsCoordinator).
-        /// </summary>
         public void SetImportantPlaybackMode(ImportantPlaybackMode mode)
         {
             Alerts?.SetImportantPlaybackMode(mode);
         }
 
-        /// <summary>
-        /// Обновить счётчик очереди важных сообщений (делегируется в AlertsCoordinator).
-        /// </summary>
         public void UpdateImportantQueueCount(int count)
         {
             Alerts?.UpdateImportantQueueCount(count);
         }
 
-        /// <summary>
-        /// Сохранить позицию оверлея алертов.
-        /// </summary>
         public void SaveAlertsPosition()
         {
             Alerts?.SavePosition();
         }
 
-        // ============================================================
-        // СОХРАНЕНИЕ ПОЗИЦИЙ (делегируется в OverlayTogglesCoordinator)
-        // ============================================================
         public void SaveOverlayPosition() => Overlays?.SaveAllPositions();
         public void SaveShortsPosition() => Overlays?.SaveAllPositions();
         public void SaveImportantPosition() => Overlays?.SaveAllPositions();

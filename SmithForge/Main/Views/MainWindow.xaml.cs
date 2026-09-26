@@ -363,8 +363,8 @@ namespace SmithForge.Main.Views
         {
             var vm = DataContext as MainViewModel;
             var window = new ChatManagerWindow();
-            // Используем существующий _chatManager из MainViewModel
-            window.DataContext = vm.GetChatManagerViewModel();  // ← нужно добавить метод
+            // Используем ChatCoordinator
+            window.DataContext = vm.ChatsManager.GetChatManagerViewModel();
             window.Owner = this;
             window.ShowDialog();
         }

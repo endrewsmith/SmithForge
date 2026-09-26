@@ -3,17 +3,25 @@ using CommunityToolkit.Mvvm.Input;
 using SmithForge.ChatEngine.Core.Models;
 using SmithForge.Features.ChatManager;
 using SmithForge.Main.Models;
-using SmithForge.Main.Services;
+using System;
 using System.Collections.ObjectModel;
 using System.Diagnostics;
+using System.Linq;
+using System.Threading.Tasks;
 using System.Windows;
 
-namespace SmithForge.ViewModels
+namespace SmithForge.Main.Services
 {
-    public partial class MainViewModel
+    /// <summary>
+    /// Координатор управления чатами: подключение, отключение, обновление статистики.
+    /// </summary>
+    public partial class ChatCoordinator : ObservableObject
     {
+        private readonly DialogService _dialogService;
+        private readonly MessageHandlerService _messageHandler;
+
         // ============================================================
-        // ПОЛЯ ЧАТОВ
+        // КОЛЛЕКЦИИ И СТАТИСТИКА
         // ============================================================
         [ObservableProperty]
         private ObservableCollection<ChatConnection> _chats = new();
@@ -26,6 +34,31 @@ namespace SmithForge.ViewModels
 
         private ChatManagerViewModel _chatManager = new();
         private ChatConnectionService _chatConnectionService = null!;
+
+        // ============================================================
+        // КОНСТРУКТОР
+        // ============================================================
+        public ChatCoordinator(DialogService dialogService, MessageHandlerService messageHandler)
+        {
+            _dialogService = dialogService ?? throw new ArgumentNullException(nameof(dialogService));
+            _messageHandler = messageHandler ?? throw new ArgumentNullException(nameof(messageHandler));
+        }
+
+        // ============================================================
+        // ИНИЦИАЛИЗАЦИЯ (вызывается из MainViewModel после создания MessageHandler)
+        // ============================================================
+        public void Initialize()
+        {
+            _chatManager = new ChatManagerViewModel(Chats, null);
+            _chatManager.LoadChatsFromFile();
+
+            _chatConnectionService = new ChatConnectionService(_chatManager);
+            _chatConnectionService.MessageReceived += OnConnectorMessageReceived;
+
+            _chatManager = new ChatManagerViewModel(Chats, _chatConnectionService);
+
+            LoadChats();
+        }
 
         // ============================================================
         // КОМАНДЫ ПОДКЛЮЧЕНИЯ
@@ -118,81 +151,84 @@ namespace SmithForge.ViewModels
         [RelayCommand]
         private async Task StartAllChats()
         {
-            Debug.WriteLine("[MainViewModel] StartAllChats() вызван");
+            Debug.WriteLine("[ChatCoordinator] StartAllChats() вызван");
 
             var chatsToConnect = Chats.Where(c => !c.IsConnected).ToList();
 
             if (chatsToConnect.Count == 0)
             {
-                Debug.WriteLine("[MainViewModel] Все чаты уже подключены");
+                Debug.WriteLine("[ChatCoordinator] Все чаты уже подключены");
                 return;
             }
 
-            Debug.WriteLine($"[MainViewModel] Подключаем {chatsToConnect.Count} чатов...");
+            Debug.WriteLine($"[ChatCoordinator] Подключаем {chatsToConnect.Count} чатов параллельно...");
 
-            foreach (var chat in chatsToConnect)
-            {
-                try
-                {
-                    Debug.WriteLine($"[MainViewModel] Подключаем: {chat.ChatName}");
-                    await ConnectChat(chat);
-                }
-                catch (Exception ex)
-                {
-                    Debug.WriteLine($"[MainViewModel] Ошибка подключения {chat.ChatName}: {ex.Message}");
-                }
-            }
+            // ✅ ПАРАЛЛЕЛЬНО — запускаем все задачи одновременно
+            var connectTasks = chatsToConnect.Select(chat => ConnectChat(chat));
+            await Task.WhenAll(connectTasks);
 
-            Debug.WriteLine("[MainViewModel] Все чаты обработаны");
+            Debug.WriteLine("[ChatCoordinator] Все чаты подключены (или попытки завершены)");
         }
 
         [RelayCommand]
         private async Task StopAllChats()
         {
-            Debug.WriteLine("[MainViewModel] StopAllChats() вызван");
+            Debug.WriteLine("[ChatCoordinator] StopAllChats() вызван");
 
             var chatsToDisconnect = Chats.Where(c => c.IsConnected).ToList();
 
             if (chatsToDisconnect.Count == 0)
             {
-                Debug.WriteLine("[MainViewModel] Все чаты уже отключены");
+                Debug.WriteLine("[ChatCoordinator] Все чаты уже отключены");
                 return;
             }
 
-            Debug.WriteLine($"[MainViewModel] Отключаем {chatsToDisconnect.Count} чатов...");
+            Debug.WriteLine($"[ChatCoordinator] Отключаем {chatsToDisconnect.Count} чатов параллельно...");
 
-            foreach (var chat in chatsToDisconnect)
-            {
-                try
-                {
-                    Debug.WriteLine($"[MainViewModel] Отключаем: {chat.ChatName}");
-                    await DisconnectChat(chat);
-                }
-                catch (Exception ex)
-                {
-                    Debug.WriteLine($"[MainViewModel] Ошибка отключения {chat.ChatName}: {ex.Message}");
-                }
-            }
+            // ✅ ПАРАЛЛЕЛЬНО
+            var disconnectTasks = chatsToDisconnect.Select(chat => DisconnectChat(chat));
+            await Task.WhenAll(disconnectTasks);
 
-            Debug.WriteLine("[MainViewModel] Все чаты отключены");
+            Debug.WriteLine("[ChatCoordinator] Все чаты отключены");
         }
 
         // ============================================================
-        // ВСПОМОГАТЕЛЬНЫЕ МЕТОДЫ
+        // ПУБЛИЧНЫЕ МЕТОДЫ ДЛЯ MainViewModel
         // ============================================================
+        public async Task StopAllAsync()
+        {
+            await StopAllChats();
+        }
+
+        public async Task ConnectAllAsync()
+        {
+            await StartAllChats();
+        }
+
+        public ChatManagerViewModel GetChatManagerViewModel() => _chatManager;
+
         public ChatConnectionService GetChatConnectionService() => _chatConnectionService;
 
+        // ============================================================
+        // ОБРАБОТКА СООБЩЕНИЙ
+        // ============================================================
         private void OnConnectorMessageReceived(object? sender, IncomingChatMessage message)
         {
             _messageHandler.ProcessConnectorMessage(sender, message);
         }
 
+        // ============================================================
+        // СТАТИСТИКА
+        // ============================================================
         private void UpdateStats()
         {
             ConnectedChatsCount = Chats.Count(c => c.IsConnected);
             TotalMessagesCount = Chats.Sum(c => c.MessageCount);
         }
 
+        // ============================================================
+        // ЗАГРУЗКА И ОБНОВЛЕНИЕ
+        // ============================================================
         private void LoadChats()
         {
             foreach (var chat in Chats)
@@ -243,7 +279,5 @@ namespace SmithForge.ViewModels
             Chats.CollectionChanged += (s, e) => UpdateStats();
             UpdateStats();
         }
-
-        public ChatManagerViewModel GetChatManagerViewModel() => _chatManager;
     }
 }
