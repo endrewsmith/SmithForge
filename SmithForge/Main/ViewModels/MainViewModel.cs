@@ -61,6 +61,7 @@ namespace SmithForge.ViewModels
         // ============================================================
         public InfoRotationCoordinator InfoRotation { get; private set; } = null!;
         public AudioSettingsCoordinator AudioSettings { get; private set; } = null!;
+        public YouTubeSettingsCoordinator YouTube { get; private set; } = null!;
 
         public MainViewModel()
         {
@@ -76,18 +77,12 @@ namespace SmithForge.ViewModels
 
             VoiceService.Initialize(Dispatcher.CurrentDispatcher);
 
-            // ✅ Создаём координатор голоса ДО OverlayManager.Initialize
+            // ✅ Создаём координаторы ДО OverlayManager.Initialize
             AudioSettings = new AudioSettingsCoordinator(_settingsService, Settings);
+            YouTube = new YouTubeSettingsCoordinator(_settingsService, Settings);
 
             _webServer = new WebServerService((int)Settings.NetworkPort);
             TechOverlay = new TechOverlayService(_webServer);
-
-            // ============================================================
-            // СИНХРОНИЗАЦИЯ НАСТРОЕК YOUTUBE ИЗ APP SETTINGS
-            // ============================================================
-            YouTubeApiKey = Settings.YouTube?.ApiKey ?? string.Empty;
-            YouTubeChannelId = Settings.YouTube?.ChannelId ?? string.Empty;
-            YouTubeVideoId = Settings.YouTube?.LastVideoId ?? string.Empty;
 
             _isOverlaySetupMode = Settings.IsOverlaySetupMode;
             _isOverlayHidden = Settings.IsOverlayHidden;
