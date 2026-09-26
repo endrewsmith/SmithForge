@@ -1,35 +1,21 @@
 ﻿using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using Microsoft.Extensions.Logging;
 using SmithForge.AlertsEngine.Core.Models;
 using SmithForge.ChatEngine.Core.Models;
-using SmithForge.ChatEngine.Platforms.YouTube;
 using SmithForge.ChatEngine.Platforms.YouTube.Models;
 using SmithForge.Features.ChatManager;
-using SmithForge.Features.ChatOverlay;
-using SmithForge.Features.ChatOverlayShorts;
-using SmithForge.Features.ImportantOverlay;
 using SmithForge.Features.InfoSystem;
-using SmithForge.Features.StickersOverlay;
 using SmithForge.Features.TechOverlay;
 using SmithForge.Main.Models;
 using SmithForge.Main.Models.ChatModes;
 using SmithForge.Main.Services;
 using SmithForge.Main.Services.ChatCommands;
-using System;
-using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.IO;
-using System.Linq;
 using System.Net.Http;
-using System.Speech.Synthesis;
 using System.Text;
-using System.Threading;
-using System.Threading.Tasks;
 using System.Windows;
-using System.Windows.Controls;
-using System.Windows.Input;
 using System.Windows.Threading;
 
 namespace SmithForge.ViewModels
@@ -64,7 +50,7 @@ namespace SmithForge.ViewModels
         [ObservableProperty]
         private int _rotationShownPages = 0; // ← НОВОЕ СВОЙСТВО
 
-        
+
         [ObservableProperty]
         private string _youTubeApiKey = string.Empty;
 
@@ -210,7 +196,7 @@ namespace SmithForge.ViewModels
 
             // ✅ Инициализация сервиса настроек (ДО установки свойств!)
             _settingsService = new SettingsService(Settings, _overlayManager);
-            
+
             // ✅ Инициализация сервиса диалогов
             _dialogService = new DialogService();
 
@@ -265,11 +251,11 @@ namespace SmithForge.ViewModels
 
             // ✅ Инициализация менеджера сессий
             _streamSessionManager = new StreamSessionManager();
-            
+
             // Инициализируем CurrentSession из менеджера
             CurrentSession = _streamSessionManager.CurrentSession;
             LastStreamNumber = _streamSessionManager.LastStreamNumber;
-            
+
             _streamSessionManager.SessionChanged += (s, session) =>
             {
                 CurrentSession = session;
@@ -308,9 +294,6 @@ namespace SmithForge.ViewModels
             // ============================================================
             // ЗАГРУЗКА ЧАТОВ
             // ============================================================
-
-            // ✅ Подписываемся на события YouTubeManager
-            //YouTubeManager.MessageReceived += OnYouTubeManagerMessageReceived;
 
             // ✅ Подписываемся на события AlertsService
             _alertsService.AlertReceived += OnAlertReceived;
@@ -356,8 +339,6 @@ namespace SmithForge.ViewModels
             _rotationService.PageSelected += OnRotationPageSelected;
             //_rotationService.Start(30);
 
-
-
             // Обновляем статус
             UpdateRotationStatus();
 
@@ -375,8 +356,6 @@ namespace SmithForge.ViewModels
 
             LoadChats();
         }
-
-
 
         /// <summary>
         /// Корректное завершение веб-сервера
@@ -418,7 +397,7 @@ namespace SmithForge.ViewModels
 
         partial void OnImportantPlaybackModeChanged(ImportantPlaybackMode value) => _settingsService.SetImportantPlaybackMode(value);
         partial void OnImportantPlaybackHotkeyChanged(string value) => _settingsService.SetImportantPlaybackHotkey(value);
-        
+
         partial void OnIsAutoSwitchingEnabledChanged(bool value) => _settingsService.SetIsAutoSwitchingEnabled(value, ImportantQueueCount, ImportantPlaybackMode);
 
         partial void OnStickerDisplayTimeChanged(int value) => _settingsService.SetStickerDisplayTime(value);
@@ -512,57 +491,6 @@ namespace SmithForge.ViewModels
             }
         }
 
-
-        // ============================================================
-        // ОБРАБОТКА СООБЩЕНИЙ ИЗ YouTubeManager
-        // ============================================================
-
-        private void OnYouTubeManagerMessageReceived(object? sender, ChatMessage message)
-        {
-            try
-            {
-                var commonMsg = new CommonMessage
-                {
-                    Type = "youtube",
-                    Login = message.Author,
-                    Message = message.Text,
-                    Timestamp = message.Timestamp.Ticks
-                };
-                
-                var externalId = $"youtube:{message.Author}".ToLower();
-                commonMsg.User = ChaterStorage.GetByExternalId(externalId);
-                
-                if (commonMsg.User == null)
-                {
-                    commonMsg.User = new Chater
-                    {
-                        Id = Guid.NewGuid().ToString(),
-                        Login = message.Author,
-                        DisplayName = message.Author,
-                        FirstSeen = DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
-                        LastMessageTime = DateTimeOffset.UtcNow.ToUnixTimeSeconds()
-                    };
-                    
-                    commonMsg.User.Accounts.Add(new ExternalAccount
-                    {
-                        ExternalId = externalId,
-                        Platform = "youtube",
-                        OriginalName = message.Author
-                    });
-                    
-                    ChaterStorage.AddOrUpdate(commonMsg.User);
-                    DatabaseService.SaveChater(commonMsg.User);
-                }
-                
-                commonMsg.User.LastMessageTime = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
-                _messageHandler.ProcessMessage(commonMsg.User, commonMsg, null!);
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine($"[YouTubeManager] Ошибка обработки сообщения: {ex.Message}");
-            }
-        }
-
         private void LoadInitialData()
         {
             var history = DatabaseService.LoadAll();
@@ -579,14 +507,11 @@ namespace SmithForge.ViewModels
 
             if (msg.Message.Length >= Settings.MinMessageLength)
             {
-                Application.Current.Dispatcher.Invoke(() => {
+                Application.Current.Dispatcher.Invoke(() =>
+                {
                     LastMessageText = $"[#{chater.KarmaKey}] {chater.EffectiveName}: {uiMessage}";
                 });
             }
-
-
-
-
 
             Debug.WriteLine($"[MainViewModel] Получено сообщение от {chater.Login}:");
             Debug.WriteLine($"   - Оригинальный номер: {msg.MessageNumber}");
@@ -620,13 +545,6 @@ namespace SmithForge.ViewModels
                 DisplayTimeMs = msg.DisplayTimeMs
             };
 
-
-            //Debug.WriteLine($"[WebServer] ПЕРЕД ВЫЗОВОМ AddMessageToWebOverlay для {chater.Login}");
-            //// Добавляем сообщение в веб-оверлей для OBS
-            //AddMessageToWebOverlay(chater, overlayMsg);
-            //Debug.WriteLine($"[WebServer] ПОСЛЕ ВЫЗОВА AddMessageToWebOverlay для {chater.Login}");
-
-
             _dashboardService.AddMessage(chater, overlayMsg);
 
             if (isImportantAction)
@@ -651,8 +569,6 @@ namespace SmithForge.ViewModels
             {
                 _overlayManager.AddMessage(chater, overlayMsg);
             }
-
-
         }
 
         [RelayCommand(CanExecute = nameof(CanStart))]
@@ -730,12 +646,6 @@ namespace SmithForge.ViewModels
             _streamSessionManager.SetStartTime();
 
             Debug.WriteLine($"[MainViewModel] Стрим #{_streamSessionManager.CurrentSession?.Number} запущен");
-        }
-
-        private bool SafeStart()
-        {
-            try { _chatService.Start(); return true; }
-            catch (Exception ex) { MessageBox.Show(ex.Message); return false; }
         }
 
 
@@ -1006,30 +916,6 @@ namespace SmithForge.ViewModels
             }
         }
 
-        // ============================================================
-        // YOUTUBE КОМАНДЫ
-        // ============================================================
-
-        //[RelayCommand]
-        //private async Task LoadYouTubeStreams()
-        //{
-        //    // ✅ Делегируем YouTubeManager
-        //    await YouTubeManager.FindStreamsViaHtmlAsync();
-        //}
-
-        //[RelayCommand]
-        //private async Task ConnectYouTubeChat()
-        //{
-        //    // ✅ Делегируем YouTubeManager
-        //    await YouTubeManager.ConnectSelectedAsync();
-        //}
-
-        //[RelayCommand]
-        //private void DisconnectYouTubeChat()
-        //{
-        //    // ✅ Делегируем YouTubeManager
-        //    YouTubeManager.DisconnectAll();
-        //}
 
         [RelayCommand]
         private async Task SendYouTubeMessage(string message)
@@ -1288,8 +1174,7 @@ namespace SmithForge.ViewModels
 
         private async Task StartWebServerAsync()
         {
-            if (_isWebServerRunning) return;  // ← защита
-            _isWebServerRunning = true;       // ← ставим ДО запуска, чтобы второй вызов не начал работу
+            if (_isWebServerRunning) return;
             try
             {
                 await _webServer!.StartAsync();
@@ -1298,6 +1183,7 @@ namespace SmithForge.ViewModels
             }
             catch (Exception ex)
             {
+                _isWebServerRunning = false;
                 Debug.WriteLine($"[WebServer] Ошибка запуска: {ex.Message}");
             }
         }
@@ -1323,47 +1209,25 @@ namespace SmithForge.ViewModels
         {
             if (parameter == null) return;
 
-            int value = 3;
+            int value = parameter switch
+            {
+                int i => i,
+                string s when int.TryParse(s, out var p) => p,
+                double d => (int)d,
+                _ => 3
+            };
 
-            if (parameter is int intValue)
-                value = intValue;
-            else if (parameter is string stringValue && int.TryParse(stringValue, out int parsed))
-                value = parsed;
-            else if (parameter is double doubleValue)
-                value = (int)doubleValue;
-            else
-                return;
-
-            Debug.WriteLine($"🎯 SetVoiceRateCommand ВЫЗВАН! rate={value}");
-
-            // ✅ ВСЕГДА УСТАНАВЛИВАЕМ, ДАЖЕ ЕСЛИ ЗНАЧЕНИЕ ТАКОЕ ЖЕ
-            _voiceRate = Math.Clamp(value, -10, 10);
-            OnPropertyChanged(nameof(VoiceRate)); // Принудительно обновляем UI
-
-            Settings.VoiceRate = _voiceRate;
-            ConfigService.Save(Settings);
-            VoiceService.SetVoiceRate(_voiceRate);
-
-            Debug.WriteLine($"🎙️ [Command] Установлена скорость: {_voiceRate}");
-            Debug.WriteLine($"🎙️ [Command] VoiceService.GetVoiceRate() = {VoiceService.GetVoiceRate()}");
+            // Просто присваиваем свойство — вся логика в OnVoiceRateChanged
+            VoiceRate = Math.Clamp(value, -10, 10);
         }
 
         partial void OnVoiceRateChanged(int value)
         {
-            value = Math.Clamp(value, -10, 10);
-
-            Debug.WriteLine($"🎯 OnVoiceRateChanged ВЫЗВАН! value={value}, _voiceRate={_voiceRate}");
-
-            // ✅ УБИРАЕМ ПРОВЕРКУ if (_voiceRate != value) — ВСЕГДА УСТАНАВЛИВАЕМ!
-            _voiceRate = value;
             Settings.VoiceRate = value;
             ConfigService.Save(Settings);
-
-            // ✅ ВСЕГДА ВЫЗЫВАЕМ VoiceService.SetVoiceRate
             VoiceService.SetVoiceRate(value);
 
-            Debug.WriteLine($"🎙️ [MainViewModel] Скорость изменена: {value}");
-            Debug.WriteLine($"🎙️ [MainViewModel] VoiceService.GetVoiceRate() = {VoiceService.GetVoiceRate()}");
+            Debug.WriteLine($"🎙️ [MainViewModel] Скорость голоса: {value}, сервис={VoiceService.GetVoiceRate()}");
         }
 
         partial void OnScrollSpeedChanged(int value)
@@ -1502,22 +1366,6 @@ namespace SmithForge.ViewModels
             {
                 RotationStatus = $"🔇 Тишина: {status.SilentSeconds}с / {status.SilenceIntervalSeconds}с";
             }
-        }
-
-        // Обновляем статус по таймеру (раз в секунду)
-        private void StartStatusUpdater()
-        {
-            _ = Task.Run(async () =>
-            {
-                while (true)
-                {
-                    await Task.Delay(1000);
-                    if (_rotationService != null)
-                    {
-                        UpdateRotationStatus();
-                    }
-                }
-            });
         }
 
         public void NotifyUserActivity()
