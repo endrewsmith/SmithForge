@@ -71,7 +71,7 @@ namespace SmithForge.Main.Views
                         if (settings.ImportantPlaybackMode == ImportantPlaybackMode.Manual)
                         {
                             var vm = Application.Current.MainWindow?.DataContext as MainViewModel;
-                            vm?.PlayNextImportantCommand.Execute(null);
+                            vm?.Alerts?.PlayNextImportantCommand?.Execute(null);
                         }
                     });
                 }
@@ -101,9 +101,10 @@ namespace SmithForge.Main.Views
 
             // ✅ YouTube
             YoutubeChatClient.RegisterDelegates(
-    checkExists: (code) => EmojiService.EmojiExists(code),
-    register: (code, path) => EmojiService.AddEmojiToCache(code, path)
-);
+                checkExists: (code) => EmojiService.EmojiExists(code),
+                register: (code, path) => EmojiService.AddEmojiToCache(code, path)
+            );
+
             // ✅ Twitch
             TwitchConnector.RegisterDelegates(
                 checkExists: (code) => EmojiService.EmojiExists(code),
@@ -191,7 +192,7 @@ namespace SmithForge.Main.Views
                 if (settings.ImportantPlaybackMode == ImportantPlaybackMode.Manual)
                 {
                     var vm = DataContext as MainViewModel;
-                    vm?.PlayNextImportantCommand.Execute(null);
+                    vm?.Alerts?.PlayNextImportantCommand?.Execute(null);
                     handled = true;
                     Debug.WriteLine("[Hotkey] Глобальная комбинация сработала!");
                 }
@@ -350,7 +351,7 @@ namespace SmithForge.Main.Views
             {
                 if (e.Key.ToString() == settings.ImportantPlaybackHotkey)
                 {
-                    (DataContext as MainViewModel)?.PlayNextImportantCommand.Execute(null);
+                    (DataContext as MainViewModel)?.Alerts?.PlayNextImportantCommand?.Execute(null);
                     e.Handled = true;
                 }
             }
@@ -377,7 +378,10 @@ namespace SmithForge.Main.Views
         {
             if (DataContext is SmithForge.ViewModels.MainViewModel vm)
             {
-                await vm.OpenAlertsSettingsCommand.ExecuteAsync(null);
+                if (vm.Alerts?.OpenAlertsSettingsCommand != null)
+                {
+                    await vm.Alerts.OpenAlertsSettingsCommand.ExecuteAsync(null);
+                }
             }
         }
 
@@ -388,7 +392,7 @@ namespace SmithForge.Main.Views
         {
             if (DataContext is SmithForge.ViewModels.MainViewModel vm)
             {
-                vm.ToggleAlertsOverlayCommand.Execute(null);
+                vm.Alerts?.ToggleAlertsOverlayCommand?.Execute(null);
             }
         }
 

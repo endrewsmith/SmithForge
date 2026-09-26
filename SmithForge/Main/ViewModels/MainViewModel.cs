@@ -67,6 +67,7 @@ namespace SmithForge.ViewModels
         public YouTubeSettingsCoordinator YouTube { get; private set; } = null!;
         public StickersCoordinator Stickers { get; private set; } = null!;
         public SessionCoordinator Session { get; private set; } = null!;
+        public AlertsCoordinator Alerts { get; private set; } = null!;
 
         public MainViewModel()
         {
@@ -88,6 +89,8 @@ namespace SmithForge.ViewModels
             _webServer = new WebServerService((int)Settings.NetworkPort);
             TechOverlay = new TechOverlayService(_webServer);
 
+            Alerts = new AlertsCoordinator(_settingsService, _overlayManager, _webServer, Settings);
+
             _isOverlaySetupMode = Settings.IsOverlaySetupMode;
             _isOverlayHidden = Settings.IsOverlayHidden;
             _isStickersVisible = Settings.IsStickersVisible;
@@ -108,22 +111,22 @@ namespace SmithForge.ViewModels
                 ShortsChatMode,
                 ImportantChatMode,
                 StickersChatMode,
-                ImportantPlaybackMode,
+                Alerts.ImportantPlaybackMode,
                 AudioSettings.ImportantSoundVolume,
                 AudioSettings.VoiceVolume,
                 AudioSettings.StickerDisplayTime);
+
             _overlayManager.ImportantQueueChanged += (s, count) =>
             {
                 Application.Current.Dispatcher.BeginInvoke(() =>
                 {
-                    ImportantQueueCount = count;
+                    Alerts.ImportantQueueCount = count;
                     Debug.WriteLine($"[MainViewModel] Получено событие QueueCountChanged: count={count}");
                 });
             };
 
             ProgramPath = Settings.ProgramPath;
 
-            // ✅ Создаём координатор сессий
             Session = new SessionCoordinator(Settings);
             Session.SessionIdChanged += (s, sessionId) =>
             {
@@ -137,26 +140,20 @@ namespace SmithForge.ViewModels
             _dashboardService.Initialize();
             _mediaDashboardService.Initialize();
 
-            _importantPlaybackMode = Settings.ImportantPlaybackMode;
-            _importantPlaybackHotkey = Settings.ImportantPlaybackHotkey;
-
-            if (IsAutoSwitchingEnabled && ImportantQueueCount == 0 && _importantPlaybackMode == ImportantPlaybackMode.Manual)
+            if (Alerts.IsAutoSwitchingEnabled && Alerts.ImportantQueueCount == 0 && Alerts.ImportantPlaybackMode == ImportantPlaybackMode.Manual)
             {
                 Debug.WriteLine("[MainViewModel] Стартовая синхронизация: очередь пуста, переключаем режим на Auto");
-                ImportantPlaybackMode = ImportantPlaybackMode.Auto;
+                Alerts.ImportantPlaybackMode = ImportantPlaybackMode.Auto;
             }
-            else if (IsAutoSwitchingEnabled && ImportantQueueCount > 0 && _importantPlaybackMode == ImportantPlaybackMode.Auto)
+            else if (Alerts.IsAutoSwitchingEnabled && Alerts.ImportantQueueCount > 0 && Alerts.ImportantPlaybackMode == ImportantPlaybackMode.Auto)
             {
-                Debug.WriteLine($"[MainViewModel] Стартовая синхронизация: в очереди {ImportantQueueCount} сообщений, переключаем режим на Manual");
-                ImportantPlaybackMode = ImportantPlaybackMode.Manual;
+                Debug.WriteLine($"[MainViewModel] Стартовая синхронизация: в очереди {Alerts.ImportantQueueCount} сообщений, переключаем режим на Manual");
+                Alerts.ImportantPlaybackMode = ImportantPlaybackMode.Manual;
             }
 
             // ============================================================
             // ЗАГРУЗКА ЧАТОВ
             // ============================================================
-
-            _alertsService.AlertReceived += OnAlertReceived;
-            _alertsService.StatusChanged += OnAlertStatusChanged;
 
             _chatManager = new ChatManagerViewModel(Chats, null);
             _chatManager.LoadChatsFromFile();
@@ -324,9 +321,7 @@ namespace SmithForge.ViewModels
 
             try
             {
-                await _alertsService.StartAsync(Settings);
-                _overlayManager.SetAlertsVisible(Settings.AlertsOverlayVisible);
-                Debug.WriteLine("[MainViewModel] AlertsService запущен");
+                await Alerts.StartAsync();
             }
             catch (Exception ex)
             {
@@ -368,8 +363,7 @@ namespace SmithForge.ViewModels
 
             try
             {
-                await _alertsService.StopAsync();
-                Debug.WriteLine("[MainViewModel] AlertsService остановлен");
+                await Alerts.StopAsync();
             }
             catch (Exception ex)
             {
@@ -389,9 +383,37 @@ namespace SmithForge.ViewModels
         [RelayCommand]
         private void SaveSettings() => _settingsService.SaveSettings();
 
+        /// <summary>
+        /// Уведомить систему ротации об активности пользователя.
+        /// Делегируется в InfoRotationCoordinator.
+        /// </summary>
         public void NotifyUserActivity()
         {
             InfoRotation?.NotifyUserActivity();
+        }
+
+        /// <summary>
+        /// Установить режим воспроизведения важных сообщений (делегируется в AlertsCoordinator).
+        /// </summary>
+        public void SetImportantPlaybackMode(ImportantPlaybackMode mode)
+        {
+            Alerts?.SetImportantPlaybackMode(mode);
+        }
+
+        /// <summary>
+        /// Обновить счётчик очереди важных сообщений (делегируется в AlertsCoordinator).
+        /// </summary>
+        public void UpdateImportantQueueCount(int count)
+        {
+            Alerts?.UpdateImportantQueueCount(count);
+        }
+
+        /// <summary>
+        /// Сохранить позицию оверлея алертов.
+        /// </summary>
+        public void SaveAlertsPosition()
+        {
+            Alerts?.SavePosition();
         }
 
         private void OnProcessExited() => Application.Current.Dispatcher.Invoke(() => { IsProcessRunning = false; });

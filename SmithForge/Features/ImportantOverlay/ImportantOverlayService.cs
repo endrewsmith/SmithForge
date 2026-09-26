@@ -46,15 +46,15 @@ namespace SmithForge.Features.ImportantOverlay
         private void CreateOverlay()
         {
 
-                if (_window == null)
-                {
+            if (_window == null)
+            {
                 _viewModel = new ImportantOverlayViewModel();
 
                 _window = new ImportantOverlayWindow
-                    {
+                {
                     DataContext = _viewModel,
-                        Visibility = Visibility.Collapsed  // ← НЕ Show()/Hide(), просто Collapsed
-                    };
+                    Visibility = Visibility.Collapsed  // ← НЕ Show()/Hide(), просто Collapsed
+                };
                 _window.Show();
                 _window.Hide();
 
@@ -64,8 +64,8 @@ namespace SmithForge.Features.ImportantOverlay
                 //_window.Visibility = Visibility.Collapsed;
 
                 Debug.WriteLine("[ImportantService] Окно создано (скрыто)");
-                }
-           
+            }
+
         }
         public void Initialize(double top, double left, double width, double height, bool isSetupMode)
         {
@@ -220,7 +220,7 @@ namespace SmithForge.Features.ImportantOverlay
                     Application.Current.Dispatcher.BeginInvoke(new Action(() =>
                     {
                         var mainVm = Application.Current.MainWindow?.DataContext as MainViewModel;
-                        mainVm?.SetImportantPlaybackMode(ImportantPlaybackMode.Manual);
+                        mainVm?.Alerts?.SetImportantPlaybackMode(ImportantPlaybackMode.Manual);
                     }));
 
                     // Останавливаем текущее авто-воспроизведение
@@ -361,10 +361,12 @@ namespace SmithForge.Features.ImportantOverlay
                     if (remainingCount == 0)
                     {
                         var mainVm = Application.Current.MainWindow?.DataContext as MainViewModel;
-                        if (mainVm != null && mainVm.ImportantPlaybackMode == ImportantPlaybackMode.Manual && mainVm.IsAutoSwitchingEnabled)
+                        if (mainVm?.Alerts != null
+                            && mainVm.Alerts.ImportantPlaybackMode == ImportantPlaybackMode.Manual
+                            && mainVm.Alerts.IsAutoSwitchingEnabled)
                         {
                             Debug.WriteLine("[ShowAndSpeak] Принудительное переключение режима на Auto");
-                            mainVm.ImportantPlaybackMode = ImportantPlaybackMode.Auto;
+                            mainVm.Alerts.ImportantPlaybackMode = ImportantPlaybackMode.Auto;
                         }
                     }
                 }), System.Windows.Threading.DispatcherPriority.Normal);
@@ -468,11 +470,13 @@ namespace SmithForge.Features.ImportantOverlay
             }
         }
 
-        public void Show() {
+        public void Show()
+        {
             if (_window != null) _window.Visibility = Visibility.Visible;
         }
         public void Hide() { if (_window != null) _window.Visibility = Visibility.Collapsed; }
-        public void Toggle() {
+        public void Toggle()
+        {
             if (_window != null) _window.Visibility = _window.Visibility == Visibility.Visible ? Visibility.Collapsed : Visibility.Visible;
         }
     }
