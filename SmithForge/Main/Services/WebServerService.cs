@@ -78,7 +78,7 @@ namespace SmithForge.Main.Services
             EnsureInfoPagesExist();
 
             _chatStreamHandler = new ChatStreamHandler(_streamManager);
-            _infoStreamHandler = new InfoStreamHandler(_infoManager);
+            _infoStreamHandler = new InfoStreamHandler(_infoManager, _infoPagesDir);
         }
 
         private void EnsureInfoPagesExist()

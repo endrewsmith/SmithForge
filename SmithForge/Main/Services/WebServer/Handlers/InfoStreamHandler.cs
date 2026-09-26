@@ -1,5 +1,7 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Diagnostics;
+using System.IO;
 using System.Net;
 using System.Text;
 using System.Text.RegularExpressions;
@@ -16,10 +18,12 @@ namespace SmithForge.Main.Services.WebServer.Handlers
     class InfoStreamHandler
     {
         private readonly SseClientManager _infoManager;
+        private readonly string _infoPagesDir;
 
-        public InfoStreamHandler(SseClientManager infoManager)
+        public InfoStreamHandler(SseClientManager infoManager, string infoPagesDir)
         {
             _infoManager = infoManager ?? throw new ArgumentNullException(nameof(infoManager));
+            _infoPagesDir = infoPagesDir ?? throw new ArgumentNullException(nameof(infoPagesDir));
         }
 
         /// <summary>
@@ -95,6 +99,67 @@ namespace SmithForge.Main.Services.WebServer.Handlers
             _ = NotifyInfoClientsRaw(data);
 
             Debug.WriteLine($"[WebServer] 📡 Отправлено info_message: {pageName}");
+        }
+
+        // ============================================================
+        // ОТДАЧА HTML-СТРАНИЦ
+        // ============================================================
+
+        /// <summary>
+        /// Отдать HTML-страницу информационного чата (или контент раздела).
+        /// </summary>
+        public async Task ServeInfoPageAsync(HttpListenerContext context, string pageName)
+        {
+            var response = context.Response;
+
+            // ============================================================
+            // index.html — каркас /info, из Html/Overlays/
+            // ============================================================
+            if (pageName == "index.html" || pageName == "index")
+            {
+                string indexHtml = HtmlProvider.GetOverlay("info.html");
+                await SendHtmlResponse(response, indexHtml);
+                return;
+            }
+
+            // ============================================================
+            // Страницы справочника: сначала пользовательская из SF_Data,
+            // потом дефолтная из Html/Overlays/pages/
+            // ============================================================
+
+            // 1. Пользовательская версия
+            string userPagePath = Path.Combine(_infoPagesDir, $"{pageName}.html");
+            if (File.Exists(userPagePath))
+            {
+                string html = await File.ReadAllTextAsync(userPagePath, Encoding.UTF8);
+                html = InjectInfoNavigation(html, pageName);
+                await SendHtmlResponse(response, html);
+                await NotifyInfoClients(pageName);
+                return;
+            }
+
+            // 2. Дефолтная из проекта
+            string defaultHtml = HtmlProvider.GetPage($"{pageName}.html");
+
+            // HtmlProvider возвращает заглушку "<h2>❌ Шаблон не найден: ..." если файла нет
+            if (defaultHtml.Contains("Шаблон не найден"))
+            {
+                response.StatusCode = 404;
+                await SendHtmlResponse(response, "<h2>❌ Страница не найдена</h2>");
+                return;
+            }
+
+            defaultHtml = InjectInfoNavigation(defaultHtml, pageName);
+            await SendHtmlResponse(response, defaultHtml);
+            await NotifyInfoClients(pageName);
+        }
+
+        /// <summary>
+        /// Тонкая обёртка — делегирует в ServeInfoPageAsync.
+        /// </summary>
+        public async Task HandleInfoPageRequestAsync(HttpListenerContext context, string pageName)
+        {
+            await ServeInfoPageAsync(context, pageName);
         }
         // ============================================================
         // РЕНДЕРИНГ HTML-СТРАНИЦ (пока не используется)
