@@ -56,7 +56,6 @@ namespace SmithForge.ViewModels
 
         private InfoService _infoService;
 
-        // ✅ Сервисы, нужные в конструкторе
         private StickerPageService _stickerPageService;
         private SoundPageService _soundPageService;
 
@@ -67,6 +66,7 @@ namespace SmithForge.ViewModels
         public AudioSettingsCoordinator AudioSettings { get; private set; } = null!;
         public YouTubeSettingsCoordinator YouTube { get; private set; } = null!;
         public StickersCoordinator Stickers { get; private set; } = null!;
+        public SessionCoordinator Session { get; private set; } = null!;
 
         public MainViewModel()
         {
@@ -82,7 +82,6 @@ namespace SmithForge.ViewModels
 
             VoiceService.Initialize(Dispatcher.CurrentDispatcher);
 
-            // ✅ Создаём координаторы ДО OverlayManager.Initialize
             AudioSettings = new AudioSettingsCoordinator(_settingsService, Settings);
             YouTube = new YouTubeSettingsCoordinator(_settingsService, Settings);
 
@@ -124,15 +123,12 @@ namespace SmithForge.ViewModels
 
             ProgramPath = Settings.ProgramPath;
 
-            _streamSessionManager = new StreamSessionManager();
-
-            CurrentSession = _streamSessionManager.CurrentSession;
-            LastStreamNumber = _streamSessionManager.LastStreamNumber;
-
-            _streamSessionManager.SessionChanged += (s, session) =>
+            // ✅ Создаём координатор сессий
+            Session = new SessionCoordinator(Settings);
+            Session.SessionIdChanged += (s, sessionId) =>
             {
-                CurrentSession = session;
-                LastStreamNumber = _streamSessionManager.LastStreamNumber;
+                _messageHandler?.SetSession(sessionId);
+                Debug.WriteLine($"[MainViewModel] Сессия установлена: {sessionId}");
             };
 
             LoadInitialData();
@@ -178,7 +174,6 @@ namespace SmithForge.ViewModels
 
             _soundPageService = new SoundPageService();
 
-            // ✅ Создаём координатор стикеров
             Stickers = new StickersCoordinator(_stickerPageService, _soundPageService);
 
             _infoService = new InfoService(_stickerPageService);
@@ -338,30 +333,12 @@ namespace SmithForge.ViewModels
                 Debug.WriteLine($"[MainViewModel] Ошибка запуска AlertsService: {ex.Message}");
             }
 
-            Debug.WriteLine($"[MainViewModel] ДО EnsureSessionByNumber: CurrentSession={CurrentSession?.Number}, LastStreamNumber={LastStreamNumber}");
-            int requestedNumber = CurrentSession?.Number ?? 0;
-            if (requestedNumber > 0)
-            {
-                _streamSessionManager.EnsureSessionByNumber(requestedNumber, n =>
-                {
-                    LastStreamNumber = n;
-                    Settings.LastStreamNumber = n;
-                    ConfigService.Save(Settings);
-                    Debug.WriteLine($"[MainViewModel] Установлен номер стрима: {n}");
-                });
-            }
+            Debug.WriteLine($"[MainViewModel] ДО EnsureSession: CurrentSession={Session.CurrentSession?.Number}, LastStreamNumber={Session.LastStreamNumber}");
 
-            if (_streamSessionManager.CurrentSession != null)
-            {
-                _messageHandler.SetSession(_streamSessionManager.CurrentSession.Id);
-                Debug.WriteLine($"[MainViewModel] Сессия установлена: {_streamSessionManager.CurrentSession.Id}");
-            }
-            else
-            {
-                Debug.WriteLine("[MainViewModel] ⚠️ CurrentSession == null, сессия НЕ установлена!");
-            }
+            int requestedNumber = Session.CurrentSession?.Number ?? 0;
+            Session.EnsureSession(requestedNumber);
 
-            Debug.WriteLine($"[MainViewModel] ПОСЛЕ EnsureSessionByNumber: CurrentSession={CurrentSession?.Number}, LastStreamNumber={LastStreamNumber}");
+            Debug.WriteLine($"[MainViewModel] ПОСЛЕ EnsureSession: CurrentSession={Session.CurrentSession?.Number}, LastStreamNumber={Session.LastStreamNumber}");
 
             var chatsToConnect = Chats.Where(c => !c.IsConnected).ToList();
             if (chatsToConnect.Any())
@@ -373,9 +350,9 @@ namespace SmithForge.ViewModels
             }
 
             IsProcessRunning = true;
-            _streamSessionManager.SetStartTime();
+            Session.SetStartTime();
 
-            Debug.WriteLine($"[MainViewModel] Стрим #{_streamSessionManager.CurrentSession?.Number} запущен");
+            Debug.WriteLine($"[MainViewModel] Стрим #{Session.CurrentSession?.Number} запущен");
         }
 
         [RelayCommand(CanExecute = nameof(CanStop))]
@@ -403,7 +380,7 @@ namespace SmithForge.ViewModels
 
             _pollingcts?.Cancel();
             await _chatService.StopAsync();
-            _streamSessionManager.SaveSessionEndTime();
+            Session.SaveSessionEndTime();
             IsProcessRunning = false;
 
             Debug.WriteLine("[MainViewModel] Stop() завершён");
