@@ -21,6 +21,7 @@ namespace SmithForge.Main.Services
 
         private readonly Dictionary<string, string> _infoPageCache = new();
         private readonly SseClientManager _infoManager = new("Info");
+        private readonly InfoStreamHandler _infoStreamHandler;
         private readonly object _infoPageCacheLock = new object();
         private readonly string _infoPagesDir;
 
@@ -77,6 +78,7 @@ namespace SmithForge.Main.Services
             EnsureInfoPagesExist();
 
             _chatStreamHandler = new ChatStreamHandler(_streamManager);
+            _infoStreamHandler = new InfoStreamHandler(_infoManager);
         }
 
         private void EnsureInfoPagesExist()
@@ -1308,28 +1310,9 @@ int durationSeconds)
 
         private async Task HandleInfoStreamRequestAsync(HttpListenerContext context)
         {
-            using var client = new SseClient(context, heartbeatIntervalMs: 15000);
-            Debug.WriteLine($"[WebServer] 📡 Info-клиент {client.Id} подключён");
-
-            _infoManager.Add(client);
-
-            try
-            {
-                // Приветственный пакет, чтобы браузер сразу понял, что соединение живое
-                //await client.SendAsync($"data: {{\"type\":\"hello\",\"ts\":\"{DateTime.Now:HH:mm:ss}\"}}\n\n");
-                await client.SendAsync(": ping\n\n");
-
-                // Ждём, пока клиент отключится ИЛИ сервер остановится (Dispose/Stop)
-                await client.WaitUntilClosedAsync(_cts?.Token ?? CancellationToken.None);
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine($"[WebServer] Info-клиент {client.Id} ошибка: {ex.Message}");
-            }
-            finally
-            {
-                _infoManager.Remove(client);
-            }
+            await _infoStreamHandler.HandleConnectionAsync(
+                context,
+                _cts?.Token ?? CancellationToken.None);
         }
 
         // Оставляем старый метод для обратной совместимости
