@@ -22,7 +22,6 @@ namespace SmithForge.ViewModels
 {
     public partial class MainViewModel : ObservableObject
     {
-
         [ObservableProperty]
         private string _karmaAmountText = "10";
 
@@ -31,25 +30,12 @@ namespace SmithForge.ViewModels
 
         [ObservableProperty]
         private int _scrollSpeed = 1500;
+
         [ObservableProperty]
         private double _appearSpeed = 0.3;
 
-        private InfoRotationService? _rotationService;
         private StickerPageService _stickerPageService;
         private SoundPageService _soundPageService;
-
-        [ObservableProperty]
-        private int _rotationTotalPages = 0;
-
-        [ObservableProperty]
-        private string _rotationStatus = "⏹ Остановлена";
-
-        [ObservableProperty]
-        private int _rotationSilentSeconds = 0;
-
-        [ObservableProperty]
-        private int _rotationShownPages = 0; // ← НОВОЕ СВОЙСТВО
-
 
         [ObservableProperty]
         private string _youTubeApiKey = string.Empty;
@@ -156,8 +142,6 @@ namespace SmithForge.ViewModels
 
         public TechOverlayService TechOverlay { get; }
 
-
-        // ✅ ДОБАВИТЬ:
         private WebServerService? _webServer;
         private bool _isWebServerRunning = false;
 
@@ -185,11 +169,9 @@ namespace SmithForge.ViewModels
             FolderManager.EnsureDirectoriesExist();
             Settings = ConfigService.Load();
 
-
             // ✅ ПРИНУДИТЕЛЬНО УСТАНАВЛИВАЕМ ПОРТ 10881 И СОХРАНЯЕМ
             Settings.NetworkPort = 10881;
             ConfigService.Save(Settings);
-
 
             // ✅ Инициализация оверлеев через сервис
             _overlayManager = new OverlayManagerService(Settings);
@@ -203,9 +185,6 @@ namespace SmithForge.ViewModels
             _webServer = new WebServerService((int)Settings.NetworkPort);
             // ✅ Фича: технический оверлей
             TechOverlay = new TechOverlayService(_webServer);
-
-            //Task.Run(async () => await StartWebServerAsync());
-
 
             // ============================================================
             // СИНХРОНИЗАЦИЯ НАСТРОЕК YOUTUBE ИЗ APP SETTINGS
@@ -319,12 +298,11 @@ namespace SmithForge.ViewModels
             Debug.WriteLine($"🎙️ [MainViewModel] СТАРТОВАЯ СКОРОСТЬ: {_voiceRate}");
             Debug.WriteLine($"🎙️ [MainViewModel] VoiceService.GetVoiceRate() = {VoiceService.GetVoiceRate()}");
 
-
             // ============================================================
             // ИНИЦИАЛИЗАЦИЯ РОТАЦИИ
             // ============================================================
             _stickerPageService = new StickerPageService();
-            _stickerPageService.ScanPacks();  // ← ДОБАВЛЕНО: заполняет _packNumberToId
+            _stickerPageService.ScanPacks();
 
             _soundPageService = new SoundPageService();
 
@@ -337,7 +315,6 @@ namespace SmithForge.ViewModels
 
             _rotationService = new InfoRotationService(_infoService, pagesDir);
             _rotationService.PageSelected += OnRotationPageSelected;
-            //_rotationService.Start(30);
 
             // Обновляем статус
             UpdateRotationStatus();
@@ -347,11 +324,11 @@ namespace SmithForge.ViewModels
             // ✅ Инициализация сервиса обработки сообщений
             var processor = new MessageProcessor(Settings, _infoService, _stickerPageService, _soundPageService);
             _messageHandler = new MessageHandlerService(
-    processor,
-    _overlayManager,
-    _dashboardService,
-    _mediaDashboardService,
-    _webServer);
+                processor,
+                _overlayManager,
+                _dashboardService,
+                _mediaDashboardService,
+                _webServer);
             _messageHandler.OnProcessed += OnMessageProcessed;
 
             LoadChats();
@@ -368,7 +345,6 @@ namespace SmithForge.ViewModels
 
                 if (_webServer != null)
                 {
-
                     // 2. Вызываем Dispose (закроет все SSE-соединения и остановит сервер)
                     _webServer.Dispose();
                     _webServer = null;
@@ -383,6 +359,7 @@ namespace SmithForge.ViewModels
                 Debug.WriteLine($"[MainViewModel] Ошибка завершения веб-сервера: {ex.Message}");
             }
         }
+
         // ============================================================
         // СИНХРОНИЗАЦИЯ НАСТРОЕК YOUTUBE - СОХРАНЕНИЕ ПРИ ИЗМЕНЕНИИ
         // ============================================================
@@ -474,8 +451,8 @@ namespace SmithForge.ViewModels
         private void OnAlertStatusChanged(object? sender, AlertStatus status)
         {
             Debug.WriteLine($"[MainViewModel] Статус алертов: {status}");
-            // Можно обновить UI-индикатор статуса, если нужно
         }
+
         public void SetImportantPlaybackMode(ImportantPlaybackMode mode)
         {
             if (!Application.Current.Dispatcher.CheckAccess())
@@ -572,7 +549,6 @@ namespace SmithForge.ViewModels
         }
 
         [RelayCommand(CanExecute = nameof(CanStart))]
-
         private async Task Start()
         {
             Debug.WriteLine("[MainViewModel] Start() вызван");
@@ -604,7 +580,6 @@ namespace SmithForge.ViewModels
             {
                 Debug.WriteLine($"[MainViewModel] Ошибка запуска AlertsService: {ex.Message}");
             }
-
 
             Debug.WriteLine($"[MainViewModel] ДО EnsureSessionByNumber: CurrentSession={CurrentSession?.Number}, LastStreamNumber={LastStreamNumber}");
             // ✅ 4. УСТАНОВКА СЕССИИ
@@ -647,7 +622,6 @@ namespace SmithForge.ViewModels
 
             Debug.WriteLine($"[MainViewModel] Стрим #{_streamSessionManager.CurrentSession?.Number} запущен");
         }
-
 
         [RelayCommand(CanExecute = nameof(CanStop))]
         private async Task Stop()
@@ -706,7 +680,6 @@ namespace SmithForge.ViewModels
 
         public void SaveAlertsPosition() => _overlayManager.SaveAllPositions(Settings);
 
-
         // ============================================================
         // УПРАВЛЕНИЕ ОЧЕРЕДЬЮ ВАЖНЫХ СООБЩЕНИЙ
         // ============================================================
@@ -745,7 +718,6 @@ namespace SmithForge.ViewModels
         [RelayCommand]
         private void ToggleDashboard()
         {
-            // ✅ Инициализируем сервис (один раз)
             _dashboardService.Initialize();
 
             if (_dashboardService.IsVisible)
@@ -764,6 +736,7 @@ namespace SmithForge.ViewModels
             else
                 _mediaDashboardService.Show();
         }
+
         [RelayCommand]
         private void ToggleTechOverlay()
         {
@@ -834,10 +807,8 @@ namespace SmithForge.ViewModels
                 {
                     Debug.WriteLine("[MainViewModel] Настройки алертов сохранены, перезапускаем AlertsService...");
 
-                    // Перезапускаем сервис с новыми настройками
                     await _alertsService.StartAsync(Settings);
 
-                    // Обновляем видимость оверлея
                     _overlayManager.SetAlertsVisible(Settings.AlertsOverlayVisible);
                     _overlayManager.SetAlertsDuration(Settings.AlertsAlertDuration);
                 }
@@ -852,7 +823,6 @@ namespace SmithForge.ViewModels
         [RelayCommand]
         private async Task AddKarmaToAll()
         {
-            // 1. Парсим число из текстового поля
             if (!int.TryParse(KarmaAmountText?.Trim(), out int amount))
             {
                 MessageBox.Show("Введите целое число", "Ошибка",
@@ -874,7 +844,6 @@ namespace SmithForge.ViewModels
                 return;
             }
 
-            // 2. Подтверждение
             var allChaters = ChaterStorage.GetAll();
 
             var result = MessageBox.Show(
@@ -885,7 +854,6 @@ namespace SmithForge.ViewModels
 
             if (result != MessageBoxResult.Yes) return;
 
-            // 3. Начисление
             try
             {
                 int count = 0;
@@ -902,7 +870,6 @@ namespace SmithForge.ViewModels
                 LastMessageText = $"✅ Начислено {amount} кармы {count} зрителям!";
                 Debug.WriteLine($"[Karma] Начислено {amount} кармы {count} пользователям");
 
-                // ✅ Отправляем техническое событие
                 TechOverlay?.Emit(TechEventFactory.KarmaGrant(amount, count));
 
                 await VoiceService.PlayImportantSoundAsync();
@@ -915,7 +882,6 @@ namespace SmithForge.ViewModels
                     MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
-
 
         [RelayCommand]
         private async Task SendYouTubeMessage(string message)
@@ -941,7 +907,6 @@ namespace SmithForge.ViewModels
         {
             if (chat == null) return;
 
-            // Для ручного режима проверяем Video ID
             if (chat.Platform.ToLower() == "youtube" &&
                 chat.PreferredMethod == YouTubeConnectionMethod.ManualVideoId)
             {
@@ -965,7 +930,6 @@ namespace SmithForge.ViewModels
                 }
             }
 
-            // ✅ Добавляем ConfigureAwait(false) чтобы не блокировать UI поток
             await _chatConnectionService.ConnectChat(chat, (name, connected, count) =>
             {
                 chat.Status = name == chat.ChatName ? (connected ? "✅ Подключен" : "❌ Ошибка") : chat.Status;
@@ -1016,7 +980,6 @@ namespace SmithForge.ViewModels
                 return;
             }
 
-            // Устанавливаем метод подключения на ManualVideoId
             chat.PreferredMethod = YouTubeConnectionMethod.ManualVideoId;
 
             await _chatConnectionService.ConnectChat(chat, (name, connected, count) =>
@@ -1051,8 +1014,6 @@ namespace SmithForge.ViewModels
 
         private void LoadChats()
         {
-
-            // Подписываемся на события
             foreach (var chat in Chats)
             {
                 chat.ConnectRequested += OnChatConnectRequested;
@@ -1121,6 +1082,7 @@ namespace SmithForge.ViewModels
 
             Debug.WriteLine("[MainViewModel] Все чаты обработаны");
         }
+
         [RelayCommand]
         private async Task StopAllChats()
         {
@@ -1159,14 +1121,11 @@ namespace SmithForge.ViewModels
                 await DisconnectChat(chat);
             }
 
-            // Используем существующий _chatManager с общей коллекцией
-            // _chatManager = new ChatManagerViewModel(Chats, _chatConnectionService);
             Chats.CollectionChanged += (s, e) => UpdateStats();
             UpdateStats();
         }
 
         public ChatManagerViewModel GetChatManagerViewModel() => _chatManager;
-
 
         // ============================================================
         // ВЕБ-СЕРВЕР ДЛЯ OBS
@@ -1217,7 +1176,6 @@ namespace SmithForge.ViewModels
                 _ => 3
             };
 
-            // Просто присваиваем свойство — вся логика в OnVoiceRateChanged
             VoiceRate = Math.Clamp(value, -10, 10);
         }
 
@@ -1232,7 +1190,6 @@ namespace SmithForge.ViewModels
 
         partial void OnScrollSpeedChanged(int value)
         {
-            // Отправляем новую скорость на сервер
             _ = SendScrollSpeed(value);
         }
 
@@ -1278,102 +1235,6 @@ namespace SmithForge.ViewModels
             }
         }
 
-        // ============================================================
-        // ОБРАБОТЧИК СОБЫТИЙ
-        // ============================================================
-
-        private void OnRotationPageSelected(object? sender, string pageName)
-        {
-            try
-            {
-                var webServer = WebServerService.Instance;
-                if (webServer != null && _infoService != null)
-                {
-                    var html = _infoService.Render(pageName, "system");
-                    webServer.SendInfoMessage(html, pageName);
-                }
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine($"[Rotation] ❌ Ошибка: {ex.Message}");
-            }
-        }
-
-        // ============================================================
-        // КОМАНДЫ ДЛЯ UI
-        // ============================================================
-
-        [RelayCommand]
-        private void RotationStart()
-        {
-            _rotationService?.Start(RotationSilenceInterval);
-            UpdateRotationStatus();
-        }
-
-        [RelayCommand]
-        private void RotationStop()
-        {
-            _rotationService?.Stop();
-            UpdateRotationStatus();
-        }
-
-        [RelayCommand]
-        private void RotationRefreshPages()
-        {
-            _rotationService?.RefreshPagesList();
-            UpdateRotationStatus();
-        }
-
-        [RelayCommand]
-        private void RotationActivity()
-        {
-            _rotationService?.OnUserActivity();
-            UpdateRotationStatus();
-        }
-
-        // ============================================================
-        // СВОЙСТВА ДЛЯ UI
-        // ============================================================
-
-        [ObservableProperty]
-        private int _rotationSilenceInterval = 30;
-
-        partial void OnRotationSilenceIntervalChanged(int value)
-        {
-            _rotationService?.SetSilenceInterval(value);
-        }
-
-
-
-        private void UpdateRotationStatus()
-        {
-            var status = _rotationService?.GetStatus();
-            if (status == null) return;
-
-            RotationTotalPages = status.TotalPages;
-            RotationShownPages = status.ShownPages; // ← добавить эту строку
-            RotationSilentSeconds = status.SilentSeconds;
-
-            if (!status.IsRunning)
-            {
-                RotationStatus = "⏹ Остановлена";
-            }
-            else if (status.IsWaitingForSilence)
-            {
-                RotationStatus = "📢 Показ страницы...";
-            }
-            else
-            {
-                RotationStatus = $"🔇 Тишина: {status.SilentSeconds}с / {status.SilenceIntervalSeconds}с";
-            }
-        }
-
-        public void NotifyUserActivity()
-        {
-            _rotationService?.OnUserActivity();
-            UpdateRotationStatus();
-        }
-
         [ObservableProperty]
         private string _stickerPagesStatus = "Готово";
 
@@ -1403,7 +1264,6 @@ namespace SmithForge.ViewModels
             }
         }
 
-        // Команда для UI
         [ObservableProperty]
         private string _soundPagesStatus = "Готово";
 
