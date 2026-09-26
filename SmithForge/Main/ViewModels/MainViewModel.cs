@@ -56,12 +56,17 @@ namespace SmithForge.ViewModels
 
         private InfoService _infoService;
 
+        // ✅ Сервисы, нужные в конструкторе
+        private StickerPageService _stickerPageService;
+        private SoundPageService _soundPageService;
+
         // ============================================================
         // КООРДИНАТОРЫ
         // ============================================================
         public InfoRotationCoordinator InfoRotation { get; private set; } = null!;
         public AudioSettingsCoordinator AudioSettings { get; private set; } = null!;
         public YouTubeSettingsCoordinator YouTube { get; private set; } = null!;
+        public StickersCoordinator Stickers { get; private set; } = null!;
 
         public MainViewModel()
         {
@@ -172,6 +177,9 @@ namespace SmithForge.ViewModels
             _stickerPageService.ScanPacks();
 
             _soundPageService = new SoundPageService();
+
+            // ✅ Создаём координатор стикеров
+            Stickers = new StickersCoordinator(_stickerPageService, _soundPageService);
 
             _infoService = new InfoService(_stickerPageService);
 
@@ -404,10 +412,6 @@ namespace SmithForge.ViewModels
         [RelayCommand]
         private void SaveSettings() => _settingsService.SaveSettings();
 
-        /// <summary>
-        /// Уведомить систему ротации об активности пользователя.
-        /// Делегируется в InfoRotationCoordinator.
-        /// </summary>
         public void NotifyUserActivity()
         {
             InfoRotation?.NotifyUserActivity();

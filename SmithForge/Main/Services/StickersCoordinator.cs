@@ -1,19 +1,18 @@
 ﻿using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using SmithForge.Features.InfoSystem;
-using SmithForge.Main.Services;
 using System;
 using System.Diagnostics;
 
-namespace SmithForge.ViewModels
+namespace SmithForge.Main.Services
 {
-    public partial class MainViewModel
+    /// <summary>
+    /// Координатор генерации страниц стикеров и звуков.
+    /// </summary>
+    public partial class StickersCoordinator : ObservableObject
     {
-        // ============================================================
-        // СЕРВИСЫ СТИКЕРОВ И ЗВУКОВ
-        // ============================================================
-        private StickerPageService _stickerPageService;
-        private SoundPageService _soundPageService;
+        private readonly StickerPageService _stickerPageService;
+        private readonly SoundPageService _soundPageService;
 
         // ============================================================
         // СТАТУСЫ ГЕНЕРАЦИИ
@@ -25,7 +24,18 @@ namespace SmithForge.ViewModels
         private string _soundPagesStatus = "Готово";
 
         // ============================================================
-        // КОМАНДЫ ГЕНЕРАЦИИ
+        // КОНСТРУКТОР
+        // ============================================================
+        public StickersCoordinator(
+            StickerPageService stickerPageService,
+            SoundPageService soundPageService)
+        {
+            _stickerPageService = stickerPageService ?? throw new ArgumentNullException(nameof(stickerPageService));
+            _soundPageService = soundPageService ?? throw new ArgumentNullException(nameof(soundPageService));
+        }
+
+        // ============================================================
+        // КОМАНДЫ
         // ============================================================
         [RelayCommand]
         private void GenerateStickerPages()
