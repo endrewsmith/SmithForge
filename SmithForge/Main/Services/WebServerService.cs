@@ -39,8 +39,7 @@ namespace SmithForge.Main.Services
         private readonly SseClientManager _streamManager = new("Stream");
 
         // === Alerts Overlay (веб-оверлей алертов) ===
-        private readonly List<SseClient> _alertsStreamClients = new();
-        private readonly object _alertsLock = new object();
+        private readonly SseClientManager _alertsManager = new("Alerts");
 
         // === Tech events stream (/tech/stream) ===
         private readonly SseClientManager _techManager = new("Tech");
@@ -1058,10 +1057,7 @@ namespace SmithForge.Main.Services
             using var client = new SseClient(context, heartbeatIntervalMs: 15000);
             Debug.WriteLine($"[WebServer] 🔔 Alerts-клиент {client.Id} подключён");
 
-            lock (_alertsLock)
-            {
-                _alertsStreamClients.Add(client);
-            }
+            _alertsManager.Add(client);
 
             try
             {
@@ -1078,11 +1074,7 @@ namespace SmithForge.Main.Services
             }
             finally
             {
-                lock (_alertsLock)
-                {
-                    _alertsStreamClients.Remove(client);
-                }
-                Debug.WriteLine($"[WebServer] 🔔 Alerts-клиент {client.Id} отключён. Осталось: {_alertsStreamClients.Count}");
+                _alertsManager.Remove(client);
             }
         }
 
@@ -1140,12 +1132,12 @@ namespace SmithForge.Main.Services
         /// Отправить алерт в веб-оверлей /alerts (SSE)
         /// </summary>
         public void SendAlertToWeb(
-     string userName,
-     string message,
-     string displayAmount,
-     string providerType,
-     string providerName,
-     int durationSeconds)
+string userName,
+string message,
+string displayAmount,
+string providerType,
+string providerName,
+int durationSeconds)
         {
             var payload = new
             {
@@ -1165,37 +1157,15 @@ namespace SmithForge.Main.Services
             var json = System.Text.Json.JsonSerializer.Serialize(payload);
             var data = $"data: {json}\n\n";
 
-            List<SseClient> snapshot;
-            lock (_alertsLock)
+            if (_alertsManager.Count == 0)
             {
-                if (_alertsStreamClients.Count == 0)
-                {
-                    Debug.WriteLine("[WebServer] 🔔 Алерт сформирован, но нет активных alerts-клиентов");
-                    return;
-                }
-                snapshot = new List<SseClient>(_alertsStreamClients);
+                Debug.WriteLine("[WebServer] 🔔 Алерт сформирован, но нет активных alerts-клиентов");
+                return;
             }
 
-            var dead = new List<SseClient>();
-            foreach (var client in snapshot)
-            {
-                if (!client.Send(data))
-                {
-                    dead.Add(client);
-                }
-            }
+            _alertsManager.Broadcast(data);
 
-            if (dead.Count > 0)
-            {
-                lock (_alertsLock)
-                {
-                    foreach (var d in dead) _alertsStreamClients.Remove(d);
-                }
-                foreach (var d in dead) d.Dispose();
-                Debug.WriteLine($"[WebServer] 🧹 Удалено {dead.Count} мёртвых alerts-клиентов");
-            }
-
-            Debug.WriteLine($"[WebServer] 🔔 Алерт отправлен ({_alertsStreamClients.Count} клиентов): {userName} - {displayAmount}");
+            Debug.WriteLine($"[WebServer] 🔔 Алерт отправлен ({_alertsManager.Count} клиентов): {userName} - {displayAmount}");
         }
 
 
@@ -1244,20 +1214,7 @@ namespace SmithForge.Main.Services
         /// </summary>
         public void CloseAllAlertsConnections()
         {
-            List<SseClient> toClose;
-
-            lock (_alertsLock)
-            {
-                toClose = new List<SseClient>(_alertsStreamClients);
-                _alertsStreamClients.Clear();
-            }
-
-            foreach (var client in toClose)
-            {
-                client.Dispose();
-            }
-
-            Debug.WriteLine($"[WebServer] Все alerts-клиенты закрыты ({toClose.Count})");
+            _alertsManager.CloseAll();
         }
         public void Dispose()
         {
