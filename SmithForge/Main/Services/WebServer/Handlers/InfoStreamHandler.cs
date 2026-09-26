@@ -48,5 +48,30 @@ namespace SmithForge.Main.Services.WebServer.Handlers
                 _infoManager.Remove(client);
             }
         }
+
+        /// <summary>
+        /// Текущее количество подключённых клиентов.
+        /// </summary>
+        public int Count => _infoManager.Count;
+
+        /// <summary>
+        /// Уведомить клиентов о смене страницы.
+        /// </summary>
+        public async Task NotifyInfoClients(string pageName)
+        {
+            if (_infoManager.Count == 0) return;
+
+            var json = $"{{\"type\":\"page_update\",\"page\":\"{pageName}\"}}";
+            var data = $"data: {json}\n\n";
+            await NotifyInfoClientsRaw(data);
+        }
+
+        /// <summary>
+        /// Отправить произвольные SSE-данные всем info-клиентам.
+        /// </summary>
+        public async Task NotifyInfoClientsRaw(string data)
+        {
+            await _infoManager.BroadcastAsync(data);
+        }
     }
 }

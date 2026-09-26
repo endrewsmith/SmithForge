@@ -1314,21 +1314,16 @@ int durationSeconds)
                 context,
                 _cts?.Token ?? CancellationToken.None);
         }
-
         // Оставляем старый метод для обратной совместимости
         private async Task NotifyInfoClients(string pageName)
         {
-            if (_infoManager.Count == 0) return;
-
-            var json = $"{{\"type\":\"page_update\",\"page\":\"{pageName}\"}}";
-            var data = $"data: {json}\n\n";
-            await NotifyInfoClientsRaw(data);
+            await _infoStreamHandler.NotifyInfoClients(pageName);
         }
 
         // ✅ НОВЫЙ МЕТОД: отправка произвольных данных
         private async Task NotifyInfoClientsRaw(string data)
         {
-            await _infoManager.BroadcastAsync(data);
+            await _infoStreamHandler.NotifyInfoClientsRaw(data);
         }
 
         private string InjectInfoNavigation(string html, string pageName)
