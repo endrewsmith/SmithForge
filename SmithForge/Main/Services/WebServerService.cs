@@ -1411,20 +1411,7 @@ int durationSeconds)
         /// </summary>
         public void SendInfoMessage(string html, string pageName)
         {
-            var json = new
-            {
-                type = "info_message",
-                pageName = pageName,
-                html = html,
-                timestamp = DateTime.Now.ToString("HH:mm:ss")
-            };
-
-            var jsonStr = System.Text.Json.JsonSerializer.Serialize(json);
-            var data = $"data: {jsonStr}\n\n";
-
-            _ = NotifyInfoClientsRaw(data);
-
-            Debug.WriteLine($"[WebServer] 📡 Отправлено info_message: {pageName}");
+            _infoStreamHandler.SendInfoMessage(html, pageName);
         }
 
         public void ClearImageCache()
