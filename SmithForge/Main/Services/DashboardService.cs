@@ -6,7 +6,7 @@ using System.Windows;
 
 namespace SmithForge.Main.Services
 {
-    class DashboardService
+    public class DashboardService
     {
         private DashboardWindow? _window;
         private DashboardViewModel? _viewModel;

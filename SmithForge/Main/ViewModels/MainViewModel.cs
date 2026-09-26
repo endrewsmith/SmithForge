@@ -68,6 +68,7 @@ namespace SmithForge.ViewModels
         public StickersCoordinator Stickers { get; private set; } = null!;
         public SessionCoordinator Session { get; private set; } = null!;
         public AlertsCoordinator Alerts { get; private set; } = null!;
+        public OverlayTogglesCoordinator Overlays { get; private set; } = null!;
 
         public MainViewModel()
         {
@@ -91,26 +92,29 @@ namespace SmithForge.ViewModels
 
             Alerts = new AlertsCoordinator(_settingsService, _overlayManager, _webServer, Settings);
 
-            _isOverlaySetupMode = Settings.IsOverlaySetupMode;
-            _isOverlayHidden = Settings.IsOverlayHidden;
-            _isStickersVisible = Settings.IsStickersVisible;
-            DatabaseService.Initialize();
+            Overlays = new OverlayTogglesCoordinator(
+                _settingsService,
+                _overlayManager,
+                _dashboardService,
+                _mediaDashboardService,
+                TechOverlay,
+                Settings);
 
-            _mainChatMode = Settings.MainChatMode;
-            _shortsChatMode = Settings.ShortsChatMode;
-            _importantChatMode = Settings.ImportantChatMode;
-            _stickersChatMode = Settings.StickersChatMode;
+            // Подписка на событие сохранения позиций
+            Overlays.PositionsSaved += (s, e) => LastMessageText = "✅ Позиции окон сохранены";
+
+            DatabaseService.Initialize();
 
             StickerManager.LoadPacks();
 
             _overlayManager.Initialize(
-                IsOverlaySetupMode,
-                IsOverlayHidden,
-                IsStickersVisible,
-                MainChatMode,
-                ShortsChatMode,
-                ImportantChatMode,
-                StickersChatMode,
+                Overlays.IsOverlaySetupMode,
+                Overlays.IsOverlayHidden,
+                Overlays.IsStickersVisible,
+                Overlays.MainChatMode,
+                Overlays.ShortsChatMode,
+                Overlays.ImportantChatMode,
+                Overlays.StickersChatMode,
                 Alerts.ImportantPlaybackMode,
                 AudioSettings.ImportantSoundVolume,
                 AudioSettings.VoiceVolume,
@@ -415,6 +419,14 @@ namespace SmithForge.ViewModels
         {
             Alerts?.SavePosition();
         }
+
+        // ============================================================
+        // СОХРАНЕНИЕ ПОЗИЦИЙ (делегируется в OverlayTogglesCoordinator)
+        // ============================================================
+        public void SaveOverlayPosition() => Overlays?.SaveAllPositions();
+        public void SaveShortsPosition() => Overlays?.SaveAllPositions();
+        public void SaveImportantPosition() => Overlays?.SaveAllPositions();
+        public void SaveStickersPosition() => Overlays?.SaveAllPositions();
 
         private void OnProcessExited() => Application.Current.Dispatcher.Invoke(() => { IsProcessRunning = false; });
         private bool CanStart() => !IsProcessRunning;

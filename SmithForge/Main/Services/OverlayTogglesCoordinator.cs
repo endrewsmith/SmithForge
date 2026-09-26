@@ -3,15 +3,26 @@ using CommunityToolkit.Mvvm.Input;
 using SmithForge.Features.TechOverlay;
 using SmithForge.Main.Models;
 using SmithForge.Main.Models.ChatModes;
-using SmithForge.Main.Services;
+using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 
-namespace SmithForge.ViewModels
+namespace SmithForge.Main.Services
 {
-    public partial class MainViewModel
+    /// <summary>
+    /// Координатор переключения оверлеев и режимов отображения.
+    /// </summary>
+    public partial class OverlayTogglesCoordinator : ObservableObject
     {
+        private readonly SettingsService _settingsService;
+        private readonly OverlayManagerService _overlayManager;
+        private readonly DashboardService _dashboardService;
+        private readonly SmithForge.Features.MediaDashboard.MediaDashboardService _mediaDashboardService;
+        private readonly TechOverlayService? _techOverlay;
+        private readonly AppSettings _settings;
+
         // ============================================================
-        // ПОЛЯ ОВЕРЛЕЕВ
+        // СВОЙСТВА
         // ============================================================
         [ObservableProperty]
         private bool _isOverlaySetupMode = true;
@@ -22,9 +33,6 @@ namespace SmithForge.ViewModels
         [ObservableProperty]
         private bool _isStickersVisible = true;
 
-        // ============================================================
-        // РЕЖИМЫ ОТОБРАЖЕНИЯ ЧАТОВ
-        // ============================================================
         [ObservableProperty]
         private ChatDisplayMode _mainChatMode = ChatDisplayMode.AppearAndFade;
 
@@ -40,10 +48,45 @@ namespace SmithForge.ViewModels
         public List<SmithForge.Main.Models.ChatDisplayModeInfo> AvailableModes { get; } = ChatDisplayModeFactory.GetAvailableModes();
 
         // ============================================================
+        // СОБЫТИЯ
+        // ============================================================
+        public event EventHandler? PositionsSaved;
+
+        // ============================================================
+        // КОНСТРУКТОР
+        // ============================================================
+        public OverlayTogglesCoordinator(
+            SettingsService settingsService,
+            OverlayManagerService overlayManager,
+            DashboardService dashboardService,
+            SmithForge.Features.MediaDashboard.MediaDashboardService mediaDashboardService,
+            TechOverlayService? techOverlay,
+            AppSettings settings)
+        {
+            _settingsService = settingsService ?? throw new ArgumentNullException(nameof(settingsService));
+            _overlayManager = overlayManager ?? throw new ArgumentNullException(nameof(overlayManager));
+            _dashboardService = dashboardService ?? throw new ArgumentNullException(nameof(dashboardService));
+            _mediaDashboardService = mediaDashboardService ?? throw new ArgumentNullException(nameof(mediaDashboardService));
+            _techOverlay = techOverlay;
+            _settings = settings ?? throw new ArgumentNullException(nameof(settings));
+
+            // Загружаем начальные значения
+            _isOverlaySetupMode = settings.IsOverlaySetupMode;
+            _isOverlayHidden = settings.IsOverlayHidden;
+            _isStickersVisible = settings.IsStickersVisible;
+            _mainChatMode = settings.MainChatMode;
+            _shortsChatMode = settings.ShortsChatMode;
+            _importantChatMode = settings.ImportantChatMode;
+            _stickersChatMode = settings.StickersChatMode;
+        }
+
+        // ============================================================
         // СИНХРОНИЗАЦИЯ С НАСТРОЙКАМИ
         // ============================================================
         partial void OnIsOverlaySetupModeChanged(bool oldValue, bool newValue)
-            => _settingsService.SetOverlaySetupMode(newValue, () => LastMessageText = "✅ Позиции окон сохранены");
+        {
+            _settingsService.SetOverlaySetupMode(newValue, () => PositionsSaved?.Invoke(this, EventArgs.Empty));
+        }
 
         partial void OnIsOverlayHiddenChanged(bool oldValue, bool newValue)
             => _settingsService.SetOverlayHidden(newValue);
@@ -64,7 +107,7 @@ namespace SmithForge.ViewModels
             => _settingsService.SetStickersChatMode(value);
 
         // ============================================================
-        // КОМАНДЫ ПЕРЕКЛЮЧЕНИЯ ОВЕРЛЕЕВ
+        // КОМАНДЫ ПЕРЕКЛЮЧЕНИЯ
         // ============================================================
         [RelayCommand]
         private void ToggleDashboard()
@@ -91,7 +134,7 @@ namespace SmithForge.ViewModels
         [RelayCommand]
         private void ToggleTechOverlay()
         {
-            TechOverlay?.Toggle();
+            _techOverlay?.Toggle();
         }
 
         [RelayCommand]
@@ -115,9 +158,9 @@ namespace SmithForge.ViewModels
         // ============================================================
         // СОХРАНЕНИЕ ПОЗИЦИЙ
         // ============================================================
-        public void SaveOverlayPosition() => _overlayManager.SaveAllPositions(Settings);
-        public void SaveShortsPosition() => _overlayManager.SaveAllPositions(Settings);
-        public void SaveImportantPosition() => _overlayManager.SaveAllPositions(Settings);
-        public void SaveStickersPosition() => _overlayManager.SaveAllPositions(Settings);
+        public void SaveAllPositions()
+        {
+            _overlayManager.SaveAllPositions(_settings);
+        }
     }
 }

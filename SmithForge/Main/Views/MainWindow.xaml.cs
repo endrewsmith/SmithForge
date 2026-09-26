@@ -230,7 +230,7 @@ namespace SmithForge.Main.Views
                 vm.Settings.WindowLeft = this.Left;
                 vm.Settings.WindowHeight = this.Height;
                 vm.Settings.WindowWidth = this.Width;
-                vm.Settings.IsOverlaySetupMode = vm.IsOverlaySetupMode;
+                vm.Settings.IsOverlaySetupMode = vm.Overlays.IsOverlaySetupMode;
 
                 vm.SaveOverlayPosition();
                 vm.SaveShortsPosition();
@@ -285,21 +285,23 @@ namespace SmithForge.Main.Views
         {
             if (DataContext is SmithForge.ViewModels.MainViewModel vm)
             {
-                vm.ToggleDashboardCommand?.Execute(null);
+                vm.Overlays?.ToggleDashboardCommand?.Execute(null);
             }
         }
+
         private void ToggleMediaDashboard_Click(object sender, RoutedEventArgs e)
         {
             if (DataContext is SmithForge.ViewModels.MainViewModel vm)
             {
-                vm.ToggleMediaDashboardCommand?.Execute(null);
+                vm.Overlays?.ToggleMediaDashboardCommand?.Execute(null);
             }
         }
+
         private void ToggleTechOverlay_Click(object sender, RoutedEventArgs e)
         {
             if (DataContext is SmithForge.ViewModels.MainViewModel vm)
             {
-                vm.ToggleTechOverlayCommand?.Execute(null);
+                vm.Overlays?.ToggleTechOverlayCommand?.Execute(null);
             }
         }
 
@@ -322,7 +324,7 @@ namespace SmithForge.Main.Views
         {
             if (DataContext is SmithForge.ViewModels.MainViewModel vm)
             {
-                vm.ToggleShortsOverlayCommand.Execute(null);
+                vm.Overlays?.ToggleShortsOverlayCommand?.Execute(null);
             }
         }
 
@@ -330,7 +332,7 @@ namespace SmithForge.Main.Views
         {
             if (DataContext is SmithForge.ViewModels.MainViewModel vm)
             {
-                vm.ToggleImportantOverlayCommand?.Execute(null);
+                vm.Overlays?.ToggleImportantOverlayCommand?.Execute(null);
             }
         }
 
@@ -338,7 +340,7 @@ namespace SmithForge.Main.Views
         {
             if (DataContext is SmithForge.ViewModels.MainViewModel vm)
             {
-                vm.ToggleStickersOverlayCommand.Execute(null);
+                vm.Overlays?.ToggleStickersOverlayCommand?.Execute(null);
             }
         }
 
