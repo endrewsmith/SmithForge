@@ -106,7 +106,7 @@ namespace SmithForge.Main.Services
 
                 // Получаем CSS асинхронно или из кэша (если переписали по прошлым советам)
                 // Так как метод синхронный, используем .GetAwaiter().GetResult() для Task-метода
-                var rankCss = GetRankCssContent(chater.Rank).GetAwaiter().GetResult();
+                var rankCss = _chatStreamHandler.GetRankCssContent(chater.Rank).GetAwaiter().GetResult();
 
                 var updateData = new
                 {
@@ -116,10 +116,10 @@ namespace SmithForge.Main.Services
                     messageText = "", // Текста нет
                     avatarPath = avatarPath,
                     userRank = chater.Rank,
-                    rankDisplay = GetRankDisplay(chater.Rank),
-                    rankClass = GetRankClass(chater.Rank),
+                    rankDisplay = _chatStreamHandler.GetRankDisplay(chater.Rank),
+                    rankClass = _chatStreamHandler.GetRankClass(chater.Rank),
                     rankCss = rankCss,
-                    rankTemplate = GetRankTemplate(chater.Rank),
+                    rankTemplate = _chatStreamHandler.GetRankTemplate(chater.Rank),
                     karmaKey = chater.KarmaKeyDisplay,
                     karma = chater.KarmaDisplay,
                     messageCount = chater.MessageCount,
@@ -786,46 +786,7 @@ namespace SmithForge.Main.Services
         /// </summary>
         public void BroadcastChatMessage(DisplayMessageViewModel msg)
         {
-            if (msg == null) return;
-
-            string json;
-            try
-            {
-                string formattedText = GetFormattedMessageForWeb(msg.MessageText);
-
-                var rankTemplate = GetRankTemplate(msg.UserRank);
-                var rankCss = GetRankCssContent(msg.UserRank).GetAwaiter().GetResult();
-
-                json = JsonSerializer.Serialize(new
-                {
-                    type = "chat_message",
-                    id = msg.Id,
-                    displayName = msg.DisplayName,
-                    messageText = formattedText,
-                    formattedMessage = formattedText,
-                    userRank = msg.UserRank,
-                    rankDisplay = GetRankDisplay(msg.UserRank),
-                    rankClass = GetRankClass(msg.UserRank),
-                    rankCss = rankCss,
-                    rankTemplate = rankTemplate,
-                    avatarPath = msg.AvatarPath,
-                    timestamp = DateTime.Now.ToString("HH:mm:ss"),
-                    karmaKey = msg.User?.KarmaKeyDisplay ?? "",
-                    karma = msg.User?.KarmaDisplay ?? "",
-                    messageNumber = msg.MessageNumber,
-                    messageCount = msg.MessageCount,
-                    likes = GetLikesCountForMessage(msg.MessageNumber),
-                    dislikes = GetDislikesCountForMessage(msg.MessageNumber),
-                    platform = msg.Type?.ToLower() ?? "twitch"
-                });
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine($"[WebServer] Ошибка формирования chat_message JSON: {ex.Message}");
-                return;
-            }
-
-            BroadcastRawSse($"data: {json}\n\n");
+            _chatStreamHandler.BroadcastChatMessage(msg);
         }
 
         private int GetLikesCountForMessage(int messageNumber)
@@ -1663,7 +1624,7 @@ int durationSeconds)
         /// </summary>
         public void CloseAllStreamConnections()
         {
-            _streamManager.CloseAll();
+            _chatStreamHandler.CloseAll();
         }
 
         /// <summary>
