@@ -18,17 +18,16 @@ namespace SmithForge.Features.InfoSystem
         private readonly string _pagesDir;
         private readonly string _defaultPage = "help";
         private static readonly object _cacheLock = new object();
+        private readonly StickerPageService? _stickerPageService;
 
-        public InfoService()
+        public InfoService(StickerPageService? stickerPageService = null)
         {
+            _stickerPageService = stickerPageService;
             _pagesDir = Path.Combine(
-                AppDomain.CurrentDomain.BaseDirectory,
-                "SF_Data", "InfoWeb", "Pages");
+                 AppDomain.CurrentDomain.BaseDirectory,
+                 "Html", "InfoPages");
 
-            Directory.CreateDirectory(_pagesDir);
-
-            // Создаём дефолтную страницу если её нет
-            EnsureDefaultPagesExist();
+            Debug.WriteLine($"[InfoService] Pages dir: {_pagesDir}");
         }
 
         // ========== ПУБЛИЧНЫЙ API ==========
@@ -40,7 +39,73 @@ namespace SmithForge.Features.InfoSystem
 
             if (string.IsNullOrEmpty(pagePath))
                 pagePath = "help";
+            if (pagePath.StartsWith("stickers/", StringComparison.OrdinalIgnoreCase))
+            {
+                string suffix = pagePath.Substring("stickers/".Length);
 
+                // Если суффикс — чистое число (например, "86"), разрешаем в полное имя папки
+                if (int.TryParse(suffix, out int packNumber))
+                {
+                    var packId = _stickerPageService?.GetPackIdByNumber(packNumber);
+
+                    if (!string.IsNullOrEmpty(packId))
+                    {
+                        Debug.WriteLine($"[InfoService] 🔄 stickers/{packNumber} → stickers/{packId}");
+                        pagePath = $"stickers/{packId}";
+                    }
+                    else
+                    {
+                        Debug.WriteLine($"[InfoService] ⚠️ Пак с номером {packNumber} не найден");
+                    }
+                }
+            }
+
+            // ============================================================
+            // ✅ РЕЗОЛВ КОРОТКИХ ИМЁН: profile → 01_profile
+            // Ищем в корне InfoPages файл вида NN_<pagePath>.html
+            // ============================================================
+            if (!pagePath.Contains("/") && !pagePath.Contains("\\") && !pagePath.Contains(":"))
+            {
+                var directFile = Path.Combine(_pagesDir, pagePath + ".html");
+
+                if (!File.Exists(directFile))
+                {
+                    // Ищем файл с префиксом NN_: "01_profile.html", "02_profile.html"
+                    var candidates = Directory.GetFiles(_pagesDir, $"*_{pagePath}.html");
+
+                    if (candidates.Length > 0)
+                    {
+                        string fileName = Path.GetFileNameWithoutExtension(candidates[0]);
+                        Debug.WriteLine($"[InfoService] 🔄 {pagePath} → {fileName}");
+                        pagePath = fileName;
+                    }
+                    else
+                    {
+                        Debug.WriteLine($"[InfoService] ⚠️ Короткое имя '{pagePath}' не разрезолвилось (нет NN_{pagePath}.html)");
+                    }
+                }
+            }
+
+            // ============================================================
+            // ✅ РЕЗОЛВ ПО НОМЕРУ: 1 → 01_xxx
+            // Ищем в корне InfoPages файл вида NN_*.html с нужным номером
+            // ============================================================
+            if (int.TryParse(pagePath, out int pageNumber) && pageNumber > 0)
+            {
+                string prefix = pageNumber.ToString("D2");  // 1 → "01", 12 → "12", 100 → "100"
+                var candidates = Directory.GetFiles(_pagesDir, $"{prefix}_*.html");
+
+                if (candidates.Length > 0)
+                {
+                    string fileName = Path.GetFileNameWithoutExtension(candidates[0]);
+                    Debug.WriteLine($"[InfoService] 🔄 {pagePath} → {fileName}");
+                    pagePath = fileName;
+                }
+                else
+                {
+                    Debug.WriteLine($"[InfoService] ⚠️ Страница с номером {pageNumber} (префикс {prefix}_) не найдена");
+                }
+            }
             // Проверяем кеш
             if (_pageCache.TryGetValue(pagePath, out InfoPage? cachedPage))
             {
@@ -71,8 +136,8 @@ namespace SmithForge.Features.InfoSystem
                 }
                 else
                 {
-                    // Пробуем найти index.html в папке (если путь ведет к папке)
-                    var indexPath = Path.Combine(_pagesDir, relativePath, "index.html");
+                    // Пробуем найти help.html в папке (если путь ведет к папке)
+                    var indexPath = Path.Combine(_pagesDir, relativePath, "help.html");
                     Debug.WriteLine($"[InfoService] 📂 Пробуем index: {indexPath}");
 
                     if (File.Exists(indexPath))
@@ -342,64 +407,5 @@ namespace SmithForge.Features.InfoSystem
 
             return sb.ToString();
         }
-
-        private string ExtractQuery(string target)
-        {
-            // target = "search:текст" → "текст"
-            int colonIndex = target.IndexOf(':');
-            if (colonIndex > 0 && colonIndex < target.Length - 1)
-            {
-                return target.Substring(colonIndex + 1);
-            }
-            return string.Empty;
-        }
-
-        private void EnsureDefaultPagesExist()
-        {
-            string defaultPath = Path.Combine(_pagesDir, "help.html");
-            if (!File.Exists(defaultPath))
-            {
-                File.WriteAllText(defaultPath, DefaultHelpPage, Encoding.UTF8);
-            }
-        }
-
-        private const string DefaultHelpPage = @"
-<div class='page-root'>
-    <h1>📚 Справочник команд SmithForge</h1>
-    <p>Выберите раздел для просмотра:</p>
-    
-    <div class='page-grid'>
-        <div class='page-card'>
-            <span class='icon'>🎨</span>
-            <a href='!!info:formatting'>Форматирование текста</a>
-            <span class='desc'>Жирный, курсив, цвет</span>
-        </div>
-        <div class='page-card'>
-            <span class='icon'>💰</span>
-            <a href='!!info:karma'>Карма и ранги</a>
-            <span class='desc'>Как заработать и тратить</span>
-        </div>
-        <div class='page-card'>
-            <span class='icon'>📢</span>
-            <a href='!!info:important'>Важные сообщения</a>
-            <span class='desc'>Озвучивание в эфире</span>
-        </div>
-        <div class='page-card'>
-            <span class='icon'>🎨</span>
-            <a href='!!info:stickers'>Стикеры</a>
-            <span class='desc'>Отправка стикеров</span>
-        </div>
-        <div class='page-card'>
-            <span class='icon'>👤</span>
-            <a href='!!info:profile'>Профиль</a>
-            <span class='desc'>Аватарка и настройки</span>
-        </div>
-        <div class='page-card'>
-            <span class='icon'>📋</span>
-            <a href='!!info:commands'>Все команды</a>
-            <span class='desc'>Полный список</span>
-        </div>
-    </div>
-</div>";
     }
 }

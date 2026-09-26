@@ -1,4 +1,7 @@
-﻿using SmithForge.Main.Models;
+﻿using SmithForge.Features.TechOverlay;
+using SmithForge.Main.Models;
+using SmithForge.Main.Services;
+using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
@@ -7,6 +10,7 @@ namespace SmithForge.Main.Services.ChatCommands
 {
     public class LikeCommand : BaseCommand
     {
+        public override bool IsTechnical => true;
         public override string Name => "like";
         public override IEnumerable<string> Aliases => new[] { "лайк", "l", "👍" };
         public override string Description => "Поставить лайк на сообщение: !!like:42";
@@ -52,7 +56,7 @@ namespace SmithForge.Main.Services.ChatCommands
                 return;
             }
 
-            // 4. ✅ НОВОЕ: Находим ChatLogs.Id и проверяем текущую реакцию
+            // 4. Находим ChatLogs.Id и проверяем текущую реакцию
             long chatLogId = DatabaseService.GetMessageIdByNumber(messageNumber);
             if (chatLogId <= 0)
             {
@@ -66,7 +70,7 @@ namespace SmithForge.Main.Services.ChatCommands
             string? existingReaction = DatabaseService.GetUserReaction(chatLogId, chater.Id);
             Debug.WriteLine($"[LikeCommand] Текущая реакция пользователя: {existingReaction ?? "(нет)"}");
 
-            // 5. ✅ Если уже стоит ЛАЙК — ничего не делаем, карму не списываем
+            // 5. Если уже стоит ЛАЙК — ничего не делаем, карму не списываем
             if (existingReaction == "like")
             {
                 Debug.WriteLine($"[LikeCommand] ⏭ У пользователя уже лайк на #{messageNumber}, пропускаем без списания");
@@ -81,7 +85,32 @@ namespace SmithForge.Main.Services.ChatCommands
             Debug.WriteLine($"[LikeCommand] ✅ Лайк разрешен для #{messageNumber} от {chater.Login} " +
                             $"(было: {existingReaction ?? "ничего"} → станет: like)");
 
-            msg.Message = $"<like msg='{messageNumber}' user='{chater.Id}' />";
+            // ✅ СТАВИМ ЛАЙК СРАЗУ В БД
+            try
+            {
+                DatabaseService.LikeMessage(chatLogId, chater.Id);
+
+                var counts = DatabaseService.GetReactionCounts(chatLogId);
+                Debug.WriteLine($"[LikeCommand] 👍 Лайк поставлен. Likes={counts.Likes}, Dislikes={counts.Dislikes}");
+
+                // ✅ УВЕДОМЛЯЕМ ВЕБ-ОВЕРЛЕЙ
+                WebServerService.Instance?.UpdateReactionInWeb(
+                    messageNumber: messageNumber,
+                    reactionType: "like",
+                    newCount: counts.Likes);
+
+                // ✅ Событие в технический оверлей
+                int actualKarma = GetCostForRank(chater.Rank);
+                WebServerService.Instance?.SendTechnicalEvent(
+                    TechEventFactory.Like(chater, messageNumber, actualKarma));
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[LikeCommand] ❌ Ошибка постановки лайка: {ex.Message}");
+            }
+
+            // Техническое сообщение — пустое, чтобы не шло в оверлей
+            msg.Message = string.Empty;
             msg.IsProcessedByCommand = true;
             msg.ShouldChargeForCommand = true;
 

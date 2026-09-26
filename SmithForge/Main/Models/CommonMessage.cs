@@ -132,6 +132,13 @@ namespace SmithForge.Main.Models
         /// </summary>
         public bool ShouldChargeForCommand { get; set; } = true;
 
+        /// <summary>
+        /// Отображается ли сообщение в обычном дашборде/веб-чате.
+        /// false — служебное (техническое): !!nick, !!ava, !!like, !!dislike, !!hide, !!st, !!voice и т.д.
+        /// true  — визуальное (обычные сообщения и !!b, !!i, !!color, !!ext).
+        /// </summary>
+        public bool IsVisible { get; set; } = true;
+
         // ========== ДЕБАГ ==========
 
         /// <summary>

@@ -1,0 +1,192 @@
+﻿<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            background: rgba(18, 18, 20, 0.96);
+            font-family: 'Segoe UI', -apple-system, Arial, sans-serif;
+            color: #c8c8cd;
+            padding: 8px 6px 8px 2px;
+            width: 100vw;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        /* «Основные разделы» — чуть тише белого */
+        .header {
+            font-size: 20px;
+            text-transform: uppercase;
+            letter-spacing: 1.2px;
+            color: #d6d6db;
+            margin-bottom: 12px;
+            font-weight: 800;
+        }
+
+        .section {
+            margin-bottom: 14px;
+        }
+
+        /* Заголовок-разделитель — самый светлый, но не чистый белый */
+        .section-title {
+            display: block;
+            width: 100%;
+            font-size: 20px;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 1.4px;
+            color: #dcdce1;
+            background: rgba(255, 255, 255, 0.08);
+            border-left: 4px solid rgba(255, 255, 255, 0.55);
+            padding: 8px 10px;
+            margin-bottom: 8px;
+            border-radius: 2px;
+        }
+
+        .lang-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 5px;
+            margin-bottom: 4px;
+            align-items: center;
+        }
+
+        .cmd {
+            font-family: 'IBM Plex Mono', 'JetBrains Mono', 'Source Code Pro', 'Fira Mono', 'Roboto Mono', 'Courier New', monospace;
+            font-size: 22px;
+            letter-spacing: 0;
+            padding: 3px 10px;
+            border-radius: 3px;
+            line-height: 1.25;
+            white-space: nowrap;
+            font-variant-ligatures: none;
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+            text-rendering: geometricPrecision;
+        }
+
+            /* Самая короткая — самая светлая из команд */
+            .cmd.main {
+                font-weight: 700;
+                color: #d2d2d7;
+                background: rgba(255, 255, 255, 0.15);
+                border: 1px solid rgba(255, 255, 255, 0.08);
+            }
+
+            /* Средняя — тише */
+            .cmd.alt {
+                font-weight: 700;
+                color: #b2b2b8;
+                background: rgba(255, 255, 255, 0.075);
+                border: 1px solid rgba(255, 255, 255, 0.04);
+            }
+
+            /* Самая длинная — ещё тише */
+            .cmd.dim {
+                font-weight: 700;
+                color: #9a9aa0;
+                background: rgba(255, 255, 255, 0.05);
+                border: 1px solid rgba(255, 255, 255, 0.03);
+            }
+
+        /* «Подробно» — тише заголовков, но читаемо */
+        .details-row {
+            font-size: 20px;
+            color: #c0c0c6;
+            margin-top: 8px;
+            padding-left: 1px;
+            font-weight: 700;
+            letter-spacing: 0.2px;
+            line-height: 1.4;
+        }
+
+            .details-row .cmd-det {
+                font-family: 'IBM Plex Mono', 'JetBrains Mono', 'Source Code Pro', 'Fira Mono', 'Roboto Mono', 'Courier New', monospace;
+                font-size: 20px;
+                letter-spacing: 0;
+                color: #a8a8ae;
+                background: rgba(255, 255, 255, 0.04);
+                padding: 0px 4px;
+                border-radius: 2px;
+                font-weight: 600;
+                -webkit-font-smoothing: antialiased;
+            }
+    </style>
+</head>
+<body>
+
+    <div class="header">Основные разделы</div>
+
+    <!-- Профиль -->
+    <div class="section">
+        <div class="section-title">Профиль</div>
+        <div class="lang-row">
+            <span class="cmd main">ii1</span>
+            <span class="cmd alt">!!i:1</span>
+            <span class="cmd dim">!!info:profile</span>
+        </div>
+        <div class="lang-row">
+            <span class="cmd main">ии1</span>
+            <span class="cmd alt">!!и:1</span>
+            <span class="cmd dim">!!инфо:профиль</span>
+        </div>
+        <div class="details-row">Подробно: <span class="cmd-det">про1</span> <span class="cmd-det">ab1</span> <span class="cmd-det">!!info:about:1</span></div>
+    </div>
+
+    <!-- Форматирование -->
+    <div class="section">
+        <div class="section-title">Форматирование</div>
+        <div class="lang-row">
+            <span class="cmd main">ii2</span>
+            <span class="cmd alt">!!i:2</span>
+            <span class="cmd dim">!!info:formatting</span>
+        </div>
+        <div class="lang-row">
+            <span class="cmd main">ии2</span>
+            <span class="cmd alt">!!и:2</span>
+            <span class="cmd dim">!!инфо:формат</span>
+        </div>
+        <div class="details-row">Подробно: <span class="cmd-det">про2</span> <span class="cmd-det">ab2</span> <span class="cmd-det">!!info:about:2</span></div>
+    </div>
+
+    <!-- Медиа -->
+    <div class="section">
+        <div class="section-title">Медиа сообщения</div>
+        <div class="lang-row">
+            <span class="cmd main">ii3</span>
+            <span class="cmd alt">!!i:3</span>
+            <span class="cmd dim">!!info:media</span>
+        </div>
+        <div class="lang-row">
+            <span class="cmd main">ии3</span>
+            <span class="cmd alt">!!и:3</span>
+            <span class="cmd dim">!!инфо:медиа</span>
+        </div>
+    </div>
+
+    <!-- Подробно обо всём -->
+    <div class="section">
+        <div class="section-title">Подробно обо всём</div>
+        <div class="lang-row">
+            <span class="cmd main">ii</span>
+            <span class="cmd alt">!!i:3</span>
+            <span class="cmd dim">!!info:about</span>
+        </div>
+        <div class="lang-row">
+            <span class="cmd main">ии</span>
+            <span class="cmd alt">!!и:3</span>
+            <span class="cmd dim">!!инфо:про</span>
+        </div>
+    </div>
+
+</body>
+</html>

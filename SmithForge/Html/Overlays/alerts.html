@@ -1,0 +1,342 @@
+﻿<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>SmithForge Alerts</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            background: transparent;
+            font-family: 'Segoe UI', sans-serif;
+            overflow: hidden;
+            width: 100vw;
+            height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        #alert-container {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%) scale(0.6);
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.4s ease, transform 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
+            max-width: 90vw;
+        }
+
+            #alert-container.visible {
+                opacity: 1;
+                transform: translate(-50%, -50%) scale(1);
+            }
+
+            #alert-container.hiding {
+                opacity: 0;
+                transform: translate(-50%, -50%) scale(0.7);
+            }
+
+        /* Базовый вид */
+        .alert-box {
+            padding: 25px 40px;
+            border-radius: 22px;
+            border: 2px solid;
+            backdrop-filter: blur(10px);
+            text-align: center;
+            min-width: 400px;
+            max-width: 700px;
+        }
+
+            /* DonationAlerts — золото */
+            .alert-box.provider-donationalerts {
+                background: rgba(13, 13, 26, 0.9);
+                border-color: #FFD700;
+                box-shadow: 0 0 40px rgba(255, 215, 0, 0.5), 0 0 80px rgba(255, 215, 0, 0.3);
+            }
+
+                .alert-box.provider-donationalerts .provider-label {
+                    color: #FFD700;
+                }
+
+                .alert-box.provider-donationalerts .user-name {
+                    color: #FFD700;
+                }
+
+            /* DonationPay — синий */
+            .alert-box.provider-donationpay {
+                background: rgba(13, 26, 46, 0.9);
+                border-color: #00BFFF;
+                box-shadow: 0 0 40px rgba(0, 191, 255, 0.5), 0 0 80px rgba(0, 191, 255, 0.3);
+            }
+
+                .alert-box.provider-donationpay .provider-label {
+                    color: #00BFFF;
+                }
+
+                .alert-box.provider-donationpay .user-name {
+                    color: #00BFFF;
+                }
+
+        .provider-label {
+            font-size: 14px;
+            opacity: 0.75;
+            margin-bottom: 8px;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+        }
+
+        .row-main {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 15px;
+            margin-bottom: 10px;
+        }
+
+        .user-name {
+            font-size: 36px;
+            font-weight: bold;
+            text-shadow: 0 0 20px currentColor;
+        }
+
+        .separator {
+            color: #555;
+            font-size: 36px;
+        }
+
+        .amount {
+            font-size: 36px;
+            font-weight: bold;
+            color: #FFFFFF;
+            text-shadow: 0 0 15px rgba(255,255,255,0.5);
+        }
+
+        .message {
+            font-size: 18px;
+            color: #DDD;
+            line-height: 1.4;
+            max-width: 600px;
+            word-wrap: break-word;
+            margin-top: 10px;
+        }
+
+            .message:empty {
+                display: none;
+            }
+
+        /* Анимация появления/скрытия */
+        @keyframes pulse {
+            0%, 100% {
+                transform: scale(1);
+            }
+
+            50% {
+                transform: scale(1.02);
+            }
+        }
+
+        #alert-container.visible .alert-box {
+            animation: pulse 2.5s ease-in-out infinite;
+        }
+
+        #alert-container.hiding {
+            transition: opacity 0.35s ease, transform 0.35s ease;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="alert-container">
+        <div class="alert-box" id="alert-box">
+            <div class="provider-label" id="provider-label"></div>
+            <div class="row-main">
+                <span class="user-name" id="user-name"></span>
+                <span class="separator">•</span>
+                <span class="amount" id="amount"></span>
+            </div>
+            <div class="message" id="message"></div>
+        </div>
+    </div>
+
+    <script>
+        const alertContainer = document.getElementById('alert-container');
+        const alertBox = document.getElementById('alert-box');
+        const providerLabel = document.getElementById('provider-label');
+        const userNameEl = document.getElementById('user-name');
+        const amountEl = document.getElementById('amount');
+        const messageEl = document.getElementById('message');
+
+        // ============================================================
+        // СОСТОЯНИЕ
+        // ============================================================
+        let es = null;                  // ✅ ГЛОБАЛЬНЫЙ EventSource
+        let queue = [];
+        let isShowing = false;
+
+        // ✅ Все таймеры сохраняем — чтобы можно было отменить
+        let hideTimer = null;
+        let hidingEndTimer = null;
+        let nextAlertTimer = null;
+
+        // ✅ Ограничение очереди, чтобы не копилась бесконечно
+        const MAX_QUEUE = 20;
+
+        // ============================================================
+        // SSE ПОДКЛЮЧЕНИЕ
+        // ============================================================
+        function connect() {
+        if (es) {
+        es.close();
+        es = null;
+        }
+
+        es = new EventSource('/alerts/stream');
+
+        es.onmessage = function(e) {
+        try {
+        const data = JSON.parse(e.data);
+
+        if (data.type === 'alert') {
+        addToQueue(data.alert);
+        }
+        } catch (err) {
+        console.error('Parse error:', err);
+        }
+        };
+
+        es.onerror = function() {
+        // ✅ Если сервер явно закрыл — не переподключаемся
+        if (es && es.readyState === EventSource.CLOSED) {
+        console.log('Alerts SSE закрыт — переподключение не требуется');
+        return;
+        }
+
+        // Иначе — временный обрыв, пробуем через 3 секунды
+        setTimeout(connect, 3000);
+        };
+
+        es.onopen = function() {
+        console.log('✅ Alerts SSE подключён');
+        };
+        }
+
+        // ============================================================
+        // ДОБАВЛЕНИЕ В ОЧЕРЕДЬ
+        // ============================================================
+        function addToQueue(alert) {
+        // ✅ Ограничиваем очередь — старые выкидываем
+        if (queue.length >= MAX_QUEUE) {
+        queue.shift();
+        console.warn('⚠️ Очередь алертов переполнена — старый удалён');
+        }
+
+        queue.push(alert);
+        console.log('🔔 Добавлен алерт в очередь:', alert.userName, 'Осталось:', queue.length);
+
+        if (!isShowing) {
+        showNext();
+        }
+        }
+
+        // ============================================================
+        // ОЧИСТКА ВСЕХ ТАЙМЕРОВ
+        // ============================================================
+        function clearAllTimers() {
+        if (hideTimer) {
+        clearTimeout(hideTimer);
+        hideTimer = null;
+        }
+        if (hidingEndTimer) {
+        clearTimeout(hidingEndTimer);
+        hidingEndTimer = null;
+        }
+        if (nextAlertTimer) {
+        clearTimeout(nextAlertTimer);
+        nextAlertTimer = null;
+        }
+        }
+
+        // ============================================================
+        // ПОКАЗ СЛЕДУЮЩЕГО АЛЕРТА
+        // ============================================================
+        function showNext() {
+        if (queue.length === 0) {
+        isShowing = false;
+        return;
+        }
+
+        isShowing = true;
+        const alert = queue.shift();
+
+        // Определяем класс провайдера
+        const providerClass = 'provider-' + (alert.providerType || 'donationalerts').toLowerCase();
+
+        alertBox.className = 'alert-box ' + providerClass;
+        providerLabel.textContent = alert.providerName || 'ALERT';
+
+        userNameEl.textContent = alert.userName || 'Аноним';
+        amountEl.textContent = alert.displayAmount || '';
+
+        if (alert.message && alert.message.trim()) {
+        messageEl.textContent = alert.message;
+        messageEl.style.display = 'block';
+        } else {
+        messageEl.textContent = '';
+        messageEl.style.display = 'none';
+        }
+
+        // Показываем
+        alertContainer.className = 'visible';
+
+        // Через N секунд — скрываем
+        const duration = (alert.durationSeconds || 10) * 1000;
+
+        // ✅ Чистим старые таймеры перед запуском новых
+        clearAllTimers();
+
+        hideTimer = setTimeout(() => {
+        hideTimer = null;
+
+        alertContainer.className = 'hiding';
+
+        hidingEndTimer = setTimeout(() => {
+        hidingEndTimer = null;
+
+        alertContainer.className = '';
+
+        // Небольшая пауза между алертами
+        nextAlertTimer = setTimeout(() => {
+        nextAlertTimer = null;
+        showNext();
+        }, 400);
+        }, 350);
+        }, duration);
+        }
+
+        // ============================================================
+        // ЗАПУСК
+        // ============================================================
+        connect();
+        console.log('🎉 SmithForge Alerts Overlay запущен');
+
+        // ============================================================
+        // ЗАКРЫТИЕ СТРАНИЦЫ
+        // ============================================================
+        window.addEventListener('beforeunload', function() {
+        if (es) {
+        es.close();
+        es = null;
+        console.log('Alerts SSE соединение принудительно закрыто перед обновлением.');
+        }
+
+        clearAllTimers();
+        });
+    </script>
+</body>
+</html>

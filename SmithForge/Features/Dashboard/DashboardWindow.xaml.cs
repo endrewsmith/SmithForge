@@ -43,17 +43,69 @@ namespace SmithForge.Features.Dashboard
             this.Visibility = Visibility.Collapsed;
             System.Diagnostics.Debug.WriteLine("[Dashboard] Окно скрыто через CloseButton");
         }
+        private bool _hadScroll = false;
+        private System.Windows.Threading.DispatcherTimer? _scrollDebounce;
 
         private void MainScrollViewer_ScrollChanged(object sender, ScrollChangedEventArgs e)
         {
+            var scrollViewer = sender as ScrollViewer;
+            if (scrollViewer == null) return;
+
             if (DataContext is DashboardViewModel viewModel)
             {
-                var scrollViewer = sender as ScrollViewer;
-                if (scrollViewer != null)
-                {
-                    viewModel.OnScrollChanged(scrollViewer.VerticalOffset, scrollViewer.ScrollableHeight);
-                }
+                viewModel.OnScrollChanged(scrollViewer.VerticalOffset, scrollViewer.ScrollableHeight);
             }
         }
+        //private void MainScrollViewer_ScrollChanged(object sender, ScrollChangedEventArgs e)
+        //{
+        //    var scrollViewer = sender as ScrollViewer;
+        //    if (scrollViewer == null) return;
+
+        //    // Обновляем состояние по фактическому ScrollableHeight
+        //    bool hasScroll = scrollViewer.ScrollableHeight > 0;
+
+        //    if (hasScroll != _hadScroll)
+        //    {
+        //        // ✅ Дебаунс: ждём 100мс стабильного состояния, потом логируем переход
+        //        _scrollDebounce?.Stop();
+        //        _scrollDebounce = new System.Windows.Threading.DispatcherTimer
+        //        {
+        //            Interval = TimeSpan.FromMilliseconds(100)
+        //        };
+        //        _scrollDebounce.Tick += (s, args) =>
+        //        {
+        //            _scrollDebounce?.Stop();
+        //            _scrollDebounce = null;
+
+        //            // Перепроверяем — состояние не мигнуло за это время
+        //            bool stable = scrollViewer.ScrollableHeight > 0;
+        //            if (stable == _hadScroll) return;
+
+        //            _hadScroll = stable;
+
+        //            if (stable)
+        //            {
+        //                System.Diagnostics.Debug.WriteLine("[Dashboard] 📜 СКРОЛЛ ПОЯВИЛСЯ (стабильно)");
+        //                // тут твоя логика при появлении
+        //                if (DataContext is DashboardViewModel vm)
+        //                {
+        //                    vm.SmoothScrollToBottom();
+        //                }
+        //            }
+        //            else
+        //            {
+        //                System.Diagnostics.Debug.WriteLine("[Dashboard] 📜 СКРОЛЛ ИСЧЕЗ (стабильно)");
+        //                // тут твоя логика при исчезновении
+        //                scrollViewer.UpdateLayout();
+        //            }
+        //        };
+        //        _scrollDebounce.Start();
+        //    }
+
+        //    if (DataContext is DashboardViewModel viewModel)
+        //    {
+        //        viewModel.OnScrollChanged(scrollViewer.VerticalOffset, scrollViewer.ScrollableHeight);
+        //    }
+        //}
     }
 }

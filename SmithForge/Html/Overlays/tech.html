@@ -1,0 +1,257 @@
+﻿<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>SmithForge Tech Events</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        html, body {
+            background: transparent;
+            font-family: 'Segoe UI', sans-serif;
+            overflow: hidden;
+            width: 100%;
+            height: 100%;
+        }
+
+        /* Слот растянут на всю область source'а */
+        #tech-slot {
+            position: absolute;
+            inset: 0;
+            display: flex;
+            align-items: center;
+            justify-content: flex-start;
+            pointer-events: none;
+            padding: 0 16px;
+        }
+
+        /* Само сообщение — без фона, на всю ширину */
+        .tech-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            width: 100%;
+            max-width: 100%;
+            padding: 0;
+            color: #eeeeee;
+            font-size: 26px;
+            font-weight: 600;
+            line-height: 1.2;
+            text-align: left;
+            /* Тень текста — чтобы читалось на любом фоне */
+            text-shadow: 0 0 2px rgba(0,0,0,0.9), 0 0 6px rgba(0,0,0,0.7), 0 1px 0 rgba(0,0,0,0.5);
+            opacity: 0;
+            transform: translateY(12px);
+            transition: opacity 0.3s ease, transform 0.3s ease;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            justify-content: flex-start;
+        }
+
+            .tech-item.visible {
+                opacity: 1;
+                transform: translateY(0);
+            }
+
+            .tech-item .icon {
+                font-size: 26px;
+                flex-shrink: 0;
+            }
+
+            .tech-item .who {
+                color: #ffd700;
+                font-weight: 700;
+                flex-shrink: 0;
+            }
+
+            .tech-item .text {
+                overflow: hidden;
+                text-overflow: ellipsis;
+                flex-shrink: 1;
+                min-width: 0;
+            }
+
+            /* Правый блок со стоимостью — прижат к правому краю */
+            .tech-item .karma-container {
+                display: flex;
+                align-items: center;
+                flex-shrink: 0;
+                margin-left: auto;
+                padding-left: 16px;
+                white-space: nowrap;
+            }
+
+            /* Значение кармы — циановое как в шаблонах рангов */
+            .tech-item .karma-value {
+                color: #00FFFF;
+                font-size: 0.9em;
+                font-weight: 700;
+                text-shadow: 0 0 2px rgba(0,0,0,0.9), 0 0 6px rgba(0,0,0,0.7);
+            }
+
+            /* Иконка молнии — циановая */
+            .tech-item .karma-icon {
+                margin-left: 4px;
+                font-size: 0.85em;
+                display: inline-block;
+                filter: sepia(1) hue-rotate(150deg) saturate(10) brightness(1.2);
+            }
+    </style>
+</head>
+<body>
+
+    <div id="tech-slot"></div>
+
+    <script>
+        const slot = document.getElementById('tech-slot');
+
+        // Длительность показа одного события
+        const LIFETIME_MS = 4000;
+
+        // Время fade-out, за которое плашка успевает уйти перед следующей
+        const FADE_OUT_MS = 250;
+
+        let currentEl = null;
+        let currentTimer = null;
+        let pendingEvent = null;
+
+function iconFor(kind) {
+    switch (kind) {
+        case 'nick':        return '✏️';
+        case 'avatar':      return '🖼️';
+        case 'like':        return '👍';
+        case 'dislike':     return '👎';
+        case 'info':        return '📖';
+        case 'help':        return '❓';
+        case 'karmagrant':  return '🎁'; 
+        default:            return '⚙️';
+    }
+}
+
+        function escapeHtml(s) {
+        return String(s)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+        }
+
+        function buildElement(evt) {
+        const div = document.createElement('div');
+        div.className = 'tech-item';
+
+        const icon = iconFor(evt.kind);
+        const userName = escapeHtml(evt.userName || 'Аноним');
+        const text = escapeHtml(evt.text || '');
+
+        // ✅ Стоимость — показываем, если > 0
+        const karma = Number(evt.karma) || 0;
+        const karmaHtml = karma > 0
+        ? '<span class="karma-container">' +
+        '<span class="karma-value">-' + karma + '</span>' +
+        '<span class="karma-icon">⚡</span>' +
+        '</span>'
+        : '';
+
+        div.innerHTML =
+        '<span class="icon">' + icon + '</span>' +
+        '<span class="who">' + userName + '</span>' +
+        '<span class="text">' + text + '</span>' +
+        karmaHtml;
+
+        return div;
+        }
+
+        function showEvent(evt) {
+        // Если что-то уже показывается — прячем и запоминаем новое
+        if (currentEl) {
+        pendingEvent = evt;
+        hideCurrent();
+        return;
+        }
+
+        currentEl = buildElement(evt);
+        slot.appendChild(currentEl);
+
+        // Даём браузеру отрисовать, потом включаем .visible → плавное появление
+        requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+        currentEl.classList.add('visible');
+        });
+        });
+
+        currentTimer = setTimeout(hideCurrent, LIFETIME_MS);
+        }
+
+        function hideCurrent() {
+        if (!currentEl) return;
+
+        if (currentTimer) {
+        clearTimeout(currentTimer);
+        currentTimer = null;
+        }
+
+        const el = currentEl;
+        currentEl = null;
+
+        el.classList.remove('visible');
+
+        setTimeout(() => {
+        if (el.parentNode) el.parentNode.removeChild(el);
+
+        // Если пришло новое, пока пряталось — показываем его
+        if (pendingEvent) {
+        const next = pendingEvent;
+        pendingEvent = null;
+        showEvent(next);
+        }
+        }, FADE_OUT_MS);
+        }
+
+        let es = null;
+
+function connect() {
+    if (es) {
+        es.close();
+        es = null;
+    }
+
+    es = new EventSource('/tech/stream');
+
+        es.onmessage = function(e) {
+        try {
+        const data = JSON.parse(e.data);
+        if (data.type === 'tech') showEvent(data);
+        } catch (err) { console.error('Parse error', err); }
+        };
+
+        es.onerror = function() {
+        // Если соединение принудительно закрыто — не переподключаемся
+        if (es && es.readyState === EventSource.CLOSED) return;
+
+        setTimeout(connect, 3000);
+        };
+
+        es.onopen = function() { console.log('✅ Tech SSE подключён'); };
+        }
+
+        connect();
+        console.log('🔧 SmithForge Tech Overlay запущен');
+
+        // ✅ Закрываем SSE-соединение перед перезагрузкой/закрытием страницы
+        window.addEventListener('beforeunload', () => {
+        if (es) {
+        es.close();
+        es = null;
+        console.log('SSE соединение принудительно закрыто перед обновлением.');
+        }
+        });
+    </script>
+</body>
+</html>

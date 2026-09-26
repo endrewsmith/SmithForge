@@ -13,6 +13,7 @@ namespace SmithForge.Main.Services.ChatCommands
     public class SoundCommand : BaseCommand
     {
         private readonly SoundPageService _soundPageService;
+        public override bool IsDashboardVisible => false;
 
         public override string Name => "snd";
         public override IEnumerable<string> Aliases => new[] { "звук", "sound" };

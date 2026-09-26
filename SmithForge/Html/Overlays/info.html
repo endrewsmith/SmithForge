@@ -1,0 +1,1126 @@
+﻿<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>📚 Инфо-чат SmithForge</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', sans-serif;
+            background: transparent;
+            color: #eee;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        #chat-container {
+            flex: 1;
+            overflow-y: hidden; /* ← было auto, стало hidden */
+            padding: 4px 2px;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            /* ✅ СКРЫВАЕМ СКРОЛЛБАР */
+            scrollbar-width: none; /* Firefox */
+            -ms-overflow-style: none; /* IE/Edge */
+        }
+
+            #chat-container::-webkit-scrollbar {
+                display: none; /* ← скрыть в Chrome/Edge */
+            }
+
+        .chat-spacer {
+            height: 100%;
+            flex-shrink: 0;
+            background: transparent;
+            pointer-events: none;
+        }
+
+        /* ✅ Базовый класс без анимации (анимация будет добавляться через JS) */
+        .message {
+            background: transparent;
+            border: 1px solid rgba(45, 45, 68, 0.6);
+            border-radius: 12px;
+            padding: 12px 2px;
+            max-width: 100%;
+            flex-shrink: 0;
+            backdrop-filter: blur(6px);
+            box-shadow: 0 4px 20px rgba(0,0,0,0.4);
+            opacity: 0;
+            transform: translateY(20px);
+            /* animation задается через JS */
+        }
+
+        /* ✅ КЛАСС УДАЛЕНИЯ — плавное исчезновение старого сообщения */
+        .message-leaving {
+            opacity: 0 !important;
+            max-height: 0 !important;
+            padding-top: 0 !important;
+            padding-bottom: 0 !important;
+            margin-top: 0 !important;
+            margin-bottom: 0 !important;
+            border-top-width: 0 !important;
+            border-bottom-width: 0 !important;
+            overflow: hidden !important;
+            transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1) !important;
+        }
+
+        .message .msg-body {
+            font-size: 13px;
+            line-height: 1.5;
+            color: #ddd;
+        }
+
+            /* ============================================================
+           ШАПКА СТРАНИЦЫ — список команд + разделитель
+           ============================================================ */
+
+            .message .msg-body .page-commands {
+                display: block;
+                text-align: left;
+                color: #B0B0B8;
+                font-size: 14px;
+                font-family: 'Consolas', 'Courier New', monospace;
+                margin: 0 0 4px 0;
+                padding: 0;
+                letter-spacing: 0.3px;
+            }
+
+                /* Разделитель: одна линия высотой 2px — верх светлее, низ темнее */
+                .message .msg-body .page-commands::after {
+                    content: '';
+                    display: block;
+                    margin-top: 8px;
+                    height: 2px;
+                    background: linear-gradient( to bottom, #4A4A5A 0%, #4A4A5A 50%, #262630 50%, #262630 100% );
+                }
+
+            /* ============================================================
+           КОНТЕНТ СТРАНИЦЫ
+           ============================================================ */
+
+            .message .msg-body h1 {
+                font-size: 16px;
+                color: #ffd700;
+                margin-bottom: 6px;
+            }
+
+            .message .msg-body h2 {
+                font-size: 14px;
+                color: #ffd700;
+                margin-bottom: 4px;
+            }
+
+            .message .msg-body p {
+                margin-bottom: 4px;
+                color: #bbb;
+            }
+
+            .message .msg-body .page-grid {
+                display: grid;
+                grid-template-columns: 1fr 1fr;
+                gap: 6px;
+            }
+
+            .message .msg-body .page-card {
+                background: rgba(45, 45, 68, 0.5);
+                padding: 10px;
+                border-radius: 6px;
+                text-align: center;
+            }
+
+                .message .msg-body .page-card .icon {
+                    font-size: 20px;
+                    display: block;
+                }
+
+                .message .msg-body .page-card .name {
+                    color: #ffd700;
+                    font-weight: bold;
+                    font-size: 12px;
+                }
+
+                .message .msg-body .page-card .desc {
+                    color: #aaa;
+                    font-size: 10px;
+                }
+
+            .message .msg-body .command-list .command {
+                display: flex;
+                align-items: center;
+                background: rgba(45, 45, 68, 0.4);
+                padding: 5px 10px;
+                margin: 3px 0;
+                border-radius: 4px;
+                gap: 8px;
+                flex-wrap: wrap;
+            }
+
+                .message .msg-body .command-list .command .icon {
+                    font-size: 16px;
+                }
+
+                .message .msg-body .command-list .command .name {
+                    color: #ffd700;
+                    font-weight: bold;
+                    font-size: 12px;
+                }
+
+                .message .msg-body .command-list .command .aliases {
+                    color: #888;
+                    font-size: 10px;
+                }
+
+                .message .msg-body .command-list .command .desc {
+                    color: #ccc;
+                    font-size: 12px;
+                    flex: 1;
+                }
+
+                .message .msg-body .command-list .command .cost {
+                    color: #4caf50;
+                    font-size: 10px;
+                }
+
+            .message .msg-body .info-nav {
+                display: none;
+            }
+
+            .message .msg-body .error {
+                color: #ff6b6b;
+                text-align: center;
+                padding: 10px;
+            }
+
+        @keyframes slideUp {
+            0% {
+                opacity: 0;
+                transform: translateY(0px);
+            }
+
+            100% {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        #chat-container::-webkit-scrollbar {
+            width: 3px;
+        }
+
+        #chat-container::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        #chat-container::-webkit-scrollbar-thumb {
+            background: rgba(45, 45, 68, 0.6);
+            border-radius: 2px;
+        }
+
+
+        /* Сетка паков — как sticker-grid */
+        .packs-page .packs-grid {
+            display: grid;
+            grid-auto-flow: row;
+            grid-template-columns: repeat(5, 1fr); /* 5 в ряд */
+            gap: 4px;
+            margin: 2px 0;
+            padding: 2px 0;
+            width: 100%;
+            max-width: 100%;
+            /* По умолчанию — без скролла */
+            overflow: hidden;
+            scrollbar-width: none;
+            -ms-overflow-style: none;
+        }
+
+            .packs-page .packs-grid::-webkit-scrollbar {
+                display: none;
+            }
+
+            /* ✅ Включается JS'ом, когда паков > 20 */
+            .packs-page .packs-grid.packs-scrollable {
+                grid-auto-flow: column;
+                grid-template-columns: none;
+                grid-template-rows: repeat(4, auto);
+                grid-auto-columns: calc((100% - 4 * 4px) / 5);
+                overflow-x: auto;
+                overflow-y: hidden;
+            }
+
+        .packs-page .pack-preview img {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+            filter: grayscale(100%);
+            transition: filter 0.3s ease;
+            display: block;
+        }
+
+        /* Плашка-заголовок — как stk-header */
+        .packs-page .packs-header {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            background: rgba(255, 255, 255, 0.08);
+            border-left: 4px solid rgba(255, 255, 255, 0.55);
+            border-radius: 2px;
+            padding: 8px 10px;
+            margin-bottom: 12px;
+        }
+
+        .packs-page .packs-header-name {
+            font-size: 20px;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 1.4px;
+            color: #dcdce1;
+        }
+
+        .packs-page .packs-header-cmd-row {
+            display: flex;
+            gap: 5px;
+            align-items: center;
+        }
+
+        /* Плашка команды в шапке — как stk-cmd-main */
+        .packs-page .packs-cmd {
+            font-family: 'IBM Plex Mono', 'JetBrains Mono', 'Source Code Pro', 'Consolas', monospace;
+            font-size: 16px;
+            font-weight: 700;
+            letter-spacing: 0;
+            padding: 2px 10px;
+            border-radius: 3px;
+            line-height: 1.25;
+            white-space: nowrap;
+            display: inline-block;
+            color: #d2d2d7;
+            background: rgba(255, 255, 255, 0.15);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+        }
+
+            .packs-page .packs-cmd.packs-cmd-main {
+                font-size: 20px;
+                padding: 3px 14px;
+            }
+
+        .packs-page .pack-info {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 3px;
+            margin-top: 4px;
+            width: 100%;
+        }
+
+        .packs-page .pack-name {
+            display: block;
+            font-size: 11px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.3px;
+            color: #dcdce1;
+            text-align: center;
+            /* ✅ Обрезка — что не влезло, скрыто, без многоточия */
+            width: 100%;
+            max-width: 100%;
+            white-space: nowrap;
+            overflow: hidden;
+        }
+        .packs-page .pack-cmd {
+            display: inline-block;
+            font-family: 'IBM Plex Mono', ...;
+            font-size: 18px;
+            font-weight: 700;
+            padding: 1px 6px;
+            border-radius: 3px;
+            ... color: #e6e6eb;
+            background: rgba(255, 255, 255, 0.15); /* ← это уже плашка */
+            border: 1px solid rgba(255, 255, 255, 0.08);
+        }
+        /* ============================================================
+        СТИКЕРЫ
+        ============================================================ */
+
+        /* Список паков */
+        .pack-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+            gap: 12px;
+            margin: 10px 0;
+        }
+
+        .pack-card {
+            background: rgba(45, 45, 68, 0.5);
+            border-radius: 10px;
+            padding: 2px;
+            text-align: center;
+            transition: transform 0.2s;
+        }
+
+            .pack-card:hover {
+                transform: scale(1.02);
+            }
+
+        .pack-info {
+            margin-top: 8px;
+        }
+
+        .pack-name {
+            display: block;
+            font-weight: bold;
+            color: #ffd700;
+        }
+
+        .pack-count {
+            display: block;
+            font-size: 11px;
+            color: #888;
+        }
+
+        .pack-link {
+            display: inline-block;
+            margin-top: 6px;
+            padding: 4px 12px;
+            background: #4caf50;
+            color: #fff;
+            border-radius: 4px;
+            text-decoration: none;
+            font-size: 12px;
+        }
+
+            .pack-link:hover {
+                background: #66bb6a;
+            }
+
+        /* ✅ По умолчанию (≤ 20 стикеров) — построчно, 5 в ряд */
+        .sticker-grid {
+            display: grid;
+            grid-auto-flow: row; /* ← СТРОКАМИ */
+            grid-template-columns: repeat(5, 1fr); /* 5 в ряд */
+            gap: 4px;
+            padding: 2px 0;
+            margin: 2px 0;
+            width: 100%;
+            max-width: 100%;
+            overflow: hidden;
+            scrollbar-width: none;
+            -ms-overflow-style: none;
+        }
+
+            .sticker-grid::-webkit-scrollbar {
+                display: none;
+            }
+
+            /* ✅ Когда стикеров > 20 — лента в 4 ряда × 5 колонок, скролл вправо */
+            .sticker-grid.sticker-scrollable {
+                grid-auto-flow: column; /* КОЛОНКАМИ */
+                grid-template-columns: none; /* сброс */
+                grid-template-rows: repeat(4, auto); /* 4 ряда */
+                grid-auto-columns: calc((100% - 4 * 4px) / 5); /* 5 колонок */
+                overflow-x: auto; /* скролл вправо */
+                overflow-y: hidden;
+            }
+
+        .sticker-card {
+            background: rgba(45, 45, 68, 0.5);
+            border-radius: 8px;
+            padding: 2px;
+            text-align: center;
+            overflow: hidden;
+            box-sizing: border-box;
+            min-width: 0;
+        }
+
+        .sticker-preview {
+            position: relative;
+            width: 100%;
+        }
+
+            .sticker-preview img {
+                width: 100%;
+                height: auto;
+                aspect-ratio: 1 / 1;
+                object-fit: contain;
+                filter: grayscale(100%);
+                display: block;
+            }
+
+        .sticker-badge {
+            position: absolute;
+            top: -4px;
+            right: -4px;
+            font-size: 10px;
+            background: #ff6b6b;
+            padding: 1px 6px;
+            border-radius: 8px;
+        }
+
+        .sticker-info {
+            margin-top: 6px;
+        }
+
+        .sticker-id {
+            display: block;
+            font-size: 11px;
+            color: #888;
+        }
+
+        .sticker-command {
+            display: inline-block;
+            font-family: 'IBM Plex Mono', 'JetBrains Mono', 'Source Code Pro', 'Consolas', monospace;
+            font-size: 18px;
+            font-weight: 700;
+            letter-spacing: 0;
+            padding: 0px 2px;
+            border-radius: 3px;
+            line-height: 1.25;
+            white-space: nowrap;
+            margin-top: 2px;
+            color: #e6e6eb;
+            background: rgba(255, 255, 255, 0.15);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+        }
+
+        .page-stickers-pack .stk-header {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            background: rgba(255, 255, 255, 0.08);
+            border-left: 4px solid rgba(255, 255, 255, 0.55);
+            border-radius: 2px;
+            padding: 8px 10px;
+            margin-bottom: 12px;
+        }
+
+        .page-stickers-pack .stk-header-name {
+            font-size: 20px;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 1.4px;
+            color: #dcdce1;
+        }
+
+        .page-stickers-pack .stk-header-cmd-row {
+            display: flex;
+            gap: 5px;
+            align-items: center;
+        }
+
+        .page-stickers-pack .stk-cmd {
+            font-family: 'IBM Plex Mono', 'JetBrains Mono', 'Source Code Pro', 'Consolas', monospace;
+            font-size: 16px;
+            font-weight: 700;
+            letter-spacing: 0;
+            padding: 2px 10px;
+            border-radius: 3px;
+            line-height: 1.25;
+            white-space: nowrap;
+            display: inline-block;
+            color: #d2d2d7;
+            background: rgba(255, 255, 255, 0.15);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+        }
+
+            .page-stickers-pack .stk-cmd.stk-cmd-main {
+                font-size: 20px;
+                padding: 3px 14px;
+            }
+    </style>
+</head>
+<body>
+
+    <div id="chat-container"></div>
+
+    <script>
+        // ============================================================
+// ИНИЦИАЛИЗАЦИЯ ПАКОВ: включаем скролл, если паков > 20
+// ============================================================
+
+function setupPacksGrid(grid) {
+    const cards = grid.querySelectorAll('.pack-card');
+    const count = cards.length;
+
+    if (grid.dataset.packsInit === '1') return;
+    grid.dataset.packsInit = '1';
+
+    console.log(`[Packs] setupPacksGrid. Cards: ${count}, Threshold: ${STICKER_AUTO_THRESHOLD}`);
+
+    if (count > STICKER_AUTO_THRESHOLD) {
+        // Много паков → вертикальный скролл и автопрокрутка
+        grid.classList.add('packs-scrollable');
+        stickerGridAutoStart(grid);   // та же функция — работает и с packs
+    } else {
+        // Мало паков → обычная сетка
+        grid.classList.remove('packs-scrollable');
+    }
+}
+// ============================================================
+// ABOUT-КОМАНДЫ: отдельный порог автопрокрута
+// ============================================================
+const COMMANDS_AUTO_THRESHOLD = 2;
+
+function setupCommandsGrid(grid) {
+    const cards = grid.querySelectorAll('.pack-card');
+    const count = cards.length;
+
+    if (grid.dataset.cmdInit === '1') return;
+    grid.dataset.cmdInit = '1';
+
+    console.log(`[Commands] setupCommandsGrid. Cards: ${count}, Threshold: ${COMMANDS_AUTO_THRESHOLD}`);
+
+    if (count > COMMANDS_AUTO_THRESHOLD) {
+        grid.classList.add('packs-scrollable');   // ← тот же класс, что у паков
+        stickerGridAutoStart(grid);                // ← та же функция автопрокрута
+    } else {
+        grid.classList.remove('packs-scrollable');
+    }
+}
+       // ============================================================
+// АВТОПРОКРУТКА СТИКЕРОВ (горизонтальная) — только если их > 20
+// ============================================================
+
+const STICKER_PAUSE_MS = 4000;
+const STICKER_SCROLL_MS = 1200;
+const STICKER_AUTO_THRESHOLD = 20;
+
+const stickerScrollStates = new WeakMap();
+
+function animateScrollLeft(grid, target, duration, onComplete) {
+    const start = grid.scrollLeft;
+    const distance = target - start;
+    const startTime = performance.now();
+
+    function easeInOut(t) {
+        return t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+    }
+
+    function step(now) {
+        const state = stickerScrollStates.get(grid);
+        if (state && state.stopped) return;
+
+        const elapsed = now - startTime;
+        const t = Math.min(elapsed / duration, 1);
+        const eased = easeInOut(t);
+
+        grid.scrollTo({ left: start + distance * eased, behavior: 'auto' });
+
+        if (t < 1) {
+            requestAnimationFrame(step);
+        } else if (onComplete) {
+            onComplete();
+        }
+    }
+
+    requestAnimationFrame(step);
+}
+
+// Ширина одной колонки (карточка + gap)
+function getStickerColumnStep(grid) {
+    // Ищем карточку — либо стикер, либо пак
+    const card = grid.querySelector('.sticker-card, .pack-card');
+    if (!card) return 76;
+    const rect = card.getBoundingClientRect();
+    const gap = 4;
+    return rect.width + gap;
+}
+
+function stickerAutoLoop(grid) {
+    const state = stickerScrollStates.get(grid);
+    if (!state || state.stopped) return;
+
+    const maxScroll = grid.scrollWidth - grid.clientWidth;
+    const current = grid.scrollLeft;
+    const step = getStickerColumnStep(grid);
+
+    // ✅ Дошли до правого края — меняем направление на "влево"
+    if (state.direction === 1 && current >= maxScroll - 2) {
+        state.direction = -1;
+    }
+    // ✅ Дошли до левого края — меняем направление на "вправо"
+    else if (state.direction === -1 && current <= 2) {
+        state.direction = 1;
+    }
+
+    // ✅ Целевая позиция — учитывая направление
+    let target = current + state.direction * step;
+
+    // Ограничиваем границами
+    if (target > maxScroll) target = maxScroll;
+    if (target < 0) target = 0;
+
+    animateScrollLeft(grid, target, STICKER_SCROLL_MS, () => {
+        const s = stickerScrollStates.get(grid);
+        if (!s || s.stopped) return;
+        if (s.stopping) {
+            stickerScrollStates.delete(grid);
+            return;
+        }
+        s.timeoutId = setTimeout(() => stickerAutoLoop(grid), STICKER_PAUSE_MS);
+    });
+}
+
+function stickerGridAutoStart(grid) {
+    if (stickerScrollStates.has(grid)) return;
+    if (grid.scrollWidth <= grid.clientWidth + 2) return;
+
+    const state = {
+        stopped: false,
+        stopping: false,
+        timeoutId: null,
+        direction: 1,                 // ✅ 1 = вправо, -1 = влево
+        firstDelayDone: false
+    };
+    stickerScrollStates.set(grid, state);
+
+    grid.addEventListener('mouseenter', () => stickerGridAutoStop(grid));
+    grid.addEventListener('mouseleave', () => stickerGridAutoResume(grid));
+
+    // ✅ Первый сдвиг — с задержкой, чтобы сообщение успело встать
+    const FIRST_DELAY_MS = 14000;
+    state.timeoutId = setTimeout(() => {
+        const s = stickerScrollStates.get(grid);
+        if (!s || s.stopped) return;
+        s.firstDelayDone = true;
+        stickerAutoLoop(grid);
+    }, FIRST_DELAY_MS);
+}
+
+function stickerGridAutoStop(grid) {
+    const state = stickerScrollStates.get(grid);
+    if (!state) return;
+    state.stopping = true;
+    if (state.timeoutId) {
+        clearTimeout(state.timeoutId);
+        state.timeoutId = null;
+    }
+}
+
+function stickerGridAutoStopImmediate(grid) {
+    const state = stickerScrollStates.get(grid);
+    if (!state) return;
+    state.stopped = true;
+    if (state.timeoutId) {
+        clearTimeout(state.timeoutId);
+        state.timeoutId = null;
+    }
+    stickerScrollStates.delete(grid);
+}
+
+function stickerGridAutoResume(grid) {
+    const state = stickerScrollStates.get(grid);
+    if (!state) return;
+    state.stopping = false;
+    state.stopped = false;
+    if (!state.timeoutId) {
+        stickerAutoLoop(grid);
+    }
+}
+
+// ============================================================
+// ИНИЦИАЛИЗАЦИЯ: включаем скролл, если стикеров > 20
+// ============================================================
+
+function setupStickerGrid(grid) {
+    const cards = grid.querySelectorAll('.sticker-card');
+    const count = cards.length;
+
+    if (grid.dataset.stickerInit === '1') return;
+    grid.dataset.stickerInit = '1';
+
+    console.log(`[Sticker] setupStickerGrid. Cards: ${count}, Threshold: ${STICKER_AUTO_THRESHOLD}`);
+
+    if (count > STICKER_AUTO_THRESHOLD) {
+        // Много → включаем горизонтальный скролл и автопрокрутку
+        grid.classList.add('sticker-scrollable');
+        stickerGridAutoStart(grid);
+    } else {
+        // Мало → обычная сетка без скролла
+        grid.classList.remove('sticker-scrollable');
+    }
+}
+
+        const chatContainer = document.getElementById('chat-container');
+
+        // ============================================================
+        // СОСТОЯНИЕ
+        // ============================================================
+        let es = null;
+
+        // ============================================================
+        // НАСТРОЙКИ
+        // ============================================================
+        const MAX_MESSAGES = 10;
+
+        let currentScrollSpeed = 1500;
+        let currentAppearSpeed = 0.3;
+
+        // ============================================================
+        // РАСПОРКА (spacer)
+        // ============================================================
+        function initSpacer() {
+        const spacer = document.createElement('div');
+        spacer.className = 'chat-spacer';
+        chatContainer.appendChild(spacer);
+        }
+        initSpacer();
+
+        // ============================================================
+        // СКРОЛЛ
+        // ============================================================
+        let scrollAnimationFrameId = null;
+
+        function smoothScrollToBottomAsync(element, duration) {
+        return new Promise((resolve) => {
+        if (scrollAnimationFrameId) {
+        cancelAnimationFrame(scrollAnimationFrameId);
+        }
+
+        const start = element.scrollTop;
+        let startTime = null;
+
+        function animateScroll(currentTime) {
+        if (!startTime) startTime = currentTime;
+        const elapsed = currentTime - startTime;
+        const progress = Math.min(elapsed / duration, 1);
+        const ease = progress * (2 - progress);
+
+        const target = element.scrollHeight - element.clientHeight;
+        const change = target - start;
+
+        if (change > 0) {
+        element.scrollTop = start + change * ease;
+        }
+
+        if (elapsed < duration) {
+        scrollAnimationFrameId = requestAnimationFrame(animateScroll);
+        } else {
+        element.scrollTop = element.scrollHeight - element.clientHeight;
+        scrollAnimationFrameId = null;
+        resolve();
+        }
+        }
+
+        scrollAnimationFrameId = requestAnimationFrame(animateScroll);
+        });
+        }
+
+        // ============================================================
+        // ЖДЁМ АНИМАЦИЮ ПОЯВЛЕНИЯ
+        // ============================================================
+        function waitForAnimation(element) {
+        return new Promise((resolve) => {
+        let done = false;
+
+        const finish = () => {
+        if (done) return;
+        done = true;
+        element.removeEventListener('animationend', onEnd);
+        element.removeEventListener('animationcancel', onEnd);
+        resolve();
+        };
+
+        const onEnd = () => finish();
+
+        element.addEventListener('animationend', onEnd);
+        element.addEventListener('animationcancel', onEnd);
+
+        setTimeout(finish, (currentAppearSpeed * 1000) + 300);
+        });
+        }
+
+        // ============================================================
+// ЖДЁМ ИМЕННО slideUp (не любую анимацию)
+// ============================================================
+function waitForSlideUp(element, durationMs) {
+    return new Promise((resolve) => {
+        let done = false;
+
+        const finish = () => {
+            if (done) return;
+            done = true;
+            element.removeEventListener('animationend', onEnd);
+            resolve();
+        };
+
+        const onEnd = (e) => {
+            // Реагируем ТОЛЬКО на slideUp
+            if (e.animationName === 'slideUp') {
+                finish();
+            }
+        };
+
+        element.addEventListener('animationend', onEnd);
+
+        // Fallback — на случай, если animationend не сработал
+        setTimeout(finish, durationMs + 300);
+    });
+}
+
+        // ============================================================
+        // УДАЛЕНИЕ СООБЩЕНИЙ
+        // ============================================================
+        function removeMessages(messages) {
+        return new Promise((resolve) => {
+        if (messages.length === 0) {
+        resolve();
+        return;
+        }
+
+        let pending = messages.length;
+
+        for (const oldMsg of messages) {
+oldMsg.querySelectorAll('.sticker-grid, .packs-grid, .commands-grid').forEach(grid => {
+    stickerGridAutoStopImmediate(grid);
+});
+        oldMsg.classList.add('message-leaving');
+
+        let done = false;
+        const finish = () => {
+        if (done) return;
+        done = true;
+
+        if (oldMsg.parentNode) oldMsg.remove();
+        pending--;
+        if (pending === 0) resolve();
+        };
+
+        oldMsg.addEventListener('transitionend', (e) => {
+        if (e.propertyName === 'opacity' || e.propertyName === 'max-height') {
+        finish();
+        }
+        });
+
+        setTimeout(finish, 600);
+        }
+        });
+        }
+
+        // ============================================================
+        // ОЧЕРЕДЬ (главное исправление)
+        // ============================================================
+        const revealQueue = [];
+        let isProcessingQueue = false;
+
+        function revealAndScrollMessage(msgDiv) {
+        revealQueue.push(msgDiv);
+
+        if (!isProcessingQueue) {
+        processNextInQueue();
+        }
+        }
+
+async function processNextInQueue() {
+    if (revealQueue.length === 0) {
+        isProcessingQueue = false;
+        return;
+    }
+
+    isProcessingQueue = true;
+    const msgDiv = revealQueue.shift();
+
+    console.log(`[InfoQueue] Старт. В очереди: ${revealQueue.length}`);
+
+    try {
+        // 1. Удаляем старые, если нужно
+        const activeMessages = Array.from(chatContainer.children).filter(el =>
+            !el.classList.contains('chat-spacer') &&
+            !el.classList.contains('message-leaving')
+        );
+
+        const slotsNeeded = activeMessages.length + 1 - MAX_MESSAGES;
+
+        if (slotsNeeded > 0) {
+            await removeMessages(activeMessages.slice(0, slotsNeeded));
+        }
+
+        // 2. Останавливаем все карусели
+// 2. Останавливаем все карусели
+document.querySelectorAll('.sticker-grid, .packs-grid, .commands-grid').forEach(grid => {
+    stickerGridAutoStop(grid);
+});
+        await new Promise(resolve => setTimeout(resolve, STICKER_SCROLL_MS + 100));
+
+        // 3. Добавляем в DOM с opacity: 0
+        msgDiv.style.opacity = '0';
+        msgDiv.style.animation = 'none';
+        chatContainer.appendChild(msgDiv);
+        void msgDiv.offsetHeight;
+
+        // 4. Запускаем анимацию появления
+        msgDiv.style.animation = `slideUp ${currentAppearSpeed}s ease-out forwards`;
+
+        // ✅ ЖЁСТКО ЖДЁМ ДЛИТЕЛЬНОСТЬ АНИМАЦИИ + ЗАПАС
+        //    Никаких animationend — просто таймер
+        const appearMs = currentAppearSpeed * 1000;
+        await new Promise(resolve => setTimeout(resolve, appearMs + 2000));
+
+        // 5. ТОЛЬКО ТЕПЕРЬ запускаем стикеры
+msgDiv.querySelectorAll('.sticker-grid').forEach(grid => {
+    setupStickerGrid(grid);
+});
+
+// ✅ Обрабатываем и главную страницу паков
+msgDiv.querySelectorAll('.packs-grid').forEach(grid => {
+    setupPacksGrid(grid);
+});
+
+        // ✅ Обрабатываем about-страницу с командами
+msgDiv.querySelectorAll('.commands-grid').forEach(grid => {
+    setupCommandsGrid(grid);
+});
+
+        // 6. Скролл info-чата вниз
+        const msgHeight = msgDiv.offsetHeight || 200;
+        const minSpeed = Math.max(currentScrollSpeed * 0.8, 600);
+        const maxSpeed = Math.min(currentScrollSpeed * 6.0, 10000);
+        const heightFactor = Math.min(Math.max((msgHeight - 30) / 600, 0), 1);
+        const scrollDuration = minSpeed + (maxSpeed - minSpeed) * heightFactor;
+
+        await smoothScrollToBottomAsync(chatContainer, scrollDuration);
+
+        console.log(`[InfoQueue] ✅ Цикл завершён`);
+    } catch (ex) {
+        console.error(`[InfoQueue] Ошибка:`, ex);
+    }
+
+    processNextInQueue();
+}
+
+        
+
+        // ============================================================
+        // ОБНОВЛЕНИЕ СКОРОСТЕЙ ИЗ SSE
+        // ============================================================
+        function updateScrollSpeed(speed) {
+        currentScrollSpeed = speed;
+        console.log(`🏃 Скорость скролла обновлена: ${speed}ms`);
+        }
+
+        function updateAppearSpeed(speed) {
+        currentAppearSpeed = speed;
+        console.log(`✨ Скорость появления обновлена: ${speed}s`);
+        }
+
+        // ============================================================
+        // ДОБАВЛЕНИЕ СООБЩЕНИЯ
+        // ============================================================
+        function addMessage(pageName, html) {
+        const msgDiv = document.createElement('div');
+        msgDiv.className = 'message';
+
+        msgDiv.innerHTML = `<div class="msg-body">${html}</div>`;
+
+        // FALLBACK: если в HTML нет .page-commands — генерируем из имени файла
+        const pageRoot = msgDiv.querySelector('.page-root');
+        if (pageRoot && !pageRoot.querySelector('.page-commands')) {
+        const cmdDiv = document.createElement('div');
+        cmdDiv.className = 'page-commands';
+        cmdDiv.textContent = `!!info:${(pageName || 'help').replace(/\//g, ':')}`;
+        pageRoot.insertBefore(cmdDiv, pageRoot.firstChild);
+        }
+
+        // Ждём загрузки картинок
+        const images = msgDiv.querySelectorAll('img');
+
+        if (images.length === 0) {
+        revealAndScrollMessage(msgDiv);
+        } else {
+        const promises = Array.from(images).map(img => {
+        if (img.complete && img.naturalWidth > 0) {
+        return Promise.resolve();
+        }
+
+        return new Promise((resolve) => {
+        const timeout = setTimeout(() => {
+        img.onload = null;
+        img.onerror = null;
+        resolve();
+        }, 3000);
+
+        function handler() {
+        clearTimeout(timeout);
+        img.onload = null;
+        img.onerror = null;
+        resolve();
+        }
+        img.onload = handler;
+        img.onerror = handler;
+        });
+        });
+
+        Promise.allSettled(promises).then(() => {
+        revealAndScrollMessage(msgDiv);
+        });
+        }
+        }
+
+        // ============================================================
+        // SSE ПОДКЛЮЧЕНИЕ
+        // ============================================================
+        function connectInfoStream() {
+        if (es) {
+        es.close();
+        es = null;
+        }
+        es = new EventSource('/info/stream');
+
+        es.onmessage = function(e) {
+        try {
+        const data = JSON.parse(e.data);
+
+        if (data.type === 'info_message') {
+        addMessage(data.pageName, data.html);
+        }
+
+        if (data.type === 'scroll_speed') {
+        updateScrollSpeed(data.speed);
+        }
+
+        if (data.type === 'appear_speed') {
+        updateAppearSpeed(data.speed);
+        }
+        } catch (ex) {
+        console.error('SSE error:', ex);
+        }
+        };
+
+        es.onerror = function() {
+        if (es && es.readyState === EventSource.CLOSED) {
+        console.log('Info SSE закрыт — переподключение не требуется');
+        return;
+        }
+
+        console.warn('SSE ошибка. Браузер попробует переподключиться автоматически.');
+        };
+        }
+
+        // ============================================================
+        // СТАРТ
+        // ============================================================
+        connectInfoStream();
+        console.log('📚 Информационный чат для OBS запущен! Жду команды...');
+        console.log(`🏃 Скорость скролла: ${currentScrollSpeed}ms`);
+        console.log(`✨ Скорость появления: ${currentAppearSpeed}s`);
+
+        window.addEventListener('beforeunload', () => {
+        if (es) {
+        es.close();
+        es = null;
+        console.log('Info SSE соединение принудительно закрыто перед обновлением.');
+        }
+        });
+    </script>
+</body>
+</html>

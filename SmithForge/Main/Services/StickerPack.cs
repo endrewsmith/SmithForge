@@ -44,7 +44,7 @@ namespace SmithForge.Main.Services
 
             System.Diagnostics.Debug.WriteLine($"[StickerManager] Найдено папок: {packDirs.Count}");
 
-            int packId = 1;
+            int fallbackCounter = 1; // ← порядковый fallback, если в имени нет числа
 
             foreach (var dir in packDirs)
             {
@@ -59,20 +59,45 @@ namespace SmithForge.Main.Services
 
                 if (files.Any())
                 {
+                    // ✅ БЕРЁМ НОМЕР ИЗ НАЧАЛА ИМЕНИ: "001_папка" → 1
+                    int actualPackId = fallbackCounter;
+                    var match = Regex.Match(folderName, @"^(\d+)_");
+                    if (match.Success && int.TryParse(match.Groups[1].Value, out int parsed))
+                    {
+                        actualPackId = parsed;
+                        System.Diagnostics.Debug.WriteLine(
+                            $"[StickerManager] Извлечён номер пака из '{folderName}': {actualPackId}");
+                    }
+                    else
+                    {
+                        System.Diagnostics.Debug.WriteLine(
+                            $"[StickerManager] ⚠️ У папки '{folderName}' нет числового префикса, используется порядковый: {actualPackId}");
+                    }
+
                     var pack = new StickerPack
                     {
-                        Id = packId,
+                        Id = actualPackId,
                         FolderName = folderName,
                         Path = dir,
                         StickerCount = files.Count,
                         StickerFiles = files
                     };
 
-                    _packs[packId] = pack;
-                    _folderToPackId[folderName] = packId;
+                    // Если два пака с одинаковым номером — предупреждаем и не перезаписываем
+                    if (_packs.ContainsKey(actualPackId))
+                    {
+                        System.Diagnostics.Debug.WriteLine(
+                            $"[StickerManager] ⚠️ Пак #{actualPackId} уже существует ({_packs[actualPackId].FolderName}), пропускаем '{folderName}'");
+                    }
+                    else
+                    {
+                        _packs[actualPackId] = pack;
+                        _folderToPackId[folderName] = actualPackId;
+                        System.Diagnostics.Debug.WriteLine(
+                            $"[StickerManager] Пак #{actualPackId}: {folderName} ({files.Count} стикеров)");
+                    }
 
-                    System.Diagnostics.Debug.WriteLine($"[StickerManager] Пак #{packId}: {folderName} ({files.Count} стикеров)");
-                    packId++;
+                    fallbackCounter++;
                 }
                 else
                 {
@@ -94,17 +119,7 @@ namespace SmithForge.Main.Services
                 return GetStickerFileFromPack(pack, stickerId);
             }
 
-            // 2. Если не нашли, пробуем найти по имени папки с суффиксом _номер
-            string targetSuffix = $"_{packId}";
-            var folderMatch = _folderToPackId.FirstOrDefault(kvp => kvp.Key.EndsWith(targetSuffix));
-
-            if (folderMatch.Key != null && _packs.TryGetValue(folderMatch.Value, out var packByFolder))
-            {
-                System.Diagnostics.Debug.WriteLine($"[StickerManager] Найден пак по суффиксу: {packByFolder.FolderName}");
-                return GetStickerFileFromPack(packByFolder, stickerId);
-            }
-
-            // 3. Пробуем найти по индексу в списке (если папки отсортированы)
+            // 2. Пробуем найти по индексу в списке (если папки отсортированы)
             var sortedPacks = _packs.Values.OrderBy(p => p.Id).ToList();
             if (packId >= 1 && packId <= sortedPacks.Count)
             {
@@ -128,20 +143,20 @@ namespace SmithForge.Main.Services
             // Проверяем разные форматы имен файлов
             string[] possibleNames = new[]
             {
-                $"{stickerId:D3}.png",     // 001.png
-                $"{stickerId:D3}.jpg",     // 001.jpg
-                $"{stickerId:D3}.jpeg",    // 001.jpeg
-                $"{stickerId:D3}.gif",     // 001.gif
-                $"{stickerId:D3}.webp",    // 001.webp
-                $"{stickerId:D2}.png",     // 01.png
-                $"{stickerId:D2}.jpg",     // 01.jpg
-                $"{stickerId:D2}.gif",     // 01.gif
-                $"{stickerId}.png",        // 1.png
-                $"{stickerId}.jpg",        // 1.jpg
-                $"{stickerId}.gif",        // 1.gif
-                $"sticker_{stickerId}.png", // sticker_1.png
-                $"sticker_{stickerId}.gif", // sticker_1.gif
-            };
+            $"{stickerId:D3}.png",     // 001.png
+            $"{stickerId:D3}.jpg",     // 001.jpg
+            $"{stickerId:D3}.jpeg",    // 001.jpeg
+            $"{stickerId:D3}.gif",     // 001.gif
+            $"{stickerId:D3}.webp",    // 001.webp
+            $"{stickerId:D2}.png",     // 01.png
+            $"{stickerId:D2}.jpg",     // 01.jpg
+            $"{stickerId:D2}.gif",     // 01.gif
+            $"{stickerId}.png",        // 1.png
+            $"{stickerId}.jpg",        // 1.jpg
+            $"{stickerId}.gif",        // 1.gif
+            $"sticker_{stickerId}.png", // sticker_1.png
+            $"sticker_{stickerId}.gif", // sticker_1.gif
+        };
 
             foreach (var fileName in possibleNames)
             {

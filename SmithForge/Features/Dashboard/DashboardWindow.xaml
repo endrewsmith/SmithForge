@@ -137,12 +137,12 @@
                       HorizontalScrollBarVisibility="Disabled"
                       Background="#232323"
                       Margin="0,45,0,0"
-                      Padding="0,10,0,0"
+                      Padding="0,0,0,0"
                       ScrollChanged="MainScrollViewer_ScrollChanged">
             <ItemsControl x:Name="MessagesList" 
                           ItemsSource="{Binding DisplayMessages}" 
                           IsHitTestVisible="True"
-                          Margin="10">
+                          Margin="10,10,10,0">
                 <ItemsControl.ItemsPanel>
                     <ItemsPanelTemplate>
                         <StackPanel VerticalAlignment="Bottom"/>
@@ -150,11 +150,36 @@
                 </ItemsControl.ItemsPanel>
                 <ItemsControl.ItemTemplate>
                     <DataTemplate>
-                        <ContentControl Content="{Binding}" 
-                                        ContentTemplate="{Binding DashboardMessageSkin}"
-                                        Margin="0,2"/>
+                        <Grid x:Name="MessageGrid" 
+          Margin="0,2,0,2" 
+          Background="Transparent">
+                            <ContentControl Content="{Binding}" 
+                        ContentTemplate="{Binding DashboardMessageSkin}"/>
+                            <Grid.Style>
+                                <Style TargetType="Grid">
+                                    <Style.Triggers>
+                                        <!-- ✅ Анимация всегда срабатывает при появлении нового сообщения -->
+                                        <EventTrigger RoutedEvent="Loaded">
+                                            <BeginStoryboard>
+                                                <Storyboard>
+                                                    <ThicknessAnimation Storyboard.TargetProperty="Margin"
+                    From="0,10,0,-250" 
+                    To="0,0,0,0" 
+                    Duration="0:0:1.0">
+                                                        <ThicknessAnimation.EasingFunction>
+                                                            <SineEase EasingMode="EaseInOut"/>
+                                                        </ThicknessAnimation.EasingFunction>
+                                                    </ThicknessAnimation>
+                                                </Storyboard>
+                                            </BeginStoryboard>
+                                        </EventTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Grid.Style>
+                        </Grid>
                     </DataTemplate>
                 </ItemsControl.ItemTemplate>
+
             </ItemsControl>
         </ScrollViewer>
 

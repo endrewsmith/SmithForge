@@ -1,0 +1,46 @@
+<div class="message rank-5-container platform-{platform}"
+     data-message-number="{messageNumber}"
+     data-message-id="{messageId}"
+     data-user-id="{userId}"
+     data-user-rank="{userRank}">
+    <!-- ВЕРХНЯЯ ОБЛАСТЬ (ранг, ключ кармы, карма) -->
+    <div class="msg-header">
+        <span class="rank-display">{rankDisplay}</span>
+        <div class="karma-container">
+            <span class="karma-key">{karmaKey}</span>
+            <span class="karma-value">{karma}</span>
+            <span class="karma-icon">⚡</span>
+        </div>
+    </div>
+
+    <!-- ТЕКСТ СООБЩЕНИЯ (с аватаркой) -->
+    <div class="msg-body">
+        <!-- ✅ Аватарка: если есть — img, если нет — рамка -->
+        <span class="avatar-border">
+            <img class="user-avatar" src="{avatarPath}" alt=""
+                 onerror="this.style.display='none'; this.parentElement.classList.add('empty');" />
+        </span>
+        <span class="name">{displayName}</span>
+        <span class="colon"> : </span>
+        <span class="text">{formattedMessage}</span>
+    </div>
+
+    <!-- НИЖНЯЯ ОБЛАСТЬ (номер + реакции) -->
+    <div class="msg-footer">
+        <div class="msg-number-container">
+            <span class="hash-symbol">#</span>
+            <span class="msg-number">{messageNumber}</span>
+        </div>
+        <div class="reactions-container">
+            <!-- ✅ СКРЫТЫ через hidden -->
+            <div class="reaction-panel like-panel hidden">
+                <span class="reaction-icon like-icon">👍</span>
+                <span class="reaction-count like-count">{likes}</span>
+            </div>
+            <div class="reaction-panel dislike-panel hidden">
+                <span class="reaction-icon dislike-icon">👎</span>
+                <span class="reaction-count dislike-count">{dislikes}</span>
+            </div>
+        </div>
+    </div>
+</div>

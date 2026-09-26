@@ -1,0 +1,1275 @@
+﻿<!DOCTYPE html>
+<html>
+<head>
+    <link href="https://googleapis.com" rel="stylesheet">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SmithForge Chat Overlay</title>
+    <style>
+
+        /* Общие стили для эмодзи */
+        .emoji {
+            display: inline-block;
+            vertical-align: middle;
+            margin: 0 2px;
+            image-rendering: auto;
+        }
+
+        .youtube-emoji {
+            width: 12px;
+            height: 12px;
+        }
+
+        .twitch-emoji {
+            width: 12px;
+            height: 12px;
+        }
+
+        .youtube-emoji-lg {
+            width: 12px;
+            height: 12px;
+        }
+
+        .youtube-emoji-sm {
+            width: 12px;
+            height: 12px;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            background: transparent;
+            font-family: 'Segoe UI', Arial, sans-serif;
+            overflow: hidden;
+        }
+
+        #chat-container {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            height: 100vh;
+            max-height: 100vh;
+            overflow-y: auto !important;
+            overflow-x: hidden;
+            padding: 5px 2px;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            scrollbar-width: none;
+            -ms-overflow-style: none;
+        }
+
+        .message-leaving {
+            opacity: 0 !important;
+            max-height: 0 !important;
+            padding-top: 0 !important;
+            padding-bottom: 0 !important;
+            margin-top: 0 !important;
+            margin-bottom: 0 !important;
+            border-top-width: 0 !important;
+            border-bottom-width: 0 !important;
+            overflow: hidden !important;
+            transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1) !important;
+        }
+
+        #chat-container::-webkit-scrollbar {
+            width: 4px;
+        }
+
+        #chat-container::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        #chat-container::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 2px;
+        }
+
+        .chat-spacer {
+            height: 100%;
+            flex-shrink: 0;
+            background: transparent;
+            pointer-events: none;
+        }
+
+        .message {
+            flex-shrink: 0 !important;
+            opacity: 0;
+            transform: translateY(20px);
+            will-change: transform, opacity;
+        }
+
+            .message.rank-0 {
+                background: #000000 !important;
+                border: 1px solid #757575 !important;
+                border-radius: 5px !important;
+                padding: 2px 0 2px 8px !important;
+                margin: 0px !important;
+                box-sizing: border-box !important;
+                width: 100% !important;
+                display: flex !important;
+                flex-direction: row !important;
+                justify-content: space-between !important;
+                align-items: center !important;
+            }
+
+                .message.rank-0 .msg-body {
+                    flex: 1 !important;
+                    text-align: left !important;
+                    margin-right: 15px !important;
+                    line-height: 18px !important;
+                    display: block !important;
+                }
+
+                    .message.rank-0 .msg-body .name {
+                        font-family: 'Spectral SC', serif !important;
+                        color: #999999 !important;
+                        font-weight: bold !important;
+                        font-size: 15px !important;
+                        display: inline !important;
+                    }
+
+                    .message.rank-0 .msg-body .colon {
+                        font-family: 'Spectral SC', serif !important;
+                        color: #FFFFFF !important;
+                        font-size: 15px !important;
+                        display: inline !important;
+                        margin-right: 4px !important;
+                    }
+
+                    .message.rank-0 .msg-body .text {
+                        font-family: 'Spectral SC', serif !important;
+                        color: #FFFFFF !important;
+                        font-size: 15px !important;
+                        word-break: break-word !important;
+                        display: inline !important;
+                        font-variant: small-caps !important;
+                        text-transform: none !important;
+                    }
+
+        @keyframes slideUp {
+            0% {
+                opacity: 0;
+                transform: translateY(0);
+            }
+
+            100% {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .hidden {
+            display: none !important;
+        }
+
+        /* ИНДИКАТОР РАНГА 0 */
+        .rank-0-indicator-box {
+            display: flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            flex-shrink: 0 !important;
+            width: 16px !important;
+            height: 24px !important;
+            position: relative !important;
+            overflow: visible !important;
+            contain: size layout;
+            opacity: 0;
+            animation: panelTimeline 6.5s ease-in-out forwards !important;
+        }
+
+        @keyframes panelTimeline {
+            0% {
+                opacity: 0;
+                transform: scale(0.8);
+            }
+
+            5% {
+                opacity: 1;
+                transform: scale(1);
+            }
+
+            90% {
+                opacity: 1;
+                transform: scale(1);
+            }
+
+            100% {
+                opacity: 0;
+                transform: scale(0.8);
+            }
+        }
+
+        .rank-0-indicator-box .step-panel {
+            display: flex !important;
+            flex-direction: column-reverse !important;
+            gap: 1px !important;
+        }
+
+        .rank-0-indicator-box .step-dash {
+            height: 1.0px !important;
+            width: 5px !important;
+            opacity: 0.0 !important;
+            transition: opacity 0.35s ease-out !important;
+        }
+
+            .rank-0-indicator-box .step-dash.active {
+                opacity: 1 !important;
+            }
+
+        .rank-0-indicator-box .dash-1 {
+            background-color: #FFFF00 !important;
+        }
+
+        .rank-0-indicator-box .dash-2 {
+            background-color: #FFEA00 !important;
+        }
+
+        .rank-0-indicator-box .dash-3 {
+            background-color: #FFD700 !important;
+        }
+
+        .rank-0-indicator-box .dash-4 {
+            background-color: #FFC84D !important;
+        }
+
+        .rank-0-indicator-box .dash-5 {
+            background-color: #FFB347 !important;
+        }
+
+        .rank-0-indicator-box .dash-6 {
+            background-color: #FFA500 !important;
+        }
+
+        .rank-0-indicator-box .dash-7 {
+            background-color: #FF8C00 !important;
+        }
+
+        .rank-0-indicator-box .dash-8 {
+            background-color: #FF7F50 !important;
+        }
+
+        .rank-0-indicator-box .dash-9 {
+            background-color: #FF6347 !important;
+        }
+
+        .rank-0-indicator-box .dash-10 {
+            background-color: #FF4500 !important;
+        }
+
+        .rank-0-indicator-box .rank-star {
+            position: absolute !important;
+            font-size: 16px !important;
+            color: #FFD700 !important;
+            opacity: 0;
+            transform: scale(0);
+            transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            right: 10px !important;
+        }
+
+            .rank-0-indicator-box .rank-star.active {
+                opacity: 1 !important;
+                transform: scale(1) !important;
+                animation: starPulse 1.5s ease-in-out infinite;
+            }
+
+        @keyframes starPulse {
+            0%, 100% {
+                transform: scale(1);
+            }
+
+            50% {
+                transform: scale(1.2);
+            }
+        }
+
+        .rank-0-indicator-box .rank-star.explode {
+            animation: starExplode 1.8s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards !important;
+        }
+
+        @keyframes starExplode {
+            0% {
+                opacity: 0;
+                transform: scale(0);
+                text-shadow: 0 0 0 rgba(255, 215, 0, 0);
+            }
+
+            30% {
+                opacity: 0.6;
+                transform: scale(1.4);
+                text-shadow: 0 0 20px rgba(255, 215, 0, 0.6);
+            }
+
+            60% {
+                opacity: 1;
+                transform: scale(1.15);
+                text-shadow: 0 0 35px rgba(255, 215, 0, 0.8);
+            }
+
+            100% {
+                opacity: 1;
+                transform: scale(1);
+                text-shadow: 0 0 8px rgba(255, 215, 0, 0.5);
+            }
+        }
+
+        .rank-0-indicator-box .rank-star.supernova {
+            animation: starSupernova 1.5s ease-out forwards !important;
+        }
+
+        @keyframes starSupernova {
+            0% {
+                opacity: 0;
+                transform: scale(0);
+            }
+
+            40% {
+                opacity: 1;
+                transform: scale(1.6);
+                text-shadow: 0 0 30px rgba(255, 215, 0, 0.9);
+            }
+
+            70% {
+                transform: scale(0.95);
+                text-shadow: 0 0 15px rgba(255, 215, 0, 0.6);
+            }
+
+            100% {
+                opacity: 1;
+                transform: scale(1);
+                text-shadow: 0 0 8px rgba(255, 215, 0, 0.5);
+            }
+        }
+
+        .rank-0-indicator-box .rank-star.firework {
+            animation: starFirework 1.8s ease-out forwards !important;
+        }
+
+        @keyframes starFirework {
+            0% {
+                opacity: 0;
+                transform: scale(0);
+                text-shadow: 0 0 0 rgba(255, 215, 0, 0);
+            }
+
+            25% {
+                opacity: 0.7;
+                transform: scale(1.6);
+                text-shadow: 0 0 25px rgba(255, 215, 0, 0.7);
+            }
+
+            55% {
+                opacity: 1;
+                transform: scale(1.35);
+                text-shadow: 0 0 50px rgba(255, 215, 0, 0.9);
+            }
+
+            80% {
+                transform: scale(1.08);
+                text-shadow: 0 0 20px rgba(255, 215, 0, 0.6);
+            }
+
+            100% {
+                opacity: 1;
+                transform: scale(1);
+                text-shadow: 0 0 8px rgba(255, 215, 0, 0.5);
+            }
+        }
+
+        .rank-0-indicator-box .rank-star.rainbow {
+            animation: starRainbow 2.2s ease-in-out forwards !important;
+        }
+
+        @keyframes starRainbow {
+            0% {
+                opacity: 0;
+                transform: scale(0);
+                color: #FF4500;
+            }
+
+            20% {
+                opacity: 1;
+                transform: scale(1.3);
+                color: #FFD700;
+            }
+
+            40% {
+                transform: scale(1.1);
+                color: #00FF00;
+            }
+
+            60% {
+                transform: scale(1.2);
+                color: #00BFFF;
+            }
+
+            80% {
+                transform: scale(1.05);
+                color: #8B00FF;
+            }
+
+            100% {
+                opacity: 1;
+                transform: scale(1);
+                color: #FFD700;
+            }
+        }
+
+        .rank-0-indicator-box .rank-star.pop-sticker {
+            animation: starPopSticker 0.7s cubic-bezier(0.34, 1.56, 0.64, 1) forwards !important;
+        }
+
+        @keyframes starPopSticker {
+            0% {
+                opacity: 0;
+                transform: scale(0.4) rotate(-15deg);
+            }
+
+            30% {
+                opacity: 1;
+                transform: scale(1.15) rotate(8deg);
+            }
+
+            55% {
+                transform: scale(1.05) rotate(-4deg);
+            }
+
+            75% {
+                transform: scale(1) rotate(2deg);
+            }
+
+            100% {
+                opacity: 1;
+                transform: scale(1) rotate(0deg);
+            }
+        }
+
+        .rank-0-indicator-box .rank-star.fly-right {
+            animation: starFlyRight 3s ease-in-out forwards !important;
+        }
+
+        @keyframes starFlyRight {
+            0% {
+                opacity: 0;
+                transform: scale(0) rotate(0deg);
+            }
+
+            15% {
+                opacity: 0.4;
+                transform: scale(0.6) rotate(90deg);
+            }
+
+            30% {
+                opacity: 1;
+                transform: scale(1.1) rotate(200deg);
+                text-shadow: 0 0 25px rgba(255, 215, 0, 0.8);
+            }
+
+            40% {
+                opacity: 1;
+                transform: scale(1) rotate(280deg);
+                text-shadow: 0 0 15px rgba(255, 215, 0, 0.7);
+            }
+
+            55% {
+                opacity: 1;
+                transform: scale(1.08) rotate(360deg);
+                text-shadow: 0 0 20px rgba(255, 215, 0, 0.8);
+            }
+
+            60% {
+                opacity: 1;
+                transform: scale(1) rotate(360deg);
+                text-shadow: 0 0 8px rgba(255, 215, 0, 0.5);
+            }
+
+            80% {
+                opacity: 0.8;
+                transform: translateX(30px) scale(0.9) rotate(400deg);
+            }
+
+            100% {
+                opacity: 0;
+                transform: translateX(70px) scale(0.5) rotate(450deg);
+            }
+        }
+
+        /* ЭФФЕКТЫ ОБНОВЛЕНИЯ */
+        .message.message-updated {
+            animation: messageUpdate 0.6s ease !important;
+        }
+
+        @keyframes messageUpdate {
+            0% {
+                background-color: rgba(255, 215, 0, 0.3);
+            }
+
+            100% {
+                background-color: transparent;
+            }
+        }
+
+        .message-reactions {
+            display: flex;
+            gap: 12px;
+            font-size: 12px;
+            margin-top: 4px;
+            padding: 3px 8px;
+            opacity: 0.7;
+            transition: opacity 0.3s;
+            border-top: 1px solid rgba(255,255,255,0.08);
+        }
+
+            .message-reactions .reaction-like,
+            .message-reactions .reaction-dislike {
+                transition: transform 0.2s, color 0.2s;
+            }
+
+                .message-reactions .reaction-like.active {
+                    animation: reactionPop 0.8s ease;
+                    color: #4CAF50;
+                    font-weight: bold;
+                }
+
+                .message-reactions .reaction-dislike.active {
+                    animation: reactionPop 0.8s ease;
+                    color: #F44336;
+                    font-weight: bold;
+                }
+
+        @keyframes reactionPop {
+            0% {
+                transform: scale(1);
+            }
+
+            30% {
+                transform: scale(1.5);
+            }
+
+            60% {
+                transform: scale(0.9);
+            }
+
+            100% {
+                transform: scale(1);
+            }
+        }
+
+        .message.anim-rank_up {
+            animation: rankUp 1.5s ease !important;
+        }
+
+        @keyframes rankUp {
+            0% {
+                transform: scale(1);
+                box-shadow: none;
+            }
+
+            30% {
+                transform: scale(1.05);
+                box-shadow: 0 0 30px gold;
+            }
+
+            100% {
+                transform: scale(1);
+                box-shadow: none;
+            }
+        }
+
+        .message.anim-pulse {
+            animation: msgPulse 1s ease !important;
+        }
+
+        @keyframes msgPulse {
+            0%, 100% {
+                transform: scale(1);
+            }
+
+            50% {
+                transform: scale(1.02);
+                box-shadow: 0 0 20px rgba(255, 215, 0, 0.5);
+            }
+        }
+
+        .message.anim-shake {
+            animation: msgShake 0.5s ease !important;
+        }
+
+        @keyframes msgShake {
+            0%, 100% {
+                transform: translateX(0);
+            }
+
+            25% {
+                transform: translateX(-5px);
+            }
+
+            75% {
+                transform: translateX(5px);
+            }
+        }
+    </style>
+</head>
+<body>
+    <div id="chat-container"></div>
+    <script>
+        const chatContainer = document.getElementById('chat-container');
+        const loadedCss = new Set();
+
+        // ХРАНИЛИЩЕ СООБЩЕНИЙ
+        const messageElements = new Map();
+        const messageNumberMap = new Map();
+
+        // НАСТРОЙКИ
+        const MAX_MESSAGES = 20;
+        const TRIM_TO = 10;
+        let currentScrollSpeed = 1500;
+        let currentAppearSpeed = 0.3;
+
+        // РАСПОРКА
+        function initSpacer() {
+        const spacer = document.createElement('div');
+        spacer.className = 'chat-spacer';
+        chatContainer.appendChild(spacer);
+        }
+        initSpacer();
+
+        // SSE
+        let es = null;
+
+        function connectSSE() {
+        if (es) {
+        es.close();
+        es = null;
+        }
+
+        es = new EventSource('/stream');
+
+        es.onmessage = function(event) {
+        try {
+        const data = JSON.parse(event.data);
+        if (data.type === 'ping') return;
+
+        switch (data.type) {
+        case 'chat_message':
+        addMessage(data);
+        break;
+        case 'avatar_update':
+        updateAvatar(data);
+        break;
+        case 'message_update':
+        updateExistingMessage(data.id, data.update);
+        break;
+        case 'user_messages_update':
+        updateAllUserMessages(data.userId, data.update);
+        break;
+        case 'message_reaction':
+        updateMessageReaction(data.messageNumber, data.reaction, data.count);
+        break;
+        case 'message_animation':
+        playMessageAnimation(data.id, data.animation, data.duration);
+        break;
+        case 'user_animation':
+        playUserAnimation(data.userId, data.animation, data.duration);
+        break;
+        default:
+        if (!data.type || data.displayName) {
+        addMessage(data);
+        }
+        }
+        } catch (e) {
+        console.error('SSE parse error:', e);
+        }
+        };
+
+        es.onerror = function() {
+        if (es && es.readyState === EventSource.CLOSED) {
+        console.log('SSE соединение закрыто — переподключение не требуется');
+        return;
+        }
+        setTimeout(connectSSE, 3000);
+        };
+        }
+
+        // ОБНОВЛЕНИЕ АВАТАРКИ
+        function updateAvatar(data) {
+        const elements = document.querySelectorAll(`[data-user-id="${data.userId}"]`);
+        elements.forEach(el => {
+        const avatar = el.querySelector('.avatar');
+        if (avatar) {
+        avatar.src = data.avatarPath + '?t=' + Date.now();
+        }
+        });
+        }
+
+        // ОБНОВЛЕНИЕ СУЩЕСТВУЮЩЕГО СООБЩЕНИЯ
+        function updateExistingMessage(messageId, update) {
+        const el = messageElements.get(messageId);
+        if (!el) {
+        console.warn(`[Update] Сообщение ${messageId} не найдено в DOM`);
+        return;
+        }
+
+        if (update.formattedMessage !== undefined) {
+        const textEl = el.querySelector('.text');
+        if (textEl) textEl.innerHTML = update.formattedMessage;
+        }
+
+        if (update.displayName !== undefined) {
+        const nameEl = el.querySelector('.name');
+        if (nameEl) nameEl.textContent = update.displayName;
+        }
+
+        if (update.karma !== undefined) {
+        const karmaEl = el.querySelector('.karma-value') || el.querySelector('.karma');
+        if (karmaEl) karmaEl.textContent = update.karma;
+        }
+
+        if (update.userRank !== undefined) {
+        el.className = el.className.replace(/rank-\d+-container/g, '').replace(/\brank-\d+\b/g, '');
+        el.classList.add(`rank-${update.userRank}-container`);
+        el.classList.add(`rank-${update.userRank}`);
+        el.setAttribute('data-user-rank', update.userRank);
+
+        const rankEl = el.querySelector('.rank-display');
+        if (rankEl) rankEl.textContent = update.rankDisplay || '';
+
+        if (update.rankCss) {
+        loadRankCss(`rank-${update.userRank}-container`, update.rankCss);
+        }
+        }
+
+        if (update.fullHtml) {
+        el.innerHTML = update.fullHtml;
+        }
+
+        el.classList.add('message-updated');
+        setTimeout(() => el.classList.remove('message-updated'), 600);
+        }
+
+        // ОБНОВЛЕНИЕ ВСЕХ СООБЩЕНИЙ ПОЛЬЗОВАТЕЛЯ
+        function updateAllUserMessages(userId, update) {
+        let count = 0;
+        messageElements.forEach((el) => {
+        if (el.getAttribute('data-user-id') === userId) {
+        const id = el.getAttribute('data-message-id');
+        updateExistingMessage(id, update);
+        count++;
+        }
+        });
+        console.log(`[Update] Обновлено ${count} сообщений пользователя ${userId}`);
+        }
+
+        // ОБНОВЛЕНИЕ РЕАКЦИЙ
+        function updateMessageReaction(messageNumber, reaction, count) {
+        const el = messageNumberMap.get(String(messageNumber));
+        if (!el) return;
+
+        if (reaction === 'like') {
+        const countEl = el.querySelector('.like-count');
+        const panel = el.querySelector('.like-panel');
+        if (countEl) countEl.textContent = count;
+        if (panel) {
+        panel.classList.remove('hidden');
+        panel.classList.add('active', 'just-appeared');
+        if (countEl) countEl.classList.add('bump');
+        setTimeout(() => {
+        panel.classList.remove('active', 'just-appeared');
+        if (countEl) countEl.classList.remove('bump');
+        }, 800);
+        }
+        } else if (reaction === 'dislike') {
+        const countEl = el.querySelector('.dislike-count');
+        const panel = el.querySelector('.dislike-panel');
+        if (countEl) countEl.textContent = count;
+        if (panel) {
+        panel.classList.remove('hidden');
+        void panel.offsetHeight;
+        panel.classList.add('active', 'just-appeared');
+        if (countEl) countEl.classList.add('bump');
+        setTimeout(() => {
+        panel.classList.remove('active', 'just-appeared');
+        if (countEl) countEl.classList.remove('bump');
+        }, 800);
+        }
+        }
+        }
+
+        // АНИМАЦИЯ ОДНОГО СООБЩЕНИЯ
+        function playMessageAnimation(messageId, animationName, durationMs) {
+        const el = messageElements.get(messageId);
+        if (!el) return;
+
+        el.classList.add(`anim-${animationName}`);
+        setTimeout(() => el.classList.remove(`anim-${animationName}`), durationMs);
+        }
+
+        // АНИМАЦИЯ ВСЕХ СООБЩЕНИЙ ПОЛЬЗОВАТЕЛЯ
+        function playUserAnimation(userId, animationName, durationMs) {
+        messageElements.forEach((el) => {
+        if (el.getAttribute('data-user-id') === userId) {
+        el.classList.add(`anim-${animationName}`);
+        setTimeout(() => el.classList.remove(`anim-${animationName}`), durationMs);
+        }
+        });
+        }
+
+        // ДЕФОЛТНЫЙ ШАБЛОН
+        function getDefaultTemplate() {
+        return '<div class="message rank-0">' +
+        '  <div class="msg-body">' +
+        '    <span class="name">{displayName}</span>' +
+        '    <span class="colon"> : </span>' +
+        '    <span class="text">{formattedMessage}</span>' +
+        '  </div>' +
+        '</div>';
+        }
+
+        // ОБНОВЛЕНИЕ СКОРОСТИ ИЗ SSE
+        function updateScrollSpeed(speed) {
+        currentScrollSpeed = speed;
+        console.log(`🏃 Скорость скролла обновлена: ${speed}ms`);
+        }
+
+        function updateAppearSpeed(speed) {
+        currentAppearSpeed = speed;
+        console.log(`✨ Скорость появления обновлена: ${speed}s`);
+        }
+
+        // СКРОЛЛ
+        let scrollAnimationFrameId = null;
+
+        function smoothScrollToBottomAsync(element, duration) {
+        return new Promise((resolve) => {
+        if (scrollAnimationFrameId) {
+        cancelAnimationFrame(scrollAnimationFrameId);
+        }
+
+        const start = element.scrollTop;
+        const target = element.scrollHeight - element.clientHeight;
+        const change = target - start;
+
+        if (change <= 0) {
+        resolve();
+        return;
+        }
+
+        let startTime = null;
+
+        function animateScroll(currentTime) {
+        if (!startTime) startTime = currentTime;
+        const elapsed = currentTime - startTime;
+        const progress = Math.min(elapsed / duration, 1);
+        const ease = progress * (2 - progress);
+
+        element.scrollTop = start + change * ease;
+
+        if (elapsed < duration) {
+        scrollAnimationFrameId = requestAnimationFrame(animateScroll);
+        } else {
+        scrollAnimationFrameId = null;
+        resolve();
+        }
+        }
+
+        scrollAnimationFrameId = requestAnimationFrame(animateScroll);
+        });
+        }
+
+        // УДАЛЕНИЕ СООБЩЕНИЙ
+        function removeMessages(messages) {
+        return new Promise((resolve) => {
+        if (messages.length === 0) {
+        resolve();
+        return;
+        }
+
+        let pending = messages.length;
+
+        for (const oldMsg of messages) {
+        const oldId = oldMsg.getAttribute('data-message-id');
+        const oldNumAttr = oldMsg.getAttribute('data-message-number');
+        if (oldId) messageElements.delete(oldId);
+        if (oldNumAttr) messageNumberMap.delete(oldNumAttr);
+
+        oldMsg.classList.add('message-leaving');
+
+        let done = false;
+        const finish = () => {
+        if (done) return;
+        done = true;
+
+        if (oldMsg.parentNode) oldMsg.remove();
+        pending--;
+        if (pending === 0) resolve();
+        };
+
+        oldMsg.addEventListener('transitionend', (e) => {
+        if (e.propertyName === 'opacity' || e.propertyName === 'max-height') {
+        finish();
+        }
+        }, { once: false });
+
+        setTimeout(finish, 600);
+        }
+        });
+        }
+
+        // ЖДЁМ АНИМАЦИЮ ПОЯВЛЕНИЯ
+        function waitForAnimation(element) {
+        return new Promise((resolve) => {
+        let done = false;
+
+        const finish = () => {
+        if (done) return;
+        done = true;
+        element.removeEventListener('animationend', onEnd);
+        resolve();
+        };
+
+        const onEnd = () => {
+        finish();
+        };
+
+        element.addEventListener('animationend', onEnd);
+        setTimeout(finish, currentAppearSpeed * 1000 + 200);
+        });
+        }
+
+        // ОЧЕРЕДЬ
+        const revealQueue = [];
+        let isProcessingQueue = false;
+
+        function revealAndScrollMessage(msgDiv) {
+        revealQueue.push(msgDiv);
+
+        if (!isProcessingQueue) {
+        processNextInQueue();
+        }
+        }
+
+        async function processNextInQueue() {
+        if (revealQueue.length === 0) {
+        isProcessingQueue = false;
+        return;
+        }
+
+        isProcessingQueue = true;
+        const msgDiv = revealQueue.shift();
+
+        const num = msgDiv.getAttribute('data-message-number') || '?';
+        console.log(`[Queue #${num}] Старт. В очереди: ${revealQueue.length}`);
+
+        try {
+        const activeMessages = Array.from(chatContainer.children).filter(el =>
+        !el.classList.contains('chat-spacer') &&
+        !el.classList.contains('message-leaving')
+        );
+
+        const slotsNeeded = activeMessages.length + 1 - MAX_MESSAGES;
+
+        if (slotsNeeded > 0) {
+        const toRemove = activeMessages.slice(0, slotsNeeded);
+        console.log(`[Queue #${num}] Удаляю ${slotsNeeded}, жду transitionend...`);
+
+        await removeMessages(toRemove);
+        console.log(`[Queue #${num}] Удаление завершено`);
+        }
+
+        void chatContainer.offsetHeight;
+
+        console.log(`[Queue #${num}] Показываю с анимацией...`);
+
+        msgDiv.style.animation = `slideUp ${currentAppearSpeed}s ease-out forwards`;
+        chatContainer.appendChild(msgDiv);
+
+        await waitForAnimation(msgDiv);
+        console.log(`[Queue #${num}] Анимация появления завершена`);
+
+        if (msgDiv._pendingRank0Indicator) {
+        const { stepPanel, starElement, count } = msgDiv._pendingRank0Indicator;
+
+        setTimeout(() => {
+        updateRank0Indicator(stepPanel, starElement, count);
+        }, 200);
+
+        msgDiv._pendingRank0Indicator = null;
+        }
+
+        const msgHeight = msgDiv.offsetHeight || 60;
+        const minSpeed = Math.max(currentScrollSpeed * 0.8, 600);
+        const maxSpeed = Math.min(currentScrollSpeed * 6.0, 10000);
+        const heightFactor = Math.min(Math.max((msgHeight - 30) / 600, 0), 1);
+        const scrollDuration = minSpeed + (maxSpeed - minSpeed) * heightFactor;
+
+        console.log(`[Queue #${num}] Скролл на ${scrollDuration.toFixed(0)}ms`);
+
+        await smoothScrollToBottomAsync(chatContainer, scrollDuration);
+
+        console.log(`[Queue #${num}] ✅ Полный цикл завершён`);
+        } catch (ex) {
+        console.error(`[Queue #${num}] Ошибка:`, ex);
+        }
+
+        processNextInQueue();
+        }
+
+        // ШКАЛА ПРОГРЕССА РАНГА 0
+        function updateRank0Indicator(stepPanel, starElement, count) {
+        while (stepPanel.firstChild) {
+        stepPanel.removeChild(stepPanel.firstChild);
+        }
+
+        if (starElement) {
+        starElement.classList.remove('active', 'explode', 'supernova', 'firework', 'rainbow');
+        starElement.style.display = 'none';
+        starElement.style.opacity = '0';
+        starElement.style.transform = 'scale(0)';
+        starElement.style.filter = 'none';
+        starElement.style.textShadow = 'none';
+        }
+
+        const indicatorBox = stepPanel.closest('.rank-0-indicator-box');
+        if (indicatorBox) {
+        indicatorBox.style.animation = 'none';
+        void indicatorBox.offsetHeight;
+        indicatorBox.style.animation = 'panelTimeline 6.5s ease-in-out forwards';
+        }
+
+        if (count < 10) {
+        stepPanel.style.display = 'flex';
+        stepPanel.style.opacity = '1';
+        stepPanel.style.transition = 'none';
+
+        for (let i = 1; i <= 10; i++) {
+        const dash = document.createElement('div');
+        dash.className = `step-dash dash-${i}`;
+        stepPanel.appendChild(dash);
+        }
+
+        const allDashes = stepPanel.querySelectorAll('.step-dash');
+
+        for (let i = 0; i < count; i++) {
+        setTimeout(() => {
+        allDashes[i].classList.add('active');
+        }, 300 + (i * 120));
+        }
+        } else if (count === 10) {
+        stepPanel.style.display = 'flex';
+        stepPanel.style.opacity = '1';
+        stepPanel.style.transition = 'none';
+
+        for (let i = 1; i <= 10; i++) {
+        const dash = document.createElement('div');
+        dash.className = `step-dash dash-${i}`;
+        stepPanel.appendChild(dash);
+        }
+
+        const allDashes = stepPanel.querySelectorAll('.step-dash');
+        for (let i = 0; i < 10; i++) {
+        setTimeout(() => {
+        allDashes[i].classList.add('active');
+        }, 300 + (i * 120));
+        }
+
+        setTimeout(() => {
+        stepPanel.style.transition = 'opacity 0.5s ease-out';
+        stepPanel.style.opacity = '0';
+
+        setTimeout(() => {
+        stepPanel.style.display = 'none';
+
+        if (starElement) {
+        starElement.style.display = 'block';
+        starElement.style.opacity = '0';
+        starElement.style.transform = 'scale(0)';
+
+        const effects = ['explode', 'supernova', 'firework', 'rainbow', 'pop-sticker', 'fly-right'];
+        const randomEffect = effects[5];
+        requestAnimationFrame(() => {
+        starElement.style.transition = 'none';
+        starElement.classList.add(randomEffect);
+        starElement.style.display = 'block';
+
+        setTimeout(() => {
+        starElement.classList.remove(randomEffect);
+        starElement.classList.add('active');
+        }, 2500);
+        });
+        }
+        }, 500);
+        }, 3000);
+        }
+        }
+
+        // ДОБАВЛЕНИЕ СООБЩЕНИЯ
+        function addMessage(data) {
+        if (data.rankClass && data.rankCss && !loadedCss.has(data.rankClass)) {
+        loadRankCss(data.rankClass, data.rankCss);
+        loadedCss.add(data.rankClass);
+        }
+
+        let html = data.rankTemplate || getDefaultTemplate();
+        const msgText = data.formattedMessage || data.messageText || '';
+
+        const transparentPixel = "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7";
+
+        let avatarUrl = transparentPixel;
+
+        if (data.avatarPath &&
+        typeof data.avatarPath === 'string' &&
+        data.avatarPath.trim() !== '' &&
+        data.avatarPath !== '{avatarPath}') {
+
+        const fileName = data.avatarPath.split(/[\\/]/).pop();
+
+        if (fileName && fileName.trim() !== '') {
+        avatarUrl = '/avatar/' + fileName;
+        }
+        }
+
+        html = html
+        .replace(/{displayName}/g, data.displayName || 'Unknown')
+        .replace(/{formattedMessage}/g, msgText)
+        .replace(/{avatarPath}/g, avatarUrl)
+        .replace(/{rankDisplay}/g, data.rankDisplay || '')
+        .replace(/{timestamp}/g, data.timestamp || '')
+        .replace(/{userRank}/g, data.userRank || 0)
+        .replace(/{karmaKey}/g, data.karmaKey || '')
+        .replace(/{karma}/g, data.karma || '')
+        .replace(/{platform}/g, data.platform || 'twitch')
+        .replace(/{messageNumber}/g, data.messageNumber !== undefined ? data.messageNumber : '')
+        .replace(/{likes}/g, data.likes || 0)
+        .replace(/{dislikes}/g, data.dislikes || 0)
+        .replace(/{messageId}/g, data.id || '')
+        .replace(/{userId}/g, data.userId || '');
+
+        const tempDiv = document.createElement('div');
+        tempDiv.innerHTML = html.trim();
+        const messageDiv = tempDiv.firstElementChild;
+        if (!messageDiv) return;
+
+        if (data.userId) {
+        messageDiv.setAttribute('data-user-id', data.userId);
+        }
+        if (data.id) {
+        messageDiv.setAttribute('data-message-id', data.id);
+        }
+        if (data.messageNumber !== undefined && data.messageNumber !== null) {
+        messageDiv.setAttribute('data-message-number', data.messageNumber);
+        }
+        if (data.userRank !== undefined) {
+        messageDiv.setAttribute('data-user-rank', data.userRank);
+        }
+
+        if (data.id) {
+        messageElements.set(data.id, messageDiv);
+        }
+        if (data.messageNumber) {
+        messageNumberMap.set(String(data.messageNumber), messageDiv);
+        }
+
+        if (!messageDiv.classList.contains('message')) {
+        messageDiv.classList.add('message');
+        }
+
+        const likePanel = messageDiv.querySelector('.like-panel, .likes-panel, [class*="like-panel"]');
+        const dislikePanel = messageDiv.querySelector('.dislike-panel, .dislikes-panel, [class*="dislike-panel"]');
+
+        if (likePanel && (Number(data.likes) || 0) > 0) {
+        likePanel.classList.remove('hidden');
+        }
+        if (dislikePanel && (Number(data.dislikes) || 0) > 0) {
+        dislikePanel.classList.remove('hidden');
+        }
+
+        const userRank = Number(data.userRank) || 0;
+        const messageCount = Number(data.messageCount) || 0;
+
+        if (userRank === 0 && !messageDiv.classList.contains('rank-0')) {
+        messageDiv.classList.add('rank-0');
+        }
+
+        if (userRank === 0) {
+        let indicatorBox = messageDiv.querySelector('.rank-0-indicator-box');
+        if (!indicatorBox) {
+        indicatorBox = document.createElement('div');
+        indicatorBox.className = 'rank-0-indicator-box';
+
+        const stepPanel = document.createElement('div');
+        stepPanel.className = 'step-panel';
+
+        const star = document.createElement('span');
+        star.className = 'rank-star';
+        star.textContent = '★';
+        star.style.display = 'none';
+
+        indicatorBox.appendChild(stepPanel);
+        indicatorBox.appendChild(star);
+        messageDiv.appendChild(indicatorBox);
+        }
+
+        const stepPanel = indicatorBox.querySelector('.step-panel');
+        const starElement = indicatorBox.querySelector('.rank-star');
+        if (stepPanel) {
+        messageDiv._pendingRank0Indicator = { stepPanel, starElement, count: messageCount };
+        }
+        }
+
+        const nameElement = messageDiv.querySelector('.name');
+        if (nameElement && data.platform && userRank > 0) {
+        const platform = data.platform.toLowerCase();
+        if (platform === 'tw' || platform === 'twitch') nameElement.style.setProperty('color', '#b483fb', 'important');
+        else if (platform === 'yt' || platform === 'youtube') nameElement.style.setProperty('color', '#e87c7c', 'important');
+        else if (platform === 'gg' || platform === 'goodgame') nameElement.style.setProperty('color', '#7faeef', 'important');
+        }
+
+        const images = messageDiv.querySelectorAll('img');
+        const promises = Array.from(images).map(img => {
+        if (img.complete) return Promise.resolve();
+        return new Promise((resolve) => {
+        const timeout = setTimeout(resolve, 3000);
+
+        img.onload = () => { clearTimeout(timeout); resolve(); };
+        img.onerror = () => { clearTimeout(timeout); resolve(); };
+        });
+        });
+
+        if (document.fonts) {
+        promises.push(document.fonts.ready);
+        }
+
+        Promise.allSettled(promises).then(() => {
+        revealAndScrollMessage(messageDiv);
+        });
+        }
+
+        // ЗАГРУЗКА CSS РАНГА
+        function loadRankCss(className, cssContent) {
+        const styleId = 'rank-style-' + className;
+        if (document.getElementById(styleId)) return;
+        const style = document.createElement('style');
+        style.id = styleId;
+        style.textContent = cssContent;
+        document.head.appendChild(style);
+        }
+
+        // СТАРТ
+        connectSSE();
+        console.log('🎥 Чат оверлей запущен!');
+
+        window.addEventListener('beforeunload', () => {
+        if (es) {
+        es.close();
+        es = null;
+        console.log('SSE соединение принудительно закрыто перед обновлением.');
+        }
+        });
+    </script>
+</body>
+</html>

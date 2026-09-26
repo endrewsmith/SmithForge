@@ -1,0 +1,203 @@
+﻿<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        /* ============================================================
+           Стили изолированы префиксом .about-
+           ============================================================ */
+
+        .about-root * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        .about-root {
+            background: rgba(18, 18, 20, 0.96);
+            font-family: 'Segoe UI', -apple-system, Arial, sans-serif;
+            color: #c8c8cd;
+            padding: 8px 6px 8px 2px;
+            width: 100%;
+            overflow: hidden;
+        }
+
+        .about-header {
+            font-size: 20px;
+            text-transform: uppercase;
+            letter-spacing: 1.2px;
+            color: #d6d6db;
+            margin-bottom: 12px;
+            font-weight: 800;
+        }
+
+        /* ============================================================
+           КОНТЕЙНЕР — по умолчанию вертикальный список
+           ============================================================ */
+        .about-root .commands-grid {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            width: 100%;
+            max-height: 290px;
+            overflow: hidden;
+            scrollbar-width: none;
+            -ms-overflow-style: none;
+        }
+
+        .about-root .commands-grid::-webkit-scrollbar {
+            display: none;
+        }
+
+        /* ============================================================
+           ✅ ВКЛЮЧАЕТСЯ JS-ом, КОГДА КАРТОЧЕК > ПОРОГА
+           Горизонтальная лента — точно как .sticker-grid.sticker-scrollable
+           ============================================================ */
+.about-root .commands-grid.packs-scrollable {
+    display: grid;
+    grid-auto-flow: column;
+    grid-template-columns: none;
+    grid-template-rows: repeat(2, auto);       /* ✅ 2 ряда */
+    grid-auto-columns: 100%;            /* ✅ ширина по содержимому */
+    gap: 4px;
+    overflow-x: auto;
+    overflow-y: hidden;
+    max-height: none;
+}
+
+/* ✅ Карточка по содержимому, чтобы заголовок и команды не наезжали */
+.about-root .commands-grid.packs-scrollable .pack-card {
+    width: auto;
+    white-space: nowrap;
+}
+
+        /* ============================================================
+           КАРТОЧКА — на всю ширину, flex-wrap внутри
+           ============================================================ */
+        .about-root .pack-card {
+            width: 100%;
+            flex-shrink: 0;
+            background: rgba(255, 255, 255, 0.045);
+            border: 1px solid rgba(255, 255, 255, 0.06);
+            border-radius: 4px;
+            padding: 8px 10px;
+            display: flex;
+            flex-direction: row;
+            align-items: center;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+
+        .about-section-title {
+            font-size: 14px;
+            font-weight: 800;
+            letter-spacing: 0.8px;
+            color: #dcdce1;
+            text-transform: uppercase;
+            flex-shrink: 0;
+            white-space: nowrap;
+        }
+
+        .about-lang-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 4px;
+            align-items: center;
+            flex: 1 1 auto;
+            min-width: 0;
+        }
+
+        .about-cmd {
+            display: inline-block;
+            padding: 4px 10px;
+            border-radius: 3px;
+            font-family: 'IBM Plex Mono', 'JetBrains Mono', 'Source Code Pro', 'Consolas', monospace;
+            font-size: 14px;
+            font-weight: 700;
+            letter-spacing: 0;
+            line-height: 1.25;
+            white-space: nowrap;
+            font-variant-ligatures: none;
+        }
+
+        .about-cmd.about-main {
+            color: #d2d2d7;
+            background: rgba(255, 255, 255, 0.15);
+        }
+
+        .about-cmd.about-alt {
+            color: #b2b2b8;
+            background: rgba(255, 255, 255, 0.075);
+            border: 1px solid rgba(255, 255, 255, 0.04);
+        }
+
+        .about-cmd.about-dim {
+            color: #9a9aa0;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.03);
+        }
+    </style>
+</head>
+<body>
+
+    <div class="about-root">
+
+        <div class="about-header">Про все</div>
+
+        <div class="commands-grid">
+
+            <div class="pack-card">
+                <div class="about-section-title">Про Смита</div>
+                <div class="about-lang-row">
+                    <span class="about-cmd about-main">про1</span>
+                    <span class="about-cmd about-alt">ab1</span>
+                </div>
+            </div>
+
+            <div class="pack-card">
+                <div class="about-section-title">Про Канал</div>
+                <div class="about-lang-row">
+                    <span class="about-cmd about-main">про2</span>
+                    <span class="about-cmd about-main">ii8</span>
+                </div>
+            </div>
+
+            <div class="pack-card">
+                <div class="about-section-title">Про Чат</div>
+                <div class="about-lang-row">
+                    <span class="about-cmd about-main">про2</span>
+                    <span class="about-cmd about-main">ii8</span>
+                </div>
+            </div>
+
+            <div class="pack-card">
+                <div class="about-section-title">Про Профиль</div>
+                <div class="about-lang-row">
+                    <span class="about-cmd about-main">ii8</span>
+                </div>
+            </div>
+
+            <div class="pack-card">
+                <div class="about-section-title">Про Форматирование</div>
+                <div class="about-lang-row">
+                    <span class="about-cmd about-main">ii8</span>
+                    <span class="about-cmd about-alt">fmt</span>
+                </div>
+            </div>
+
+            <div class="pack-card">
+                <div class="about-section-title">Про Карма-кей</div>
+                <div class="about-lang-row">
+                    <span class="about-cmd about-main">ii8</span>
+                </div>
+            </div>
+
+        </div>
+
+    </div>
+
+</body>
+</html>

@@ -6,6 +6,7 @@ namespace SmithForge.Main.Services.ChatCommands
 {
     public class StickerCommand : BaseCommand
     {
+        public override bool IsDashboardVisible => false;
         public override string Name => "st";
         public override IEnumerable<string> Aliases => new[] { "стикер", "sticker", "стик" };
         public override string Description => "Отправить стикер: !!st:1:2 (пак 1, стикер 2)";

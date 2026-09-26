@@ -29,7 +29,7 @@ namespace SmithForge.Features.InfoSystem
 
             _pagesDir = Path.Combine(
                 AppDomain.CurrentDomain.BaseDirectory,
-                "SF_Data", "InfoWeb", "Pages");
+                "Html", "InfoPages");
 
             // ✅ НОВАЯ ПАПКА ДЛЯ СТРАНИЦ СТИКЕРОВ
             _stickersPagesDir = Path.Combine(_pagesDir, "stickers");
@@ -82,7 +82,7 @@ namespace SmithForge.Features.InfoSystem
             }
 
             var allDirs = Directory.GetDirectories(_stickersRoot)
-                .OrderBy(d => d)
+                .OrderBy(d => d, new NaturalStringComparer())
                 .ToList();
 
             if (allDirs.Count == 0)
@@ -141,10 +141,10 @@ namespace SmithForge.Features.InfoSystem
             Debug.WriteLine($"[StickerPage] Всего паков: {_packCache.Count}");
         }
 
-        // ✅ Извлечение номера из имени папки (gaechka_1 → 1)
+        // ✅ Извлечение номера из НАЧАЛА имени папки (001_папка → 1)
         private int ExtractNumberFromName(string folderName, int fallback)
         {
-            var match = Regex.Match(folderName, @"(\d+)$");
+            var match = Regex.Match(folderName, @"^(\d+)_");
             if (match.Success && int.TryParse(match.Groups[1].Value, out int number))
             {
                 return number;
@@ -237,36 +237,59 @@ namespace SmithForge.Features.InfoSystem
         {
             if (_packCache.Count == 0)
             {
-                return @"<div class='page-stickers-empty'>
-    <h1>🎨 Стикеры</h1>
-    <p>❌ Нет доступных паков со стикерами</p>
+                return @"<div class='packs-page'>
+    <div class='packs-header'>
+        <div class='packs-header-name'>Стикеры</div>
+        <div class='packs-header-count'>0 паков</div>
+    </div>
     <p style='color:#888;font-size:12px;'>Добавьте папки с картинками в SF_Data/Assets/Stickers/</p>
 </div>";
             }
 
             var sb = new StringBuilder();
-            sb.AppendLine("<div class='page-stickers-packs'>");
-            sb.AppendLine("  <h1>🎨 Стикеры</h1>");
-            sb.AppendLine($"  <p>Доступно паков: {_packCache.Count}</p>");
-            sb.AppendLine("  <div class='pack-grid'>");
+            sb.AppendLine("<div class='packs-page'>");
+
+            // ============================================================
+            // ПЛАШКА-ЗАГОЛОВОК
+            // ============================================================
+            sb.AppendLine("  <div class='packs-header'>");
+            sb.AppendLine("    <div class='packs-header-name'>Паки стикеров</div>");
+            sb.AppendLine("    <div class='packs-header-cmd-row'>");
+            sb.AppendLine("      <span class='packs-cmd packs-cmd-main'>ссс</span>");
+            sb.AppendLine("      <span class='packs-cmd packs-cmd-main'>!!info:stickers</span>");
+            sb.AppendLine("    </div>");
+            sb.AppendLine("  </div>");
+
+            // ============================================================
+            // СЕТКА ПАКОВ
+            // ============================================================
+            sb.AppendLine("  <div class='packs-grid'>");
 
             foreach (var pack in _packCache.Values.OrderBy(p => p.DisplayName))
             {
+                // Убираем числовой префикс в начале: 001_папка → папка
+                string cleanName = System.Text.RegularExpressions.Regex.Replace(
+                    pack.FolderName, @"^\d+_", "");
+
                 var previewPath = pack.PreviewImage.Replace(
                     AppDomain.CurrentDomain.BaseDirectory,
                     "/").Replace("\\", "/");
 
-                sb.AppendLine($"  <div class='pack-card'>");
-                sb.AppendLine($"    <div class='pack-preview'>");
-                sb.AppendLine($"      <img src='{previewPath}' alt='{pack.DisplayName}' />");
-                sb.AppendLine($"    </div>");
-                sb.AppendLine($"    <div class='pack-info'>");
-                sb.AppendLine($"      <span class='pack-number'>#{pack.Number}</span>");
-                sb.AppendLine($"      <span class='pack-name'>{pack.DisplayName}</span>");
-                sb.AppendLine($"      <span class='pack-count'>🎨 {pack.StickerCount} стикеров</span>");
-                sb.AppendLine($"      <span class='pack-id'>ID: {pack.PackId}</span>");
-                sb.AppendLine($"    </div>");
-                sb.AppendLine($"  </div>");
+                sb.AppendLine("    <div class='pack-card'>");
+
+                // Превью
+                sb.AppendLine("      <div class='pack-preview'>");
+                sb.AppendLine($"        <img src='{previewPath}' alt='{cleanName}' />");
+                sb.AppendLine("      </div>");
+
+                // Плашка команды
+                // Название пака + плашка команды
+                sb.AppendLine("      <div class='pack-info'>");
+                sb.AppendLine($"        <span class='pack-name'>{cleanName}</span>");
+                sb.AppendLine($"        <span class='pack-cmd'>сс{pack.Number}</span>");
+                sb.AppendLine("      </div>");
+
+                sb.AppendLine("    </div>");
             }
 
             sb.AppendLine("  </div>");
@@ -276,10 +299,26 @@ namespace SmithForge.Features.InfoSystem
 
         private string GeneratePackPageHtml(StickerPackInfo pack)
         {
+            // Убираем числовой префикс в начале: 001_папка → папка
+            string cleanName = System.Text.RegularExpressions.Regex.Replace(
+                pack.FolderName, @"^\d+_", "");
+
             var sb = new StringBuilder();
             sb.AppendLine("<div class='page-stickers-pack'>");
-            sb.AppendLine($"  <h1>{pack.DisplayName}</h1>");
-            sb.AppendLine($"  <p>#{pack.Number} • {pack.StickerCount} стикеров</p>");
+
+            // ============================================================
+            // ПЛАШКА-ЗАГОЛОВОК: название пака + команда рандома
+            // ============================================================
+            sb.AppendLine("  <div class='stk-header'>");
+            sb.AppendLine($"    <div class='stk-header-name'>{cleanName}</div>");
+            sb.AppendLine("    <div class='stk-header-cmd-row'>");
+            sb.AppendLine($"      <span class='stk-cmd stk-cmd-main'>с{pack.Number}с</span>");
+            sb.AppendLine("    </div>");
+            sb.AppendLine("  </div>");
+
+            // ============================================================
+            // СЕТКА СТИКЕРОВ — старая разметка, ничего не меняется
+            // ============================================================
             sb.AppendLine("  <div class='sticker-grid'>");
 
             foreach (var sticker in pack.Stickers)
@@ -288,12 +327,7 @@ namespace SmithForge.Features.InfoSystem
                     AppDomain.CurrentDomain.BaseDirectory,
                     "/").Replace("\\", "/");
 
-                // ✅ Короткая команда: с{номер_пака}с{номер_стикера}
-                // Например: с2с2, с3с24
                 string shortCommand = $"с{pack.Number}с{sticker.Id.TrimStart('0')}";
-
-                // ✅ Рандомная команда: с{номер_пака}с
-                string randomCommand = $"с{pack.Number}с";
 
                 sb.AppendLine($"  <div class='sticker-card'>");
                 sb.AppendLine($"    <div class='sticker-preview'>");
@@ -310,8 +344,6 @@ namespace SmithForge.Features.InfoSystem
             }
 
             sb.AppendLine("  </div>");
-            sb.AppendLine($"  <p style='color:#888;font-size:12px;margin-top:10px;'>💡 Рандомный стикер: <b>с{pack.Number}с</b></p>");
-            sb.AppendLine($"  <a href='!!info:stickers' class='back-link'>⬅️ Назад к пакам</a>");
             sb.AppendLine("</div>");
             return sb.ToString();
         }
@@ -322,65 +354,7 @@ namespace SmithForge.Features.InfoSystem
 
         private string GeneratePackId(string folderName)
         {
-            var id = folderName
-                .ToLower()
-                .Replace(" ", "_")
-                .Replace("!", "")
-                .Replace("?", "")
-                .Replace(".", "")
-                .Replace(",", "")
-                .Replace("-", "_");
-
-            var translit = new Dictionary<string, string>
-            {
-                ["а"] = "a",
-                ["б"] = "b",
-                ["в"] = "v",
-                ["г"] = "g",
-                ["д"] = "d",
-                ["е"] = "e",
-                ["ё"] = "e",
-                ["ж"] = "zh",
-                ["з"] = "z",
-                ["и"] = "i",
-                ["й"] = "y",
-                ["к"] = "k",
-                ["л"] = "l",
-                ["м"] = "m",
-                ["н"] = "n",
-                ["о"] = "o",
-                ["п"] = "p",
-                ["р"] = "r",
-                ["с"] = "s",
-                ["т"] = "t",
-                ["у"] = "u",
-                ["ф"] = "f",
-                ["х"] = "h",
-                ["ц"] = "ts",
-                ["ч"] = "ch",
-                ["ш"] = "sh",
-                ["щ"] = "shch",
-                ["ъ"] = "",
-                ["ы"] = "y",
-                ["ь"] = "",
-                ["э"] = "e",
-                ["ю"] = "yu",
-                ["я"] = "ya"
-            };
-
-            foreach (var pair in translit)
-            {
-                id = id.Replace(pair.Key, pair.Value);
-            }
-
-            id = Regex.Replace(id, @"[^a-z0-9_]", "");
-
-            if (string.IsNullOrEmpty(id))
-            {
-                id = "pack_" + DateTime.Now.Ticks.ToString().Substring(10);
-            }
-
-            return id;
+            return folderName;
         }
 
         private string GetDisplayName(string folderName)

@@ -3,6 +3,7 @@ using SmithForge.Main.Services.ChatCommands;
 
 public abstract class BaseCommand : IChatCommand
 {
+    public virtual bool IsDashboardVisible => true;
     public abstract string Name { get; }
     public abstract IEnumerable<string> Aliases { get; }
     public abstract string Description { get; }
@@ -12,6 +13,16 @@ public abstract class BaseCommand : IChatCommand
 
     // Ранги, для которых команда бесплатна (по умолчанию ни для кого)
     public virtual int[] FreeForRanks => Array.Empty<int>();
+
+    /// <summary>
+    /// Техническая команда — сообщение не отображается в основном чате,
+    /// не получает MessageNumber и не идёт в веб-оверлей.
+    /// Сохраняется в БД с IsVisible = 0.
+    ///
+    /// Пример: !!nick, !!ava, !!like, !!dislike, !!hide.
+    /// По умолчанию — false (команда визуальная).
+    /// </summary>
+    public virtual bool IsTechnical => false;
 
     public virtual bool CanExecute(Chater chater)
     {

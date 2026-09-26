@@ -1,0 +1,274 @@
+/* ==========================================================================
+   РАНГ 4 — изолированные стили + аватарка + реакции с анимацией
+   Только .rank-4-container
+   ========================================================================== */
+
+/* Главный контейнер карточки */
+.rank-4-container {
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: stretch !important;
+    background-color: #000000 !important;
+    border: 1px solid #757575 !important;
+    border-radius: 5px !important;
+    padding: 2px 0px 4px 10px !important;   /* справа 0 — карма у края */
+    margin: 0px !important;
+    box-sizing: border-box;
+    width: 100%;
+}
+
+/* --- ВЕРХНЯЯ ОБЛАСТЬ --- */
+.rank-4-container .msg-header {
+    display: flex !important;
+    justify-content: space-between !important;
+    align-items: center !important;
+    margin-top: -1px !important;
+    margin-bottom: 2px !important;
+}
+
+.rank-4-container .rank-display {
+    font-size: 11px !important;
+    font-weight: normal !important;
+    color: #FFD700 !important;
+    letter-spacing: 1px !important;
+}
+
+/* Блок кармы */
+.rank-4-container .karma-container {
+    display: flex !important;
+    align-items: center !important;
+    font-size: 13px !important;
+    font-weight: normal !important;
+    color: #00FFFF !important;
+    margin-left: auto !important;   /* ✅ прижать вправо */
+}
+
+/* ✅ Ключ кармы (#N) — золотой */
+.rank-4-container .karma-key {
+    color: #FFD700 !important;
+    font-size: 11px !important;
+    font-weight: normal !important;
+    padding: 0px !important;
+    margin-right: 12px !important;
+}
+
+/* Значение кармы — циановое */
+.rank-4-container .karma-value {
+    color: #00FFFF !important;
+    font-size: 11px !important;
+    font-weight: normal !important;
+}
+
+.rank-4-container .karma-icon {
+    color: #00FFFF !important;
+    margin-left: 2px !important;
+    font-size: 11px !important;
+    display: inline-block !important;
+    filter: sepia(1) hue-rotate(150deg) saturate(10) brightness(1.2) !important;
+}
+
+/* --- ТЕЛО СООБЩЕНИЯ (С АВАТАРКОЙ) --- */
+.rank-4-container .msg-body {
+    font-family: 'Spectral SC', serif !important;
+    font-size: 15px !important;
+    color: #FFFFFF !important;
+    line-height: 18px !important;
+    word-break: break-word !important;
+    text-align: left !important;
+
+    display: flex !important;
+    flex-direction: row !important;
+    flex-wrap: wrap !important;
+    align-items: center !important;
+}
+
+.rank-4-container .msg-body .name,
+.rank-4-container .msg-body .colon,
+.rank-4-container .msg-body .text,
+.rank-4-container .msg-body .avatar-border {
+    display: inline-block !important;
+    vertical-align: top !important;
+}
+
+/* --- АВАТАРКА --- */
+.rank-4-container .avatar-border {
+    width: 14px !important;
+    height: 14px !important;
+    border: 1px solid rgba(255, 255, 255, 0.15) !important;
+    background-color: transparent !important;
+    margin: 0px 6px 0px 0px !important;
+    padding: 0px !important;
+    box-sizing: border-box !important;
+    overflow: hidden !important;
+    line-height: 0 !important;
+    flex-shrink: 0 !important;
+    transform: translateY(-1px) !important;
+}
+
+.rank-4-container .user-avatar {
+    width: 100% !important;
+    height: 100% !important;
+    object-fit: cover !important;
+    display: block !important;
+    border: none !important;
+}
+.rank-4-container .avatar-border.empty {
+    border: 1px solid rgba(255, 255, 255, 0.25) !important;   /* чуть заметнее рамка */
+    background-color: rgba(255, 255, 255, 0.05) !important;   /* лёгкий серый фон */
+    border-radius: 2px !important;                             /* лёгкое скругление */
+}
+.rank-4-container .name {
+    font-weight: bold !important;
+}
+
+.rank-4-container .colon {
+    color: #FFFFFF !important;
+    margin-right: 4px !important;
+}
+
+.rank-4-container .text {
+    font-weight: normal !important;
+}
+
+/* --- НИЖНЯЯ ОБЛАСТЬ (ФУТЕР) --- */
+.rank-4-container .msg-footer {
+    display: flex !important;
+    justify-content: space-between !important;
+    align-items: center !important;
+    margin-top: 4px !important;
+    text-transform: none !important;
+}
+
+.rank-4-container .msg-number-container {
+    display: flex !important;
+    align-items: center !important;
+}
+
+.rank-4-container .hash-symbol {
+    display: inline-block !important;
+    color: #AAAAAA !important;
+    font-size: 10px !important;
+    font-weight: bold !important;
+    margin-right: 4px !important;
+    text-transform: none !important;
+}
+
+.rank-4-container .msg-number {
+    display: inline-block !important;
+    color: #CCCCCC !important;
+    font-size: 10px !important;
+    font-weight: normal !important;
+    text-transform: none !important;
+}
+
+/* ✅ Блок реакций — прижат вправо + отступ от края */
+.rank-4-container .reactions-container {
+    display: flex !important;
+    align-items: center !important;
+    gap: 6px !important;
+    margin-left: auto !important;
+    margin-right: 6px !important;
+}
+
+.rank-4-container .reaction-panel {
+    display: flex !important;
+    align-items: center !important;
+    gap: 2px !important;
+}
+
+.rank-4-container .reaction-panel.hidden {
+    display: none !important;
+}
+
+/* Цвета цифр */
+.rank-4-container .like-count {
+    color: #3ba7cf !important;
+    font-size: 11px !important;
+    font-weight: normal !important;
+}
+
+.rank-4-container .dislike-count {
+    color: #d75ebf !important;
+    font-size: 11px !important;
+    font-weight: normal !important;
+}
+
+/* ==========================================================================
+   РЕАКЦИИ — иконки + весёлая анимация
+   ========================================================================== */
+
+/* Базовая иконка реакции */
+.reaction-icon {
+    display: inline-block;
+    font-size: 10px;
+    line-height: 1;
+    vertical-align: middle;
+    transform: translateY(-1px);
+    transition: transform 0.2s ease;
+    will-change: transform;
+}
+
+/* При наведении — небольшое увеличение */
+.reaction-panel:hover .reaction-icon {
+    transform: translateY(-1px) scale(1.2);
+}
+
+/* ✅ ВЕСЁЛОЕ ПОЯВЛЕНИЕ — палец выпрыгивает снизу */
+.reaction-panel.just-appeared .reaction-icon {
+    animation: reactionBounce 0.7s cubic-bezier(0.34, 1.56, 0.64, 1);
+    transform-origin: bottom center;
+}
+
+@keyframes reactionBounce {
+    0%   { transform: translateY(6px) scale(0.3) rotate(-25deg); opacity: 0; }
+    30%  { transform: translateY(-4px) scale(1.5) rotate(20deg); opacity: 1; }
+    55%  { transform: translateY(0) scale(0.95) rotate(-8deg); }
+    80%  { transform: translateY(-2px) scale(1.1) rotate(4deg); }
+    100% { transform: translateY(-1px) scale(1) rotate(0deg); }
+}
+
+/* ✅ ПУЛЬСАЦИЯ ЦИФРЫ при обновлении */
+.reaction-count.bump {
+    animation: countBump 0.5s ease;
+}
+
+@keyframes countBump {
+    0%   { transform: scale(1); }
+    50%  { transform: scale(1.4); color: #FFD700; }
+    100% { transform: scale(1); }
+}
+
+/* ✅ ПОДСВЕТКА активной панели */
+.reaction-panel.active .reaction-icon {
+    filter: drop-shadow(0 0 6px currentColor);
+}
+
+.like-panel.active .reaction-icon {
+    filter: drop-shadow(0 0 8px rgba(76, 175, 80, 0.9));
+}
+
+.dislike-panel.active .reaction-icon {
+    filter: drop-shadow(0 0 8px rgba(244, 67, 54, 0.9));
+}
+
+/* ==========================================================================
+   ТРИГГЕРЫ ПЛАТФОРМ — ИЗОЛИРОВАННЫЕ
+   ========================================================================== */
+
+/* Twitch (tw, twitch) -> #b483fb */
+.rank-4-container.platform-tw .name,
+.rank-4-container.platform-twitch .name {
+    color: #b483fb !important;
+}
+
+/* YouTube (yt, youtube) -> #f58f8f */
+.rank-4-container.platform-yt .name,
+.rank-4-container.platform-youtube .name {
+    color: #f58f8f !important;
+}
+
+/* GoodGame (gg, goodgame) -> #7faeef */
+.rank-4-container.platform-gg .name,
+.rank-4-container.platform-goodgame .name {
+    color: #7faeef !important;
+}
