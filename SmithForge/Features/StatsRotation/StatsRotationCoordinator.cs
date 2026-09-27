@@ -179,18 +179,19 @@ namespace SmithForge.Features.StatsRotation
         {
             if (toggle == null) return;
 
+            // ✅ Всегда убираем все вхождения, потом добавляем если надо
+            _settings.EnabledStatsRules.RemoveAll(k => k == toggle.Key);
+
             if (toggle.IsEnabled)
             {
-                if (!_settings.EnabledStatsRules.Contains(toggle.Key))
-                    _settings.EnabledStatsRules.Add(toggle.Key);
-            }
-            else
-            {
-                _settings.EnabledStatsRules.Remove(toggle.Key);
+                _settings.EnabledStatsRules.Add(toggle.Key);
             }
 
+            // ✅ Дедупликация всего списка
+            _settings.EnabledStatsRules = _settings.EnabledStatsRules.Distinct().ToList();
+
+            Debug.WriteLine($"[StatsRotation] '{toggle.Key}' → {(toggle.IsEnabled ? "вкл" : "выкл")}. Активных: {_settings.EnabledStatsRules.Count}");
             ConfigService.Save(_settings);
-            Debug.WriteLine($"[StatsRotation] Правило '{toggle.Key}': {(toggle.IsEnabled ? "вкл" : "выкл")}");
         }
 
         // ============================================================

@@ -89,9 +89,9 @@ namespace SmithForge.ViewModels
             AudioSettings = new AudioSettingsCoordinator(_settingsService, Settings);
             YouTube = new YouTubeSettingsCoordinator(_settingsService, Settings);
 
-            _webServer = new WebServerService((int)Settings.NetworkPort);
+            _webServer = new WebServerService((int)Settings.NetworkPort, Settings.StaticPort);
             TechOverlay = new TechOverlayService(_webServer);
-            Stats = new StatsRotationCoordinator(_webServer, Settings);
+
 
             Alerts = new AlertsCoordinator(_settingsService, _overlayManager, _webServer, Settings);
 
@@ -139,6 +139,14 @@ namespace SmithForge.ViewModels
                 _messageHandler?.SetSession(sessionId);
                 Debug.WriteLine($"[MainViewModel] Сессия установлена: {sessionId}");
             };
+
+            // ✅ Инициализация реестра правил статистики
+            StatsRuleRegistry.Initialize(() => Session?.CurrentSession?.Id);
+            Debug.WriteLine("[MainViewModel] StatsRuleRegistry инициализирован");
+
+            // ✅ ТОЛЬКО ТЕПЕРЬ создаём координатор — реестр уже наполнен
+            Stats = new StatsRotationCoordinator(_webServer, Settings);
+            Debug.WriteLine($"[MainViewModel] StatsRotationCoordinator создан. Правил в UI: {Stats.Rules.Count}");
 
             LoadInitialData();
             _chatService.ProcessExited += (s, e) => OnProcessExited();

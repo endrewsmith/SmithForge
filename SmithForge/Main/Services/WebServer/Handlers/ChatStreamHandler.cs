@@ -101,7 +101,9 @@ namespace SmithForge.Main.Services.WebServer.Handlers
                     rankClass = GetRankClass(msg.UserRank),
                     rankCss = rankCss,
                     rankTemplate = rankTemplate,
-                    avatarPath = msg.AvatarPath,
+                    avatarPath = string.IsNullOrEmpty(msg.AvatarPath)
+    ? null
+    : $"http://localhost:{WebServerService.StaticPort}/avatar/{Path.GetFileName(msg.AvatarPath)}",
                     timestamp = DateTime.Now.ToString("HH:mm:ss"),
                     karmaKey = msg.User?.KarmaKeyDisplay ?? "",
                     karma = msg.User?.KarmaDisplay ?? "",
@@ -142,7 +144,7 @@ namespace SmithForge.Main.Services.WebServer.Handlers
                     var emojiInfo = EmojiService.GetEmojiInfo(fullCode);
                     if (emojiInfo != null && !string.IsNullOrEmpty(emojiInfo.ImagePath))
                     {
-                        return $"<img src='/emoji/{emojiCode}.png' class='emoji youtube-emoji' alt='{emojiCode}' title='{emojiCode}' />";
+                        return $"<img src='http://localhost:{WebServerService.StaticPort}/emoji/{emojiCode}.png' class='emoji youtube-emoji' alt='{emojiCode}' title='{emojiCode}' />";
                     }
                 }
 
@@ -153,7 +155,7 @@ namespace SmithForge.Main.Services.WebServer.Handlers
 
                 if (File.Exists(emojiPath))
                 {
-                    return $"<img src='/emoji/{emojiCode}.png' class='emoji youtube-emoji' alt='{emojiCode}' title='{emojiCode}' />";
+                    return $"<img src='http://localhost:{WebServerService.StaticPort}/emoji/{emojiCode}.png' class='emoji youtube-emoji' alt='{emojiCode}' title='{emojiCode}' />";
                 }
 
                 return match.Value;
@@ -171,7 +173,7 @@ namespace SmithForge.Main.Services.WebServer.Handlers
                     var emojiInfo = EmojiService.GetEmojiInfo(fullCode);
                     if (emojiInfo != null && !string.IsNullOrEmpty(emojiInfo.ImagePath))
                     {
-                        return $"<img src='/emoji/{emojiCode}.png' class='emoji twitch-emoji' alt='{emojiCode}' title='{emojiCode}' />";
+                        return $"<img src='http://localhost:{WebServerService.StaticPort}/emoji/{emojiCode}.png' class='emoji twitch-emoji' alt='{emojiCode}' title='{emojiCode}' />";
                     }
                 }
 

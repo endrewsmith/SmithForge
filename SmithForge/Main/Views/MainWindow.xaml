@@ -988,17 +988,19 @@
                    Foreground="#5E35B1"
                    Margin="0,0,0,4"/>
 
-                <ItemsControl ItemsSource="{Binding Stats.Rules}">
-                    <ItemsControl.ItemTemplate>
-                        <DataTemplate>
-                            <CheckBox Content="{Binding Title}"
-                              IsChecked="{Binding IsEnabled}"
-                              Margin="10,2,0,2"/>
-                        </DataTemplate>
-                    </ItemsControl.ItemTemplate>
-                </ItemsControl>
+                    <ItemsControl ItemsSource="{Binding Stats.Rules}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <CheckBox Content="{Binding Title}"
+                      IsChecked="{Binding IsEnabled, Mode=TwoWay}"
+                      Command="{Binding DataContext.Stats.ToggleRuleCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                      CommandParameter="{Binding}"
+                      Margin="10,2,0,2"/>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
 
-            </StackPanel>
+                </StackPanel>
         </Border>
        
 

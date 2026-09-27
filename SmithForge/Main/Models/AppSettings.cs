@@ -39,6 +39,9 @@ namespace SmithForge.Main.Models
 
         // === Сетевые настройки ===
         public double NetworkPort { get; set; } = 10881;
+
+        /// <summary>Порт для статики (картинок), чтобы не занимать слоты SSE.</summary>
+        public int StaticPort { get; set; } = 10882;
         public string ProgramPath { get; set; } = string.Empty;
         public int LastStreamNumber { get; set; } = 0;
         public int MinMessageLength { get; set; } = 1;
@@ -167,6 +170,21 @@ namespace SmithForge.Main.Models
         {
             var settings = new AppSettings
             {
+                // ✅ ДЕФОЛТНЫЕ ПРАВИЛА СТАТИСТИКИ — ТОЛЬКО ЗДЕСЬ
+                EnabledStatsRules = new List<string>
+        {
+            "top_messages",
+            "top_rank",
+            "top_karma",
+            "top_total_messages",
+            "top_stickers_stream",
+            "top_voice_stream",
+            "top_sounds_stream",
+            "top_info_stream",
+            "top_stickers_all",
+            "top_voice_all",
+        },
+
                 CommandShortcuts = new List<ShortcutItem>
                 {
                     new ShortcutItem { Key = "ввв", Value = "!!voice" },
@@ -234,6 +252,8 @@ namespace SmithForge.Main.Models
                 DonationPaySocketToken = string.Empty
             };
 
+
+
             settings._rankThresholds = new List<int>(DefaultRankThresholds);
             return settings;
         }
@@ -254,6 +274,12 @@ namespace SmithForge.Main.Models
                     .GroupBy(x => x.Key)
                     .Select(g => g.First())
                     .ToList() ?? new List<ShortcutItem>();
+
+                // ✅ ЧИСТКА EnabledStatsRules от дубликатов и пустых значений
+                EnabledStatsRules = EnabledStatsRules?
+                    .Where(k => !string.IsNullOrWhiteSpace(k))
+                    .Distinct()
+                    .ToList() ?? new List<string>();
 
                 if (_rankThresholds != null)
                     RankThresholds = _rankThresholds;
@@ -289,6 +315,27 @@ namespace SmithForge.Main.Models
                         settings.CommandShortcuts ??= CreateDefaultSettings().CommandShortcuts;
                         settings.CommandPrefixes ??= new List<string> { "!", "/" };
                         settings._rankThresholds ??= new List<int>(DefaultRankThresholds);
+
+                        // ✅ ЧИСТКА EnabledStatsRules от дубликатов (починка уже испорченного XML)
+                        if (settings.EnabledStatsRules != null)
+                        {
+                            var before = settings.EnabledStatsRules.Count;
+                            settings.EnabledStatsRules = settings.EnabledStatsRules
+                                .Where(k => !string.IsNullOrWhiteSpace(k))
+                                .Distinct()
+                                .ToList();
+                            var after = settings.EnabledStatsRules.Count;
+                            if (before != after)
+                            {
+                                System.Diagnostics.Debug.WriteLine(
+                                    $"[AppSettings] EnabledStatsRules очищен: было {before}, стало {after}");
+                            }
+                        }
+                        else
+                        {
+                            // Если в XML вообще не было — ставим пустой список
+                            settings.EnabledStatsRules = new List<string>();
+                        }
 
                         settings.YouTube ??= new YouTubeSettings();
                         settings.YouTube.Colors ??= new YouTubeColorSettings();
@@ -432,13 +479,10 @@ namespace SmithForge.Main.Models
         public int StatsSilenceIntervalSeconds { get; set; } = 30;
 
         /// <summary>Ключи включённых правил (IStatsRule.Key).</summary>
-        public List<string> EnabledStatsRules { get; set; } = new()
-{
-    "top_messages",
-    "top_rank",
-    "top_karma",
-    "top_total_messages"
-};
+        /// <summary>Ключи включённых правил (IStatsRule.Key).</summary>
+        [XmlArray("EnabledStatsRules")]
+        [XmlArrayItem("string")]
+        public List<string> EnabledStatsRules { get; set; } = new();
 
 
     }

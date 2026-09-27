@@ -33,7 +33,13 @@ namespace SmithForge.Main.Services
             // Инициализация таблицы реакций
             InitializeReactionsTable();
 
+            // ✅ Основные индексы
             db.Execute("CREATE INDEX IF NOT EXISTS idx_external_chater ON ExternalAccounts(ExternalId)");
+            // ✅ Индексы для StatsQueryService (топы по маркерам)
+            db.Execute("CREATE INDEX IF NOT EXISTS idx_chatlogs_session ON ChatLogs(SessionId)");
+            db.Execute("CREATE INDEX IF NOT EXISTS idx_chatlogs_timestamp ON ChatLogs(Timestamp)");
+            db.Execute("CREATE INDEX IF NOT EXISTS idx_chatlogs_chater ON ChatLogs(ChaterId)");
+            db.Execute("CREATE INDEX IF NOT EXISTS idx_chatlogs_session_visible ON ChatLogs(SessionId, IsVisible)");
         }
 
         // --- ПОИСК И ЗАГРУЗКА ---
@@ -732,6 +738,102 @@ namespace SmithForge.Main.Services
             return ((int)(long)row.Likes, (int)(long)row.Dislikes);
         }
 
+        /// <summary>
+        /// Топ зрителей по маркеру в сообщении за период.
+        /// Возвращает список (ChaterId, Count), отсортированный по убыванию Count.
+        /// </summary>
+        public static List<(string ChaterId, int Count)> GetMarkerCounts(
+            string marker,
+            SmithForge.Features.StatsRotation.StatsScope scope,
+            string? sessionId)
+        {
+            using var db = new SqliteConnection(ConnectionString);
 
+            string sql;
+            object param;
+
+            string pattern = $"%{marker}%";
+
+            switch (scope)
+            {
+                case SmithForge.Features.StatsRotation.StatsScope.ThisStream:
+                    if (string.IsNullOrEmpty(sessionId))
+                        return new List<(string, int)>();
+
+                    sql = @"
+                SELECT ChaterId, COUNT(*) AS Cnt
+                FROM ChatLogs
+                WHERE SessionId = @sessionId
+                  AND IsVisible = 1
+                  AND Message LIKE @pattern
+                GROUP BY ChaterId
+                ORDER BY Cnt DESC;";
+                    param = new { sessionId, pattern };
+                    break;
+
+                case SmithForge.Features.StatsRotation.StatsScope.AllTime:
+                    sql = @"
+                SELECT ChaterId, COUNT(*) AS Cnt
+                FROM ChatLogs
+                WHERE IsVisible = 1
+                  AND Message LIKE @pattern
+                GROUP BY ChaterId
+                ORDER BY Cnt DESC;";
+                    param = new { pattern };
+                    break;
+
+                case SmithForge.Features.StatsRotation.StatsScope.Last24h:
+                    {
+                        long from24 = DateTimeOffset.UtcNow.AddHours(-24).ToUnixTimeSeconds();
+                        sql = @"
+                SELECT ChaterId, COUNT(*) AS Cnt
+                FROM ChatLogs
+                WHERE IsVisible = 1
+                  AND Timestamp >= @from
+                  AND Message LIKE @pattern
+                GROUP BY ChaterId
+                ORDER BY Cnt DESC;";
+                        param = new { from = from24, pattern };
+                        break;
+                    }
+
+                case SmithForge.Features.StatsRotation.StatsScope.Last7d:
+                    {
+                        long from7d = DateTimeOffset.UtcNow.AddDays(-7).ToUnixTimeSeconds();
+                        sql = @"
+                SELECT ChaterId, COUNT(*) AS Cnt
+                FROM ChatLogs
+                WHERE IsVisible = 1
+                  AND Timestamp >= @from
+                  AND Message LIKE @pattern
+                GROUP BY ChaterId
+                ORDER BY Cnt DESC;";
+                        param = new { from = from7d, pattern };
+                        break;
+                    }
+
+                case SmithForge.Features.StatsRotation.StatsScope.ThisMonth:
+                    {
+                        var now = DateTime.UtcNow;
+                        var startOfMonth = new DateTime(now.Year, now.Month, 1, 0, 0, 0, DateTimeKind.Utc);
+                        long fromMonth = new DateTimeOffset(startOfMonth).ToUnixTimeSeconds();
+                        sql = @"
+                SELECT ChaterId, COUNT(*) AS Cnt
+                FROM ChatLogs
+                WHERE IsVisible = 1
+                  AND Timestamp >= @from
+                  AND Message LIKE @pattern
+                GROUP BY ChaterId
+                ORDER BY Cnt DESC;";
+                        param = new { from = fromMonth, pattern };
+                        break;
+                    }
+
+                default:
+                    return new List<(string, int)>();
+            }
+
+            return db.Query<(string, int)>(sql, param).ToList();
+        }
     }
 }

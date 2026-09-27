@@ -1,5 +1,6 @@
 ﻿// Features/InfoSystem/StickerPageService.cs
 
+using SmithForge.Main.Services;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -271,15 +272,17 @@ namespace SmithForge.Features.InfoSystem
                 string cleanName = System.Text.RegularExpressions.Regex.Replace(
                     pack.FolderName, @"^\d+_", "");
 
+                // ✅ Картинки идут на статический порт (10882), чтобы не занимать слоты SSE
                 var previewPath = pack.PreviewImage.Replace(
                     AppDomain.CurrentDomain.BaseDirectory,
                     "/").Replace("\\", "/");
+                var webPath = $"http://localhost:{WebServerService.StaticPort}{previewPath}";
 
                 sb.AppendLine("    <div class='pack-card'>");
 
                 // Превью
                 sb.AppendLine("      <div class='pack-preview'>");
-                sb.AppendLine($"        <img src='{previewPath}' alt='{cleanName}' />");
+                sb.AppendLine($"        <img src='{webPath}' alt='{cleanName}' loading='lazy' />");
                 sb.AppendLine("      </div>");
 
                 // Плашка команды
@@ -323,15 +326,17 @@ namespace SmithForge.Features.InfoSystem
 
             foreach (var sticker in pack.Stickers)
             {
+                // ✅ Картинки идут на статический порт (10882), чтобы не занимать слоты SSE
                 var stickerPath = sticker.FilePath.Replace(
                     AppDomain.CurrentDomain.BaseDirectory,
                     "/").Replace("\\", "/");
+                var webPath = $"http://localhost:{WebServerService.StaticPort}{stickerPath}";
 
                 string shortCommand = $"с{pack.Number}с{sticker.Id.TrimStart('0')}";
 
                 sb.AppendLine($"  <div class='sticker-card'>");
                 sb.AppendLine($"    <div class='sticker-preview'>");
-                sb.AppendLine($"      <img src='{stickerPath}' alt='{sticker.Id}' />");
+                sb.AppendLine($"      <img src='{webPath}' alt='{sticker.Id}' loading='lazy' />");
                 if (sticker.IsAnimated)
                 {
                     sb.AppendLine($"      <span class='sticker-badge'>🎬 GIF</span>");

@@ -14,6 +14,14 @@ namespace SmithForge
     {
         protected override void OnStartup(StartupEventArgs e)
         {
+            // ✅ КРИТИЧНО: снимаем лимит одновременных HTTP-соединений.
+            // По умолчанию .NET ставит лимит 2 для не-веб приложений.
+            // OBS с 5+ браузерными источниками требует минимум 5-10 соединений.
+            // Без этого один из источников постоянно отваливается.
+            System.Net.ServicePointManager.DefaultConnectionLimit = 100;
+            System.Net.ServicePointManager.MaxServicePointIdleTime = 1000;
+            System.Net.ServicePointManager.Expect100Continue = false;
+            System.Net.ServicePointManager.CheckCertificateRevocationList = false;
             // 1. Устанавливаем универсальную культуру (Invariant), где точка — разделитель
             var culture = CultureInfo.InvariantCulture;
             CultureInfo.DefaultThreadCurrentCulture = culture;

@@ -606,8 +606,17 @@ namespace SmithForge.Main.Services
                 Debug.WriteLine($"[CMD] Списано {totalCost} кармы. Остаток: {chater.Karma:F1}");
             }
 
-            // ✅ Итоговый текст - результат последовательного выполнения всех команд
-            msg.Message = cleanMessage;
+            // ✅ Универсальные маркеры технических команд для аналитики
+            if (string.IsNullOrEmpty(cleanMessage) && executedCommands.Count > 0)
+            {
+                msg.Message = string.Join("",
+                    executedCommands.Select(c => $"<cmd:{c.Name}/>").Distinct());
+            }
+            else
+            {
+                msg.Message = cleanMessage;
+            }
+
             msg.IsProcessedByCommand = anyCommandExecuted || commandsFound.Count > 0;
 
             Debug.WriteLine($"[CMD] Финальный текст: {cleanMessage}");

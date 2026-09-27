@@ -1,4 +1,5 @@
 ﻿using SmithForge.Features.StatsRotation;
+using SmithForge.Features.StatsRotation.Handlers;
 using SmithForge.Main.Models;
 using SmithForge.Main.Services.WebServer;
 using SmithForge.Main.Services.WebServer.Handlers;
@@ -8,8 +9,6 @@ using System.Net;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
-using SmithForge.Features.StatsRotation;
-using SmithForge.Features.StatsRotation.Handlers;
 
 namespace SmithForge.Main.Services
 {
@@ -28,8 +27,20 @@ namespace SmithForge.Main.Services
         private readonly object _infoPageCacheLock = new object();
         private readonly string _infoPagesDir;
 
+        // ✅ Второй порт — только для статики (картинок, чтобы не занимать слоты SSE)
+        private HttpListener? _staticListener;
+        private CancellationTokenSource? _staticCts;
+        private bool _isStaticRunning;
+        private readonly int _staticPort;
+
+        private HttpListener? _streamListener;         // ← НОВОЕ
+        private CancellationTokenSource? _streamCts;   // ← НОВОЕ
+        private bool _isStreamRunning;                 // ← НОВОЕ
+
         private static string HtmlRoot =>
     Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Html");
+
+        public static int StaticPort { get; private set; }
 
         private static string OverlaysDir =>
             Path.Combine(HtmlRoot, "Overlays");
@@ -65,10 +76,17 @@ namespace SmithForge.Main.Services
         private readonly object _imageCacheLock = new object();
         private const int MAX_CACHE_IMAGES = 100;
 
-        public WebServerService(int port = 10881)
+        private readonly int _streamPort;
+
+        public WebServerService(int port = 10881, int staticPort = 10882, int streamPort = 10883)
         {
             _port = port;
+            _staticPort = staticPort;
+            _streamPort = streamPort;  // ← НОВОЕ
+            StaticPort = staticPort;
             Instance = this;
+
+            Debug.WriteLine($"[WebServer] Main port: {_port}, Static port: {_staticPort}, Stream port: {_streamPort}");
 
 
             // ============================================================
@@ -126,7 +144,9 @@ namespace SmithForge.Main.Services
                     userId = chater.Id,
                     displayName = chater.EffectiveName,
                     messageText = "", // Текста нет
-                    avatarPath = avatarPath,
+                    avatarPath = string.IsNullOrEmpty(avatarPath)
+    ? null
+    : $"http://localhost:{StaticPort}/avatar/{Path.GetFileName(avatarPath)}",
                     userRank = chater.Rank,
                     rankDisplay = _chatStreamHandler.GetRankDisplay(chater.Rank),
                     rankClass = _chatStreamHandler.GetRankClass(chater.Rank),
@@ -158,32 +178,218 @@ namespace SmithForge.Main.Services
 
             try
             {
+                // ─── Основной порт (SSE + всё кроме /stream) ────────
                 _listener = new HttpListener();
                 _listener.Prefixes.Add($"http://localhost:{_port}/");
+                _listener.Prefixes.Add($"http://127.0.0.1:{_port}/");
                 _listener.Start();
                 _isRunning = true;
                 _cts = new CancellationTokenSource();
 
-                Debug.WriteLine($"[WebServer] Запущен на http://localhost:{_port}/");
+                Debug.WriteLine($"[WebServer] Main запущен на http://localhost:{_port}/");
 
-                // Запускаем обработку запросов
-                await Task.Run(() => ProcessRequestsAsync(_cts.Token));
+                // ─── Порт для статики (только картинки) ─────────────
+                _staticListener = new HttpListener();
+                _staticListener.Prefixes.Add($"http://localhost:{_staticPort}/");
+                _staticListener.Prefixes.Add($"http://127.0.0.1:{_staticPort}/");
+                _staticListener.Start();
+                _isStaticRunning = true;
+                _staticCts = new CancellationTokenSource();
+
+                Debug.WriteLine($"[WebServer] Static запущен на http://localhost:{_staticPort}/");
+
+                // ─── ✅ НОВЫЙ порт для /stream (чат) ────────────────
+                _streamListener = new HttpListener();
+                _streamListener.Prefixes.Add($"http://localhost:{_streamPort}/");
+                _streamListener.Prefixes.Add($"http://127.0.0.1:{_streamPort}/");
+                _streamListener.Start();
+                _isStreamRunning = true;
+                _streamCts = new CancellationTokenSource();
+
+                Debug.WriteLine($"[WebServer] Stream запущен на http://localhost:{_streamPort}/");
+
+                // Запускаем все три цикла обработки
+                _ = Task.Run(() => ProcessRequestsAsync(_cts.Token));
+                _ = Task.Run(() => ProcessStaticRequestsAsync(_staticCts.Token));
+                _ = Task.Run(() => ProcessStreamRequestsAsync(_streamCts.Token));  // ← НОВОЕ
             }
             catch (Exception ex)
             {
                 Debug.WriteLine($"[WebServer] Ошибка запуска: {ex.Message}");
-                Debug.WriteLine($"[WebServer] StackTrace: {ex.StackTrace}");
                 throw;
             }
         }
 
+        private async Task ProcessStreamRequestsAsync(CancellationToken cancellationToken)
+        {
+            while (_isStreamRunning && !cancellationToken.IsCancellationRequested)
+            {
+                try
+                {
+                    var context = await _streamListener!.GetContextAsync();
+                    _ = Task.Run(() => HandleStreamPortRequestAsync(context));
+                }
+                catch (HttpListenerException ex) when (ex.ErrorCode == 995)
+                {
+                    Debug.WriteLine("[WebServer/Stream] HttpListener остановлен");
+                    break;
+                }
+                catch (OperationCanceledException)
+                {
+                    break;
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine($"[WebServer/Stream] Ошибка: {ex.Message}");
+                }
+            }
+        }
+
+        private async Task HandleStreamPortRequestAsync(HttpListenerContext context)
+        {
+            try
+            {
+                var request = context.Request;
+                var response = context.Response;
+                string path = request.Url?.AbsolutePath ?? "/";
+
+                Debug.WriteLine($"[WebServer/Stream] Запрос: {request.HttpMethod} {path}");
+
+                // CORS
+                response.Headers.Add("Access-Control-Allow-Origin", "*");
+                response.Headers.Add("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+                response.Headers.Add("Access-Control-Allow-Headers", "Content-Type");
+
+                if (request.HttpMethod == "OPTIONS")
+                {
+                    response.StatusCode = 204;
+                    response.Close();
+                    return;
+                }
+
+                // ✅ На этом порту живёт ТОЛЬКО /stream и HTML чата
+                if (path == "/stream")
+                {
+                    await HandleStreamRequestAsync(context);
+                    return;
+                }
+
+                if (path == "/" || path == "/chat" || path == "/chat.html")
+                {
+                    await ServeFileAsync(context, Path.Combine(HtmlRoot, "Overlays", "chat.html"));
+                    return;
+                }
+
+                // Всё остальное — 404 (чтобы не путать с основным портом)
+                response.StatusCode = 404;
+                response.Close();
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[WebServer/Stream] Ошибка: {ex.Message}");
+                try { context.Response.StatusCode = 500; context.Response.Close(); } catch { }
+            }
+        }
+        private async Task ProcessStaticRequestsAsync(CancellationToken cancellationToken)
+        {
+            while (_isStaticRunning && !cancellationToken.IsCancellationRequested)
+            {
+                try
+                {
+                    var context = await _staticListener!.GetContextAsync();
+                    _ = Task.Run(() => HandleStaticRequestAsync(context));
+                }
+                catch (HttpListenerException ex) when (ex.ErrorCode == 995)
+                {
+                    Debug.WriteLine("[WebServer/Static] HttpListener остановлен");
+                    break;
+                }
+                catch (OperationCanceledException)
+                {
+                    break;
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine($"[WebServer/Static] Ошибка: {ex.Message}");
+                }
+            }
+        }
+
+        private async Task HandleStaticRequestAsync(HttpListenerContext context)
+        {
+            try
+            {
+                var request = context.Request;
+                var response = context.Response;
+                string path = request.Url?.AbsolutePath ?? "/";
+
+                // CORS
+                response.Headers.Add("Access-Control-Allow-Origin", "*");
+                response.Headers.Add("Access-Control-Allow-Methods", "GET, OPTIONS");
+                response.Headers.Add("Access-Control-Allow-Headers", "Content-Type");
+
+                if (request.HttpMethod == "OPTIONS")
+                {
+                    response.StatusCode = 204;
+                    response.Close();
+                    return;
+                }
+
+                // Только картинки и статика — ничего больше
+                if (path.StartsWith("/avatar/"))
+                {
+                    await HandleAvatarRequestAsync(context);
+                    return;
+                }
+
+                if (path.StartsWith("/emoji/"))
+                {
+                    await HandleEmojiRequestAsync(context);
+                    return;
+                }
+
+                if (path.StartsWith("/SF_Data/"))
+                {
+                    await HandleSfDataRequestAsync(context);
+                    return;
+                }
+
+                if (path.StartsWith("/ranks/"))
+                {
+                    await HandleRankCssRequestAsync(context);
+                    return;
+                }
+
+                // Не статика — 404
+                response.StatusCode = 404;
+                response.Close();
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[WebServer/Static] Ошибка: {ex.Message}");
+                try { context.Response.StatusCode = 500; context.Response.Close(); } catch { }
+            }
+        }
         public void Stop()
         {
             _isRunning = false;
             _cts?.Cancel();
             _listener?.Stop();
             _listener?.Close();
-            Debug.WriteLine("[WebServer] Остановлен");
+            Debug.WriteLine("[WebServer] Main остановлен");
+
+            _isStaticRunning = false;
+            _staticCts?.Cancel();
+            _staticListener?.Stop();
+            _staticListener?.Close();
+            Debug.WriteLine("[WebServer] Static остановлен");
+
+            // ✅ НОВОЕ
+            _isStreamRunning = false;
+            _streamCts?.Cancel();
+            _streamListener?.Stop();
+            _streamListener?.Close();
+            Debug.WriteLine("[WebServer] Stream остановлен");
         }
 
         private async Task ProcessRequestsAsync(CancellationToken cancellationToken)
@@ -237,12 +443,12 @@ namespace SmithForge.Main.Services
                 // ОСНОВНОЙ ЧАТ
                 // ============================================================
 
-                if (path == "/stream")
-                {
-                    Debug.WriteLine("[WebServer] ✅ Обработка /stream запроса!");
-                    await HandleStreamRequestAsync(context);
-                    return;
-                }
+                //if (path == "/stream")
+                //{
+                //    Debug.WriteLine("[WebServer] ✅ Обработка /stream запроса!");
+                //    await HandleStreamRequestAsync(context);
+                //    return;
+                //}
 
                 if (path == "/api/messages")
                 {
@@ -775,7 +981,9 @@ namespace SmithForge.Main.Services
                         displayName = msg.DisplayName,
                         messageText = msg.MessageText,
                         userRank = msg.UserRank,
-                        avatarPath = msg.AvatarPath,
+                        avatarPath = string.IsNullOrEmpty(msg.AvatarPath)
+    ? null
+    : $"http://localhost:{StaticPort}/avatar/{Path.GetFileName(msg.AvatarPath)}",
                         timestamp = DateTime.Now.ToString("HH:mm:ss")
                     });
                 }
@@ -897,7 +1105,7 @@ namespace SmithForge.Main.Services
                     var emojiInfo = EmojiService.GetEmojiInfo(fullCode);
                     if (emojiInfo != null && !string.IsNullOrEmpty(emojiInfo.ImagePath))
                     {
-                        return $"<img src='/emoji/{emojiCode}.png' class='emoji youtube-emoji' alt='{emojiCode}' title='{emojiCode}' />";
+                        return $"<img src='http://localhost:{StaticPort}/emoji/{emojiCode}.png' class='emoji youtube-emoji' alt='{emojiCode}' title='{emojiCode}' />";
                     }
                 }
 
@@ -908,7 +1116,7 @@ namespace SmithForge.Main.Services
 
                 if (File.Exists(emojiPath))
                 {
-                    return $"<img src='/emoji/{emojiCode}.png' class='emoji youtube-emoji' alt='{emojiCode}' title='{emojiCode}' />";
+                    return $"<img src='http://localhost:{StaticPort}/emoji/{emojiCode}.png' class='emoji youtube-emoji' alt='{emojiCode}' title='{emojiCode}' />";
                 }
 
                 return match.Value;
@@ -926,7 +1134,7 @@ namespace SmithForge.Main.Services
                     var emojiInfo = EmojiService.GetEmojiInfo(fullCode);
                     if (emojiInfo != null && !string.IsNullOrEmpty(emojiInfo.ImagePath))
                     {
-                        return $"<img src='/emoji/{emojiCode}.png' class='emoji twitch-emoji' alt='{emojiCode}' title='{emojiCode}' />";
+                        return $"<img src='http://localhost:{StaticPort}/emoji/{emojiCode}.png' class='emoji twitch-emoji' alt='{emojiCode}' title='{emojiCode}' />";
                     }
                 }
 
@@ -1207,9 +1415,15 @@ int durationSeconds)
                 _messages.Clear();
             }
 
-            // 5. Закрываем HttpListener
+            // 5. Закрываем HttpListener-ы
             _listener?.Close();
             _listener = null;
+
+            _staticListener?.Close();   // ← НОВОЕ
+            _staticListener = null;     // ← НОВОЕ
+
+            _streamListener?.Close();   // ← НОВОЕ
+            _streamListener = null;     // ← НОВОЕ
 
             Debug.WriteLine("[WebServer] Завершение выполнено");
         }
@@ -1323,21 +1537,28 @@ int durationSeconds)
         {
             try
             {
-                // ✅ Преобразуем локальный путь в URL
-                string webPath = stickerPath.Replace(
-                    AppDomain.CurrentDomain.BaseDirectory,
-                    "/")
-                    .Replace("\\", "/")
-                    .Replace("//", "/");
+                // 1. Нормализуем слэши
+                string normalized = stickerPath.Replace("\\", "/");
+                string baseDir = AppDomain.CurrentDomain.BaseDirectory.Replace("\\", "/");
+                if (!baseDir.EndsWith("/")) baseDir += "/";
 
-                // Добавляем префикс /SF_Data/
-                if (!webPath.StartsWith("/SF_Data/"))
-                {
-                    webPath = "/SF_Data/" + webPath.TrimStart('/');
-                }
+                // 2. Убираем BaseDirectory, если он в начале пути
+                if (normalized.StartsWith(baseDir, StringComparison.OrdinalIgnoreCase))
+                    normalized = normalized.Substring(baseDir.Length);
 
-                // ✅ ЛОГИРУЕМ ТЕКСТ ДЛЯ ОТЛАДКИ
-                Debug.WriteLine($"[WebServer] 📝 Текст для стикера: '{text}'");
+                normalized = normalized.TrimStart('/');
+
+                // 3. ⚠️ ГЛАВНОЕ: убираем "SF_Data/" из начала, если он уже есть,
+                //    чтобы не было двойного SF_Data в URL
+                if (normalized.StartsWith("SF_Data/", StringComparison.OrdinalIgnoreCase))
+                    normalized = normalized.Substring("SF_Data/".Length);
+
+                // 4. Собираем итоговый URL — ровно один SF_Data
+                string webPath = $"http://localhost:{StaticPort}/SF_Data/{normalized}";
+
+                // 5. Логируем для проверки
+                Debug.WriteLine($"[WebServer] 📺 Стикер URL: {webPath}");
+                Debug.WriteLine($"[WebServer] 📺 Оригинал: {stickerPath}");
 
                 var json = new
                 {
@@ -1346,24 +1567,20 @@ int durationSeconds)
                     stickerId = stickerId ?? "0",
                     stickerPath = webPath,
                     isAnimated = isAnimated,
-                    text = text ?? "",  // ✅ ТЕКСТ ПЕРЕДАЁТСЯ
+                    text = text ?? "",
                     timestamp = DateTime.Now.ToString("yyyy-MM-ddTHH:mm:ss")
                 };
 
                 var jsonStr = System.Text.Json.JsonSerializer.Serialize(json);
-
-                Debug.WriteLine($"[WebServer] 📺 Отправка JSON: {jsonStr}");
+                Debug.WriteLine($"[WebServer] 📺 JSON: {jsonStr}");
 
                 SendMediaMessage(jsonStr);
-
-                Debug.WriteLine($"[WebServer] 📺 Отправлен стикер в медиа-чат: {stickerId} -> {webPath}, текст: '{text}'");
             }
             catch (Exception ex)
             {
                 Debug.WriteLine($"[WebServer] ❌ Ошибка отправки стикера: {ex.Message}");
             }
         }
-
         /// <summary>
         /// Отправить видео в медиа-чат
         /// </summary>

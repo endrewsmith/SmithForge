@@ -64,7 +64,10 @@ namespace SmithForge.Features.StatsRotation.Handlers
 
                 string? avatarUrl = null;
                 if (!string.IsNullOrEmpty(e.AvatarPath))
-                    avatarUrl = $"/avatar/{Path.GetFileName(e.AvatarPath)}";
+                {
+                    var fileName = Path.GetFileName(e.AvatarPath);
+                    avatarUrl = $"http://localhost:{WebServerService.StaticPort}/avatar/{fileName}";
+                }
 
                 sb.Append(JsonSerializer.Serialize(new
                 {
