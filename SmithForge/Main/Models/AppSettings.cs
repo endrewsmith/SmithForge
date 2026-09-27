@@ -1,9 +1,6 @@
 ﻿using CommunityToolkit.Mvvm.ComponentModel;
-using System;
-using System.Collections.Generic;
 using System.IO;
 using System.Xml.Serialization;
-using System.Linq;
 
 namespace SmithForge.Main.Models
 {
@@ -422,6 +419,26 @@ namespace SmithForge.Main.Models
         /// Socket-токен для Centrifugo (получается автоматически)
         /// </summary>
         public string DonationPaySocketToken { get; set; } = string.Empty;
+
+
+        // ============================================================
+        // === СТАТИСТИКА В ОВЕРЛЕЕ АЛЕРТОВ ===
+        // ============================================================
+
+        /// <summary>Включена ли ротация статистики в оверлее /alerts.</summary>
+        public bool StatsRotationEnabled { get; set; } = true;
+
+        /// <summary>Секунды тишины перед показом следующего блока.</summary>
+        public int StatsSilenceIntervalSeconds { get; set; } = 30;
+
+        /// <summary>Ключи включённых правил (IStatsRule.Key).</summary>
+        public List<string> EnabledStatsRules { get; set; } = new()
+{
+    "top_messages",
+    "top_rank",
+    "top_karma",
+    "top_total_messages"
+};
 
 
     }

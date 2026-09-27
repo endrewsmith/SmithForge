@@ -62,7 +62,8 @@
             </Setter>
         </Style>
     </Window.Resources>
-
+    <ScrollViewer VerticalScrollBarVisibility="Auto"
+                  HorizontalScrollBarVisibility="Disabled">
     <Grid Margin="0">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
@@ -380,46 +381,8 @@
             </Grid>
         </Border>
 
-        <!-- ПОСЛЕДНЕЕ СООБЩЕНИЕ (Строка 4) -->
-        <Border Grid.Row="4" Background="#F8F8F8" BorderBrush="#DDD" BorderThickness="0,1" Padding="10,5">
-            <StackPanel Orientation="Horizontal">
-                <TextBlock Text="ПОСЛЕДНЕЕ: " FontWeight="Bold" VerticalAlignment="Center"/>
-                <TextBlock Text="{Binding LastMessageText}" Foreground="DarkGreen" VerticalAlignment="Center"/>
-            </StackPanel>
-        </Border>
-
-        <!-- СПИСОК ПОЛЬЗОВАТЕЛЕЙ (Строка 5) -->
-        <ListBox Grid.Row="5" ItemsSource="{Binding Users}" Margin="10"
-                 VirtualizingStackPanel.IsVirtualizing="True"
-                 VirtualizingStackPanel.VirtualizationMode="Recycling"
-                 ScrollViewer.CanContentScroll="True">
-            <ListBox.ItemTemplate>
-                <DataTemplate>
-                    <Grid Margin="0,2">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="50"/>
-                            <ColumnDefinition Width="150"/>
-                            <ColumnDefinition Width="*"/>
-                        </Grid.ColumnDefinitions>
-                        <TextBlock Grid.Column="0" 
-                                   Text="{Binding Accounts[0].PlatformShort}" 
-                                   FontWeight="Bold" 
-                                   Foreground="{Binding Accounts[0].PlatformColor}" 
-                                   Opacity="0.7"/>
-                        <TextBlock Grid.Column="1" 
-                                   Text="{Binding EffectiveName}" 
-                                   FontWeight="SemiBold"/>
-                        <StackPanel Grid.Column="2" Orientation="Horizontal">
-                            <TextBlock Text="сообщений: " Foreground="Gray" FontSize="11"/>
-                            <TextBlock Text="{Binding MessageCount}" FontWeight="Bold" Foreground="#444"/>
-                        </StackPanel>
-                    </Grid>
-                </DataTemplate>
-            </ListBox.ItemTemplate>
-        </ListBox>
-
-        <!-- СТАТУС-БАР (Строка 6) -->
-        <StatusBar Grid.Row="6">
+        <!-- СТАТУС-БАР (Строка 4) -->
+        <StatusBar Grid.Row="4">
             <StatusBar.ItemsPanel>
                 <ItemsPanelTemplate>
                     <Grid>
@@ -460,10 +423,12 @@
         </StatusBar>
 
         <!-- СЕКЦИЯ УПРАВЛЕНИЯ ОКНАМИ ЧАТОВ (Строка 7) -->
-        <Border Grid.Row="7" Background="#F0F0F5" BorderBrush="#DDD" BorderThickness="0,1" Padding="10" Margin="0,5,0,0">
+        <Border Grid.Row="5" Background="#F0F0F5" BorderBrush="#DDD" BorderThickness="0,1" Padding="10" Margin="0,5,0,0">
             <StackPanel>
                 <TextBlock Text="УПРАВЛЕНИЕ ОКНАМИ ЧАТОВ" FontSize="12" FontWeight="Bold" Foreground="#5C6BC0" Margin="0,0,0,8"/>
 
+                
+                
                 <!-- Инфо-чат: скорости -->
                 <Border Grid.Row="8" Background="#F0F4FF" BorderBrush="#BBDEFB" BorderThickness="0,1,0,1" Padding="10" Margin="0,5,0,0">
                     <StackPanel>
@@ -917,106 +882,126 @@
                 </Border>
             </StackPanel>
         </Border>
-
-        <!-- YOUTUBE СЕКЦИЯ (Строка 8) -->
-        <Border Grid.Row="8" Background="#FFF8F8" BorderBrush="#FFCDD2" BorderThickness="0,1,0,1" Padding="10" Margin="0,5,0,0">
+        <!-- ═══════════════════════════════════════════════════════════ -->
+        <!-- РОТАЦИЯ СТАТИСТИКИ (ТОПЫ) В ОВЕРЛЕЕ АЛЕРТОВ               -->
+        <!-- ═══════════════════════════════════════════════════════════ -->
+        <Border Grid.Row="6" Background="#F3E5F5" BorderBrush="#CE93D8" BorderThickness="0,1,0,1" Padding="10" Margin="0,5,0,0">
             <StackPanel>
-                <Grid>
+
+                <!-- Заголовок + статус + таймер -->
+                <Grid Margin="0,0,0,8">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto"/>
                         <ColumnDefinition Width="*"/>
-                    </Grid.ColumnDefinitions>
-                    <TextBlock Grid.Column="0" Text="🔴 YouTube" FontSize="14" FontWeight="Bold" Foreground="#C62828" Margin="0,0,15,0"/>
-                    <TextBlock Grid.Column="1" Text="{Binding YouTube.Status}" FontWeight="SemiBold" Foreground="#666"/>
-                </Grid>
-
-                <Grid Margin="0,8,0,0">
-                    <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto"/>
-                        <ColumnDefinition Width="*"/>
                     </Grid.ColumnDefinitions>
-                    <Grid.RowDefinitions>
-                        <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="Auto"/>
-                    </Grid.RowDefinitions>
 
-                    <TextBlock Grid.Row="0" Grid.Column="0" Text="Channel ID:" VerticalAlignment="Center" Margin="0,0,5,0"/>
-                    <TextBox Grid.Row="0" Grid.Column="1" Text="{Binding Settings.YouTube.ChannelId, UpdateSourceTrigger=PropertyChanged}" 
-                             Height="24" Margin="0,2,10,2" VerticalContentAlignment="Center"/>
+                    <TextBlock Grid.Column="0"
+                       Text="📊 Статистика (топы)"
+                       FontSize="14" FontWeight="Bold" Foreground="#6A1B9A"/>
 
-                    <TextBlock Grid.Row="1" Grid.Column="0" Text="API Key:" VerticalAlignment="Center" Margin="0,0,5,0"/>
-                    <TextBox Grid.Row="1" Grid.Column="1" Text="{Binding Settings.YouTube.ApiKey, UpdateSourceTrigger=PropertyChanged}" 
-                             Height="24" Margin="0,2,10,2" VerticalContentAlignment="Center"/>
+                    <TextBlock Grid.Column="1"
+                       Text="{Binding Stats.Status}"
+                       FontSize="11"
+                       Foreground="#888"
+                       VerticalAlignment="Center"
+                       Margin="10,0,0,0"/>
 
-                    <CheckBox Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="2" 
-                              Content="Автоподключение к первому стриму" 
-                              IsChecked="{Binding Settings.YouTube.AutoConnect}"
-                              VerticalAlignment="Center" Margin="0,2,0,2"/>
-                </Grid>
-
-                <Border Background="White" CornerRadius="4" BorderBrush="#DDD" BorderThickness="1" Margin="0,8,0,0">
-                    <Grid>
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="Auto"/>
-                        </Grid.ColumnDefinitions>
-                        <ListBox Grid.Column="0" ItemsSource="{Binding YouTube.Streams}" 
-                                 SelectedItem="{Binding YouTube.SelectedStream}"
-                                 Height="80" BorderThickness="0" Background="Transparent">
-                            <ListBox.ItemTemplate>
-                                <DataTemplate>
-                                    <Border Background="White" CornerRadius="3" Padding="5" Margin="2">
-                                        <Grid>
-                                            <Grid.ColumnDefinitions>
-                                                <ColumnDefinition Width="*"/>
-                                                <ColumnDefinition Width="Auto"/>
-                                            </Grid.ColumnDefinitions>
-                                            <StackPanel>
-                                                <TextBlock Text="{Binding Title}" FontWeight="SemiBold" FontSize="12"/>
-                                                <TextBlock Text="{Binding VideoId}" FontSize="10" Foreground="Gray"/>
-                                            </StackPanel>
-                                            <TextBlock Grid.Column="1" 
-                                                       Text="{Binding IsShorts, Converter={StaticResource BoolToTextConverter}}" 
-                                                       FontSize="10" Foreground="{Binding IsShorts, Converter={StaticResource BoolToColorConverter}}"
-                                                       VerticalAlignment="Center" Margin="10,0,0,0"/>
-                                        </Grid>
-                                    </Border>
-                                </DataTemplate>
-                            </ListBox.ItemTemplate>
-                        </ListBox>
-                        <StackPanel Grid.Column="1" Margin="5" VerticalAlignment="Center">
-                            <TextBlock Text="🎬" FontSize="20"/>
+                    <Border Grid.Column="2"
+                    Background="#FFF9C4"
+                    BorderBrush="#FBC02D"
+                    BorderThickness="1"
+                    CornerRadius="4"
+                    Padding="8,2">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="⏱ " FontSize="11" VerticalAlignment="Center"/>
+                            <TextBlock Text="{Binding Stats.CountdownText}"
+                               FontSize="14"
+                               FontWeight="Bold"
+                               Foreground="#F57F17"
+                               VerticalAlignment="Center"/>
                         </StackPanel>
-                    </Grid>
-                </Border>
+                    </Border>
+                </Grid>
 
-                <Grid Margin="0,8,0,0">
+                <!-- Галка включения -->
+                <CheckBox Content="Включить ротацию статистики в оверлее алертов"
+                  IsChecked="{Binding Stats.IsEnabled}"
+                  FontWeight="SemiBold"
+                  Margin="0,0,0,8"/>
+
+                <!-- Слайдер интервала тишины -->
+                <Grid Margin="0,0,0,8">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto"/>
                         <ColumnDefinition Width="*"/>
                         <ColumnDefinition Width="Auto"/>
                     </Grid.ColumnDefinitions>
-                    <TextBlock Grid.Column="0" Text="📺" FontSize="14" Margin="0,0,10,0"/>
-                    <TextBlock Grid.Column="1" Text="{Binding YouTube.VideoId, StringFormat='Video ID: {0}'}" 
-                               FontSize="11" Foreground="#555" VerticalAlignment="Center"/>
-                    <TextBlock Grid.Column="2" Text="{Binding YouTube.IsConnected, StringFormat='Статус: {0}'}" 
-                               FontSize="11" Foreground="{Binding YouTube.IsConnected, Converter={StaticResource BoolToColorConverter}}"/>
+
+                    <TextBlock Grid.Column="0"
+                       Text="⏱ Тишина (сек):"
+                       VerticalAlignment="Center"
+                       Margin="0,0,10,0"/>
+
+                    <Slider Grid.Column="1"
+                    Minimum="5"
+                    Maximum="300"
+                    Value="{Binding Stats.SilenceInterval, UpdateSourceTrigger=PropertyChanged}"
+                    TickFrequency="5"
+                    IsSnapToTickEnabled="True"
+                    VerticalAlignment="Center"/>
+
+                    <TextBlock Grid.Column="2"
+                       Text="{Binding Stats.SilenceInterval, StringFormat={}{0}с}"
+                       Width="40"
+                       TextAlignment="Right"
+                       VerticalAlignment="Center"
+                       Margin="10,0,0,0"/>
                 </Grid>
+
+                <!-- Прогресс-бар до следующего показа -->
+                <Grid Margin="0,0,0,8">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+
+                    <TextBlock Grid.Column="0"
+                       Text="⏳ До показа:"
+                       VerticalAlignment="Center"
+                       Margin="0,0,10,0"/>
+
+                    <ProgressBar Grid.Column="1"
+                         Minimum="0"
+                         Maximum="1"
+                         Value="{Binding Stats.CountdownProgress, Mode=OneWay}"
+                         Height="10"
+                         VerticalAlignment="Center"
+                         Background="#EDE7F6"
+                         Foreground="#7E57C2"/>
+                </Grid>
+
+                <!-- Активные правила -->
+                <TextBlock Text="Активные правила:"
+                   FontSize="12"
+                   FontWeight="SemiBold"
+                   Foreground="#5E35B1"
+                   Margin="0,0,0,4"/>
+
+                <ItemsControl ItemsSource="{Binding Stats.Rules}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <CheckBox Content="{Binding Title}"
+                              IsChecked="{Binding IsEnabled}"
+                              Margin="10,2,0,2"/>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+
             </StackPanel>
         </Border>
+       
 
-        <!-- СТАТУС-БАР НИЖНИЙ (Строка 9) -->
-        <StatusBar Grid.Row="9" Background="#F5F5F5">
-            <StatusBarItem>
-                <TextBlock Text="YouTube: " Foreground="Gray"/>
-            </StatusBarItem>
-            <StatusBarItem>
-                <TextBlock Text="{Binding YouTube.Status}" Foreground="Gray"/>
-            </StatusBarItem>
-            <StatusBarItem HorizontalAlignment="Right">
-                <TextBlock Text="{Binding YouTube.IsConnected, StringFormat='Подключен: {0}'}" Foreground="Gray"/>
-            </StatusBarItem>
-        </StatusBar>
     </Grid>
+    </ScrollViewer>
 </Window>

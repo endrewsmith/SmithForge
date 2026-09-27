@@ -16,48 +16,55 @@
             overflow: hidden;
             width: 100vw;
             height: 100vh;
-            display: flex;
-            align-items: center;
-            justify-content: center;
+            display: block;
         }
 
+        /* ============================================================
+           БЛОК АЛЕРТОВ (ДОНАТЫ) — плашка 800×130 сверху
+           ============================================================ */
         #alert-container {
             position: fixed;
-            top: 50%;
+            top: 0;
             left: 50%;
-            transform: translate(-50%, -50%) scale(0.6);
+            width: 800px;
+            max-width: 100vw;
+            height: 130px;
+            transform: translateX(-50%) translateY(-100%);
             opacity: 0;
             pointer-events: none;
-            transition: opacity 0.4s ease, transform 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
-            max-width: 90vw;
+            transition: opacity 0.35s ease, transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
         }
 
             #alert-container.visible {
                 opacity: 1;
-                transform: translate(-50%, -50%) scale(1);
+                transform: translateX(-50%) translateY(0);
             }
 
             #alert-container.hiding {
                 opacity: 0;
-                transform: translate(-50%, -50%) scale(0.7);
+                transform: translateX(-50%) translateY(-40%);
             }
 
-        /* Базовый вид */
         .alert-box {
-            padding: 25px 40px;
-            border-radius: 22px;
+            width: 100%;
+            height: 100%;
+            padding: 14px 30px;
+            border-radius: 0 0 16px 16px;
             border: 2px solid;
+            border-top: none;
             backdrop-filter: blur(10px);
             text-align: center;
-            min-width: 400px;
-            max-width: 700px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            overflow: hidden;
         }
 
             /* DonationAlerts — золото */
             .alert-box.provider-donationalerts {
-                background: rgba(13, 13, 26, 0.9);
+                background: rgba(13, 13, 26, 0.92);
                 border-color: #FFD700;
-                box-shadow: 0 0 40px rgba(255, 215, 0, 0.5), 0 0 80px rgba(255, 215, 0, 0.3);
+                box-shadow: 0 6px 40px rgba(255, 215, 0, 0.5), 0 0 80px rgba(255, 215, 0, 0.25);
             }
 
                 .alert-box.provider-donationalerts .provider-label {
@@ -70,9 +77,9 @@
 
             /* DonationPay — синий */
             .alert-box.provider-donationpay {
-                background: rgba(13, 26, 46, 0.9);
+                background: rgba(13, 26, 46, 0.92);
                 border-color: #00BFFF;
-                box-shadow: 0 0 40px rgba(0, 191, 255, 0.5), 0 0 80px rgba(0, 191, 255, 0.3);
+                box-shadow: 0 6px 40px rgba(0, 191, 255, 0.5), 0 0 80px rgba(0, 191, 255, 0.25);
             }
 
                 .alert-box.provider-donationpay .provider-label {
@@ -84,9 +91,9 @@
                 }
 
         .provider-label {
-            font-size: 14px;
-            opacity: 0.75;
-            margin-bottom: 8px;
+            font-size: 12px;
+            opacity: 0.7;
+            margin-bottom: 4px;
             letter-spacing: 2px;
             text-transform: uppercase;
         }
@@ -95,63 +102,190 @@
             display: flex;
             align-items: center;
             justify-content: center;
-            gap: 15px;
-            margin-bottom: 10px;
+            gap: 12px;
+            margin-bottom: 4px;
         }
 
         .user-name {
-            font-size: 36px;
+            font-size: 28px;
             font-weight: bold;
             text-shadow: 0 0 20px currentColor;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            max-width: 380px;
         }
 
         .separator {
             color: #555;
-            font-size: 36px;
+            font-size: 28px;
         }
 
         .amount {
-            font-size: 36px;
+            font-size: 28px;
             font-weight: bold;
             color: #FFFFFF;
             text-shadow: 0 0 15px rgba(255,255,255,0.5);
+            white-space: nowrap;
         }
 
         .message {
-            font-size: 18px;
+            font-size: 15px;
             color: #DDD;
-            line-height: 1.4;
-            max-width: 600px;
+            line-height: 1.3;
+            max-width: 720px;
+            margin: 0 auto;
             word-wrap: break-word;
-            margin-top: 10px;
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
         }
 
             .message:empty {
                 display: none;
             }
 
-        /* Анимация появления/скрытия */
-        @keyframes pulse {
-            0%, 100% {
-                transform: scale(1);
+        /* ============================================================
+           БЛОК СТАТИСТИКИ — плашка 800×130 сверху
+           ============================================================ */
+        #stats-block {
+            position: fixed;
+            top: 0;
+            left: 50%;
+            width: 800px;
+            max-width: 100vw;
+            height: 130px;
+            padding: 8px 14px 10px 14px;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            background: transparent;
+            border-top: none;
+            border-radius: 0 0 16px 16px;
+            color: #fff;
+            font-family: 'Segoe UI', sans-serif;
+            backdrop-filter: blur(10px);
+            opacity: 0;
+            transform: translateX(-50%) translateY(-100%);
+            transition: opacity 1.5s ease, transform 1.5s ease;
+            pointer-events: none;
+        }
+
+            #stats-block.visible {
+                opacity: 1;
+                transform: translateX(-50%) translateY(0);
             }
 
-            50% {
-                transform: scale(1.02);
+        /* ─── Заголовок ─────────────────────────────────────── */
+        .stats-title {
+            flex: 0 0 auto;
+            font-size: 15px;
+            font-weight: 700;
+            color: #FFD700;
+            letter-spacing: 0.4px;
+            line-height: 1.2;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        /* ─── Ряд карточек ──────────────────────────────────── */
+        .stats-list {
+            flex: 1 1 auto;
+            display: flex;
+            flex-direction: row;
+            gap: 8px;
+            min-height: 0;
+        }
+
+        /* ─── Одна карточка ─────────────────────────────────── */
+        .stats-card {
+            flex: 1 1 0;
+            min-width: 0;
+            display: flex;
+            flex-direction: row;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 10px;
+            background: rgba(40, 40, 55, 0.85);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 10px;
+            overflow: hidden;
+        }
+
+            /* ─── Квадратик аватарки ───────────────────────────── */
+            .stats-card .avatar {
+                flex: 0 0 auto;
+                width: 48px;
+                height: 48px;
+                border-radius: 8px;
+                object-fit: cover;
+                background: #333;
             }
-        }
 
-        #alert-container.visible .alert-box {
-            animation: pulse 2.5s ease-in-out infinite;
-        }
+            /* ─── Текстовая часть карточки ─────────────────────── */
+            .stats-card .info {
+                flex: 1 1 auto;
+                min-width: 0;
+                display: flex;
+                flex-direction: column;
+                justify-content: center;
+                gap: 2px;
+            }
 
-        #alert-container.hiding {
-            transition: opacity 0.35s ease, transform 0.35s ease;
-        }
+            .stats-card .name {
+                font-size: 14px;
+                font-weight: 600;
+                color: #fff;
+                white-space: nowrap;
+                overflow: hidden;
+                text-overflow: ellipsis;
+                line-height: 1.1;
+            }
+
+            .stats-card .value {
+                font-size: 13px;
+                font-weight: 500;
+                color: #FFD700;
+                white-space: nowrap;
+                overflow: hidden;
+                text-overflow: ellipsis;
+                line-height: 1.1;
+            }
+
+            /* ─── Цвета места (1-е, 2-е, 3-е) ──────────────────── */
+            .stats-card.rank-1 {
+                border-color: rgba(255, 215, 0, 0.55);
+                box-shadow: 0 0 12px rgba(255, 215, 0, 0.25) inset;
+            }
+
+                .stats-card.rank-1 .name {
+                    color: #FFD700;
+                }
+
+            .stats-card.rank-2 {
+                border-color: rgba(192, 192, 192, 0.45);
+            }
+
+                .stats-card.rank-2 .name {
+                    color: #C0C0C0;
+                }
+
+            .stats-card.rank-3 {
+                border-color: rgba(205, 127, 50, 0.45);
+            }
+
+                .stats-card.rank-3 .name {
+                    color: #CD7F32;
+                }
     </style>
 </head>
 <body>
 
+    <!-- ============================================================
+         ОВЕРЛЕЙ ДОНАТОВ
+         ============================================================ -->
     <div id="alert-container">
         <div class="alert-box" id="alert-box">
             <div class="provider-label" id="provider-label"></div>
@@ -164,7 +298,18 @@
         </div>
     </div>
 
+    <!-- ============================================================
+         ОВЕРЛЕЙ СТАТИСТИКИ (РОТАЦИЯ ТОПОВ)
+         ============================================================ -->
+    <div id="stats-block">
+        <div class="stats-title" id="stats-title"></div>
+        <div class="stats-list" id="stats-list"></div>
+    </div>
+
     <script>
+        // ============================================================
+        // ОВЕРЛЕЙ ДОНАТОВ
+        // ============================================================
         const alertContainer = document.getElementById('alert-container');
         const alertBox = document.getElementById('alert-box');
         const providerLabel = document.getElementById('provider-label');
@@ -172,24 +317,17 @@
         const amountEl = document.getElementById('amount');
         const messageEl = document.getElementById('message');
 
-        // ============================================================
-        // СОСТОЯНИЕ
-        // ============================================================
-        let es = null;                  // ✅ ГЛОБАЛЬНЫЙ EventSource
+        let es = null;                  // EventSource для алертов
         let queue = [];
         let isShowing = false;
+        let isShowingAlert = false;     // идёт ли сейчас показ доната
 
-        // ✅ Все таймеры сохраняем — чтобы можно было отменить
         let hideTimer = null;
         let hidingEndTimer = null;
         let nextAlertTimer = null;
 
-        // ✅ Ограничение очереди, чтобы не копилась бесконечно
         const MAX_QUEUE = 20;
 
-        // ============================================================
-        // SSE ПОДКЛЮЧЕНИЕ
-        // ============================================================
         function connect() {
         if (es) {
         es.close();
@@ -198,7 +336,7 @@
 
         es = new EventSource('/alerts/stream');
 
-        es.onmessage = function(e) {
+        es.onmessage = function (e) {
         try {
         const data = JSON.parse(e.data);
 
@@ -210,27 +348,21 @@
         }
         };
 
-        es.onerror = function() {
-        // ✅ Если сервер явно закрыл — не переподключаемся
+        es.onerror = function () {
         if (es && es.readyState === EventSource.CLOSED) {
         console.log('Alerts SSE закрыт — переподключение не требуется');
         return;
         }
 
-        // Иначе — временный обрыв, пробуем через 3 секунды
         setTimeout(connect, 3000);
         };
 
-        es.onopen = function() {
+        es.onopen = function () {
         console.log('✅ Alerts SSE подключён');
         };
         }
 
-        // ============================================================
-        // ДОБАВЛЕНИЕ В ОЧЕРЕДЬ
-        // ============================================================
         function addToQueue(alert) {
-        // ✅ Ограничиваем очередь — старые выкидываем
         if (queue.length >= MAX_QUEUE) {
         queue.shift();
         console.warn('⚠️ Очередь алертов переполнена — старый удалён');
@@ -244,9 +376,6 @@
         }
         }
 
-        // ============================================================
-        // ОЧИСТКА ВСЕХ ТАЙМЕРОВ
-        // ============================================================
         function clearAllTimers() {
         if (hideTimer) {
         clearTimeout(hideTimer);
@@ -262,9 +391,6 @@
         }
         }
 
-        // ============================================================
-        // ПОКАЗ СЛЕДУЮЩЕГО АЛЕРТА
-        // ============================================================
         function showNext() {
         if (queue.length === 0) {
         isShowing = false;
@@ -272,9 +398,13 @@
         }
 
         isShowing = true;
+        isShowingAlert = true;
+
+        // ✅ Донат всегда главнее — прячем статистику
+        hideStatsImmediate();
+
         const alert = queue.shift();
 
-        // Определяем класс провайдера
         const providerClass = 'provider-' + (alert.providerType || 'donationalerts').toLowerCase();
 
         alertBox.className = 'alert-box ' + providerClass;
@@ -291,13 +421,10 @@
         messageEl.style.display = 'none';
         }
 
-        // Показываем
         alertContainer.className = 'visible';
 
-        // Через N секунд — скрываем
         const duration = (alert.durationSeconds || 10) * 1000;
 
-        // ✅ Чистим старые таймеры перед запуском новых
         clearAllTimers();
 
         hideTimer = setTimeout(() => {
@@ -310,32 +437,182 @@
 
         alertContainer.className = '';
 
-        // Небольшая пауза между алертами
         nextAlertTimer = setTimeout(() => {
         nextAlertTimer = null;
+
+        // ✅ Донат закончился
+        isShowingAlert = false;
+
+        // ✅ Если во время доната пришла статистика — показываем её
+        if (statsPending) {
+        const pending = statsPending;
+        statsPending = null;
+        renderStats(pending);
+        }
+
         showNext();
         }, 400);
         }, 350);
         }, duration);
         }
 
-        // ============================================================
-        // ЗАПУСК
-        // ============================================================
         connect();
         console.log('🎉 SmithForge Alerts Overlay запущен');
 
         // ============================================================
+        // ОВЕРЛЕЙ СТАТИСТИКИ (РОТАЦИЯ ТОПОВ)
+        // ============================================================
+        const statsBlock = document.getElementById('stats-block');
+        const statsTitle = document.getElementById('stats-title');
+        const statsList = document.getElementById('stats-list');
+
+        let statsSource = null;
+        let statsHideTimer = null;
+        let statsPending = null;    // отложенная статистика (одна ячейка)
+
+        function clearStatsHideTimer() {
+        if (statsHideTimer) {
+        clearTimeout(statsHideTimer);
+        statsHideTimer = null;
+        }
+        }
+
+        // Решение: показать сейчас или отложить до конца доната
+        function showStats(data) {
+        if (!data || !Array.isArray(data.entries) || data.entries.length === 0) {
+        return;
+        }
+
+        // ✅ Если идёт донат — откладываем
+        if (isShowingAlert) {
+        statsPending = data;
+        console.log('[Stats] отложена, идёт донат');
+        return;
+        }
+
+        renderStats(data);
+        }
+
+        // Собственно отрисовка карточек
+        function renderStats(data) {
+        statsTitle.textContent = data.title || '';
+        statsList.innerHTML = '';
+
+        data.entries.forEach(e => {
+        const card = document.createElement('div');
+        card.className = 'stats-card rank-' + e.rank;
+
+        // Аватарка
+        if (e.avatarUrl) {
+        const img = document.createElement('img');
+        img.className = 'avatar';
+        img.src = e.avatarUrl;
+        img.alt = '';
+        img.onerror = function () { this.style.visibility = 'hidden'; };
+        card.appendChild(img);
+        } else {
+        // Заглушка, чтобы карточка не «прыгала» по ширине
+        const stub = document.createElement('div');
+        stub.className = 'avatar';
+        card.appendChild(stub);
+        }
+
+        // Текстовый блок
+        const info = document.createElement('div');
+        info.className = 'info';
+
+        const name = document.createElement('span');
+        name.className = 'name';
+        name.textContent = e.displayName || '';
+        info.appendChild(name);
+
+        const value = document.createElement('span');
+        value.className = 'value';
+        value.textContent = e.valueText || '';
+        info.appendChild(value);
+
+        card.appendChild(info);
+
+        statsList.appendChild(card);
+        });
+
+        statsBlock.classList.add('visible');
+
+        const duration = (data.duration || 15) * 1000;
+        clearStatsHideTimer();
+        statsHideTimer = setTimeout(() => {
+        statsHideTimer = null;
+        statsBlock.classList.remove('visible');
+        }, duration + 500);
+        }
+
+        function hideStats() {
+        clearStatsHideTimer();
+        statsBlock.classList.remove('visible');
+        }
+
+        // Мгновенное скрытие — используется, когда пришёл донат
+        function hideStatsImmediate() {
+        clearStatsHideTimer();
+        statsBlock.classList.remove('visible');
+        }
+
+        function connectStats() {
+        if (statsSource) {
+        statsSource.close();
+        statsSource = null;
+        }
+
+        statsSource = new EventSource('/stats/stream');
+
+        statsSource.onopen = function () {
+        console.log('✅ Stats SSE подключён');
+        };
+
+        statsSource.onmessage = function (e) {
+        try {
+        const payload = JSON.parse(e.data);
+        if (payload.type === 'stats_show') {
+        showStats(payload);
+        } else if (payload.type === 'stats_hide') {
+        hideStats();
+        }
+        } catch (err) {
+        console.warn('[Stats] parse error', err);
+        }
+        };
+
+        statsSource.onerror = function () {
+        if (statsSource && statsSource.readyState === EventSource.CLOSED) {
+        console.log('Stats SSE закрыт — переподключение не требуется');
+        return;
+        }
+
+        setTimeout(connectStats, 3000);
+        };
+        }
+
+        connectStats();
+        console.log('📊 Stats Rotation Overlay запущен');
+
+        // ============================================================
         // ЗАКРЫТИЕ СТРАНИЦЫ
         // ============================================================
-        window.addEventListener('beforeunload', function() {
+        window.addEventListener('beforeunload', function () {
         if (es) {
         es.close();
         es = null;
         console.log('Alerts SSE соединение принудительно закрыто перед обновлением.');
         }
 
+        if (statsSource) {
+        statsSource.close();
+        statsSource = null;
+        console.log('Stats SSE соединение принудительно закрыто перед обновлением.');
+        }
+
         clearAllTimers();
+        clearStatsHideTimer();
         });
     </script>
 </body>

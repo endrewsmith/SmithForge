@@ -1,6 +1,7 @@
 ﻿using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using SmithForge.AlertsEngine.Core.Models;
+using SmithForge.Features.StatsRotation;
 using SmithForge.Main.Models;
 using System;
 using System.Diagnostics;
@@ -36,6 +37,7 @@ namespace SmithForge.Main.Services
         [ObservableProperty]
         private bool _isAutoSwitchingEnabled = true;
 
+
         // ============================================================
         // КОНСТРУКТОР
         // ============================================================
@@ -66,13 +68,21 @@ namespace SmithForge.Main.Services
         {
             await _alertsService.StartAsync(_settings);
             _overlayManager.SetAlertsVisible(_settings.AlertsOverlayVisible);
+
             Debug.WriteLine("[AlertsCoordinator] AlertsService запущен");
         }
 
         public async Task StopAsync()
         {
+
             await _alertsService.StopAsync();
             Debug.WriteLine("[AlertsCoordinator] AlertsService остановлен");
+        }
+
+        /// <summary>Прокидываем активность из MainViewModel.</summary>
+        public void NotifyUserActivity()
+        {
+            
         }
 
         public void SetImportantPlaybackMode(ImportantPlaybackMode mode)

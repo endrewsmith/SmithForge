@@ -1,6 +1,7 @@
 ﻿using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using SmithForge.Features.InfoSystem;
+using SmithForge.Features.StatsRotation;
 using SmithForge.Features.TechOverlay;
 using SmithForge.Main.Models;
 using SmithForge.Main.Services;
@@ -69,6 +70,7 @@ namespace SmithForge.ViewModels
         public AlertsCoordinator Alerts { get; private set; } = null!;
         public OverlayTogglesCoordinator Overlays { get; private set; } = null!;
         public ChatCoordinator ChatsManager { get; private set; } = null!;
+        public StatsRotationCoordinator Stats { get; private set; } = null!;
 
         public MainViewModel()
         {
@@ -89,6 +91,7 @@ namespace SmithForge.ViewModels
 
             _webServer = new WebServerService((int)Settings.NetworkPort);
             TechOverlay = new TechOverlayService(_webServer);
+            Stats = new StatsRotationCoordinator(_webServer, Settings);
 
             Alerts = new AlertsCoordinator(_settingsService, _overlayManager, _webServer, Settings);
 
@@ -374,6 +377,8 @@ namespace SmithForge.ViewModels
         public void NotifyUserActivity()
         {
             InfoRotation?.NotifyUserActivity();
+            Alerts?.NotifyUserActivity();
+            Stats?.NotifyUserActivity();
         }
 
         public void SetImportantPlaybackMode(ImportantPlaybackMode mode)

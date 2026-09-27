@@ -1,4 +1,5 @@
-﻿using SmithForge.Main.Models;
+﻿using SmithForge.Features.StatsRotation;
+using SmithForge.Main.Models;
 using SmithForge.Main.Services.WebServer;
 using SmithForge.Main.Services.WebServer.Handlers;
 using System.Diagnostics;
@@ -7,6 +8,8 @@ using System.Net;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using SmithForge.Features.StatsRotation;
+using SmithForge.Features.StatsRotation.Handlers;
 
 namespace SmithForge.Main.Services
 {
@@ -44,6 +47,10 @@ namespace SmithForge.Main.Services
         // === Alerts Overlay (веб-оверлей алертов) ===
         private readonly SseClientManager _alertsManager = new("Alerts");
 
+        // рядом с _alertsManager
+        private readonly SseClientManager _statsManager = new("Stats");
+        private readonly StatsStreamHandler _statsStreamHandler;
+
         // === Tech events stream (/tech/stream) ===
         private readonly SseClientManager _techManager = new("Tech");
 
@@ -79,6 +86,9 @@ namespace SmithForge.Main.Services
 
             _chatStreamHandler = new ChatStreamHandler(_streamManager);
             _infoStreamHandler = new InfoStreamHandler(_infoManager, _infoPagesDir, _infoPageCache);
+
+            _statsStreamHandler = new StatsStreamHandler(_statsManager);
+
         }
 
         private void EnsureInfoPagesExist()
@@ -311,7 +321,15 @@ namespace SmithForge.Main.Services
                     await ServeAlertsPageAsync(context);
                     return;
                 }
-
+                // ============================================================
+                // STATS (ротация топов в оверлее алертов)
+                // ============================================================
+                if (path == "/stats/stream")
+                {
+                    Debug.WriteLine("[WebServer] ✅ Обработка /stats/stream запроса!");
+                    await _statsStreamHandler.HandleConnectionAsync(context, _cts?.Token ?? CancellationToken.None);
+                    return;
+                }
                 // ============================================================
                 // TECH EVENTS (технический оверлей)
                 // ============================================================
@@ -1174,6 +1192,7 @@ int durationSeconds)
             CloseAllAlertsConnections();
             CloseAllStreamConnections();
             CloseAllTechConnections();
+            CloseAllStatsConnections();
 
             // 2. Останавливаем сервер
             Stop();
@@ -1418,6 +1437,11 @@ int durationSeconds)
             _chatStreamHandler.CloseAll();
         }
 
+
+        public void CloseAllStatsConnections()
+        {
+            _statsStreamHandler.CloseAll();
+        }
         /// <summary>
         /// Обновить существующее сообщение в веб-оверлее (текст, имя, ранк и т.д.)
         /// </summary>
@@ -1492,6 +1516,16 @@ int durationSeconds)
             Debug.WriteLine($"[WebServer] 👤 Обновление всех сообщений пользователя {userId}");
         }
 
+        /// <summary>Отправить блок статистики в веб-оверлей /alerts.</summary>
+        public void SendStatsToWeb(IStatsRule rule, System.Collections.Generic.IReadOnlyList<StatsEntry> entries)
+        {
+            _statsStreamHandler.ShowStats(rule, entries);
+        }
 
+        /// <summary>Скрыть блок статистики.</summary>
+        public void SendStatsHide()
+        {
+            _statsStreamHandler.HideStats();
+        }
     }
 }
