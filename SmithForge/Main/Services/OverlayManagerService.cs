@@ -43,82 +43,23 @@ namespace SmithForge.Main.Services
             int voiceVolume,
             int stickerDisplayTime)
         {
-            //// === Главный оверлей ===
-            //_overlay = new ChatOverlayService();
-            //_overlay.Initialize(_settings.OverlayTop, _settings.OverlayLeft);
-            //_overlay.SetSetupMode(isSetupMode);
-            //_overlay.SetDisplayMode(mainMode);
-            //_overlay.LoadPosition(_settings);
-
-            //// === Shorts оверлей ===
-            //_shorts = new ChatOverlayShortsService();
-            //_shorts.Initialize(
-            //    _settings.ShortsWindowTop,
-            //    _settings.ShortsWindowLeft,
-            //    _settings.ShortsWindowWidth,
-            //    _settings.ShortsWindowHeight,
-            //    isSetupMode);
-            //_shorts.SetSetupMode(isSetupMode);
-            //_shorts.SetDisplayMode(shortsMode);
-            //_shorts.LoadPosition(_settings);
-
-            //// === Important оверлей ===
-            //_important = new ImportantOverlayService(_settings);
-            //_important.IsAutoSwitchingEnabled = true;
-            //_important.Initialize(
-            //    _settings.ImportantOverlayTop,
-            //    _settings.ImportantOverlayLeft,
-            //    _settings.ImportantOverlayWidth,
-            //    _settings.ImportantOverlayHeight,
-            //    isSetupMode);
-            //_important.SetSetupMode(isSetupMode);
-            //_important.SetDisplayMode(importantMode);
-            //_important.LoadPosition(_settings);
-            //_important.QueueCountChanged += (s, count) =>
-            //{
-            //    ImportantQueueCount = count;
-            //    ImportantQueueChanged?.Invoke(this, count);
-            //};
-
-            //// === Stickers оверлей ===
-            //_stickers = new StickersOverlayService();
-            //_stickers.Initialize(
-            //    _settings.StickersWindowTop,
-            //    _settings.StickersWindowLeft,
-            //    _settings.StickersWindowWidth,
-            //    _settings.StickersWindowHeight,
-            //    isSetupMode);
-            //_stickers.SetSetupMode(isSetupMode);
-            //_stickers.SetDisplayMode(stickersMode);
-            //_stickers.LoadPosition(_settings);
-            //_stickers.SetDisplayTime(stickerDisplayTime);
-
-            //// === ⭐ Alerts оверлей (НОВЫЙ) ===
-            //_alerts = new AlertsOverlayService();
-            //_alerts.Initialize(
-            //    _settings.AlertsOverlayTop,
-            //    _settings.AlertsOverlayLeft,
-            //    _settings.AlertsOverlayWidth,
-            //    _settings.AlertsOverlayHeight,
-            //    isSetupMode);
-            //_alerts.SetSetupMode(isSetupMode);
-            //_alerts.SetAlertDuration(_settings.AlertsAlertDuration);
-            //_alerts.LoadPosition(_settings);
-
-            //// Применяем скрытие
-            //if (isOverlayHidden)
-            //{
-            //    SetHidden(true);
-            //}
-
-            //// Применяем видимость стикеров
-            //if (isStickersVisible)
-            //{
-            //    _stickers.Show();
-            //}
-
-            //// Применяем видимость алертов
-            //_alerts.SetVisible(_settings.AlertsOverlayVisible);
+            // === Important оверлей ===
+            _important = new ImportantOverlayService(_settings);
+            _important.IsAutoSwitchingEnabled = true;
+            _important.Initialize(
+                _settings.ImportantOverlayTop,
+                _settings.ImportantOverlayLeft,
+                _settings.ImportantOverlayWidth,
+                _settings.ImportantOverlayHeight,
+                isSetupMode);
+            _important.SetSetupMode(isSetupMode);
+            _important.SetDisplayMode(importantMode);
+            _important.LoadPosition(_settings);
+            _important.QueueCountChanged += (s, count) =>
+            {
+                ImportantQueueCount = count;
+                ImportantQueueChanged?.Invoke(this, count);
+            };
 
             // Сохраняем настройки звука и стикеров
             ImportantSoundVolume = importantSoundVolume;
@@ -127,7 +68,7 @@ namespace SmithForge.Main.Services
             VoiceService.SetVoiceVolume(voiceVolume);
             StickerDisplayTime = stickerDisplayTime;
 
-            Debug.WriteLine("[OverlayManager] Все оверлеи инициализированы");
+            Debug.WriteLine("[OverlayManager] Important оверлей инициализирован");
         }
 
         // =====================================================
@@ -138,7 +79,20 @@ namespace SmithForge.Main.Services
         public int ImportantSoundVolume { get; private set; }
         public int VoiceVolume { get; private set; }
         public int StickerDisplayTime { get; set; }
-        public bool IsAutoSwitchingEnabled { get; set; }
+        private bool _isAutoSwitchingEnabled = true;
+        public bool IsAutoSwitchingEnabled
+        {
+            get => _isAutoSwitchingEnabled;
+            set
+            {
+                _isAutoSwitchingEnabled = value;
+                if (_important != null)
+                {
+                    _important.IsAutoSwitchingEnabled = value;
+                }
+                Debug.WriteLine($"[OverlayManager] IsAutoSwitchingEnabled = {value}");
+            }
+        }
         public bool IsPlaying => _important?.IsPlaying == true;
         public int QueueSize => _important?.QueueSize ?? 0;
 
@@ -155,7 +109,10 @@ namespace SmithForge.Main.Services
             else
                 await Task.CompletedTask;
         }
-
+        public void TryResumeAutoPlayback()
+        {
+            _important?.TryResumeAutoPlayback();
+        }
         // =====================================================
         // УПРАВЛЕНИЕ РЕЖИМАМИ ОТОБРАЖЕНИЯ
         // =====================================================

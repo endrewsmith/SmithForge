@@ -33,10 +33,6 @@ namespace SmithForge.Main.Services
         private bool _isStaticRunning;
         private readonly int _staticPort;
 
-        private HttpListener? _streamListener;         // ← НОВОЕ
-        private CancellationTokenSource? _streamCts;   // ← НОВОЕ
-        private bool _isStreamRunning;                 // ← НОВОЕ
-
         private static string HtmlRoot =>
     Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Html");
 
@@ -77,6 +73,10 @@ namespace SmithForge.Main.Services
         private const int MAX_CACHE_IMAGES = 100;
 
         private readonly int _streamPort;
+
+
+        private readonly MultiPortServer _multiPortServer = new();
+        private int _actualStreamPort = 10883;  // реальный порт после fallback
 
         public WebServerService(int port = 10881, int staticPort = 10882, int streamPort = 10883)
         {
@@ -198,50 +198,57 @@ namespace SmithForge.Main.Services
 
                 Debug.WriteLine($"[WebServer] Static запущен на http://localhost:{_staticPort}/");
 
-                // ─── ✅ НОВЫЙ порт для /stream (чат) ────────────────
-                _streamListener = new HttpListener();
-                _streamListener.Prefixes.Add($"http://localhost:{_streamPort}/");
-                _streamListener.Prefixes.Add($"http://127.0.0.1:{_streamPort}/");
-                _streamListener.Start();
-                _isStreamRunning = true;
-                _streamCts = new CancellationTokenSource();
+                // ─── ✅ Порт для /stream (чат) — через MultiPortServer ──
+                _actualStreamPort = _multiPortServer.RegisterPort(
+                    _streamPort,
+                    HandleStreamPortRequestAsync,
+                    "Stream");
 
-                Debug.WriteLine($"[WebServer] Stream запущен на http://localhost:{_streamPort}/");
+                Debug.WriteLine($"[WebServer] Stream зарегистрирован (желаемый={_streamPort}, реальный={_actualStreamPort})");
 
-                // Запускаем все три цикла обработки
-                _ = Task.Run(() => ProcessRequestsAsync(_cts.Token));
-                _ = Task.Run(() => ProcessStaticRequestsAsync(_staticCts.Token));
-                _ = Task.Run(() => ProcessStreamRequestsAsync(_streamCts.Token));  // ← НОВОЕ
+                // ─── ✅ Порт для /info (инфо-панель) — через MultiPortServer ──
+                int actualInfoPort = _multiPortServer.RegisterPort(
+                    10884,
+                    HandleInfoPortRequestAsync,
+                    "Info");
+
+                Debug.WriteLine($"[WebServer] Info зарегистрирован (желаемый=10884, реальный={actualInfoPort})");
+
+                // ─── ✅ Порт для /alerts (алерты + статистика) — через MultiPortServer ──
+                int actualAlertsPort = _multiPortServer.RegisterPort(
+                    10885,
+                    HandleAlertsPortRequestAsync,
+                    "Alerts");
+
+                Debug.WriteLine($"[WebServer] Alerts зарегистрирован (желаемый=10885, реальный={actualAlertsPort})");
+
+                // ─── ✅ Порт для /tech (тех-оверлей) ──
+                int actualTechPort = _multiPortServer.RegisterPort(
+                    10886,
+                    HandleTechPortRequestAsync,
+                    "Tech");
+
+                Debug.WriteLine($"[WebServer] Tech зарегистрирован (желаемый=10886, реальный={actualTechPort})");
+
+                // ─── ✅ Порт для /media (медиа-чат) ──
+                int actualMediaPort = _multiPortServer.RegisterPort(
+                    10887,
+                    HandleMediaPortRequestAsync,
+                    "Media");
+
+                Debug.WriteLine($"[WebServer] Media зарегистрирован (желаемый=10887, реальный={actualMediaPort})");
+
+                // Запускаем все циклы
+                _ = Task.Run(() => ProcessRequestsAsync(_cts.Token));           // основной (10881)
+                _ = Task.Run(() => ProcessStaticRequestsAsync(_staticCts.Token)); // статика (10882)
+
+                // ✅ Запускаем MultiPortServer (там чат)
+                await _multiPortServer.StartAsync();
             }
             catch (Exception ex)
             {
                 Debug.WriteLine($"[WebServer] Ошибка запуска: {ex.Message}");
                 throw;
-            }
-        }
-
-        private async Task ProcessStreamRequestsAsync(CancellationToken cancellationToken)
-        {
-            while (_isStreamRunning && !cancellationToken.IsCancellationRequested)
-            {
-                try
-                {
-                    var context = await _streamListener!.GetContextAsync();
-                    _ = Task.Run(() => HandleStreamPortRequestAsync(context));
-                }
-                catch (HttpListenerException ex) when (ex.ErrorCode == 995)
-                {
-                    Debug.WriteLine("[WebServer/Stream] HttpListener остановлен");
-                    break;
-                }
-                catch (OperationCanceledException)
-                {
-                    break;
-                }
-                catch (Exception ex)
-                {
-                    Debug.WriteLine($"[WebServer/Stream] Ошибка: {ex.Message}");
-                }
             }
         }
 
@@ -287,6 +294,260 @@ namespace SmithForge.Main.Services
             catch (Exception ex)
             {
                 Debug.WriteLine($"[WebServer/Stream] Ошибка: {ex.Message}");
+                try { context.Response.StatusCode = 500; context.Response.Close(); } catch { }
+            }
+        }
+
+        private async Task HandleInfoPortRequestAsync(HttpListenerContext context)
+        {
+            try
+            {
+                var request = context.Request;
+                var response = context.Response;
+                string path = request.Url?.AbsolutePath ?? "/";
+
+                Debug.WriteLine($"[WebServer/Info] Запрос: {request.HttpMethod} {path}");
+
+                // OPTIONS уже обработан в MultiPortServer, но на всякий случай:
+                if (request.HttpMethod == "OPTIONS")
+                {
+                    response.StatusCode = 204;
+                    response.Close();
+                    return;
+                }
+
+                // ✅ Главная страница инфо-панели
+                if (path == "/" || path == "/info" || path == "/info/")
+                {
+                    await ServeInfoPageAsync(context, "index.html");
+                    return;
+                }
+
+                // ✅ SSE-поток инфо
+                if (path == "/info/stream")
+                {
+                    await HandleInfoStreamRequestAsync(context);
+                    return;
+                }
+
+                // ✅ Страницы справочника
+                if (path.StartsWith("/info/page/"))
+                {
+                    string pageName = path.Substring("/info/page/".Length);
+                    await HandleInfoPageRequestAsync(context, pageName);
+                    return;
+                }
+
+                // ✅ Поиск
+                if (path == "/info/search")
+                {
+                    string query = request.QueryString["q"] ?? "";
+                    await HandleInfoSearchRequestAsync(context, query);
+                    return;
+                }
+
+                // ✅ Статика (картинки инфо-страниц) — если инфо-страницы ссылаются через свой порт
+                if (path.StartsWith("/SF_Data/"))
+                {
+                    await HandleSfDataRequestAsync(context);
+                    return;
+                }
+
+                if (path.StartsWith("/avatar/"))
+                {
+                    await HandleAvatarRequestAsync(context);
+                    return;
+                }
+
+                if (path.StartsWith("/emoji/"))
+                {
+                    await HandleEmojiRequestAsync(context);
+                    return;
+                }
+
+                if (path.StartsWith("/ranks/"))
+                {
+                    await HandleRankCssRequestAsync(context);
+                    return;
+                }
+
+                // Всё остальное — 404
+                Debug.WriteLine($"[WebServer/Info] ⚠️ 404: {path}");
+                response.StatusCode = 404;
+                response.Close();
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[WebServer/Info] Ошибка: {ex.Message}");
+                try { context.Response.StatusCode = 500; context.Response.Close(); } catch { }
+            }
+        }
+
+        private async Task HandleAlertsPortRequestAsync(HttpListenerContext context)
+        {
+            try
+            {
+                var request = context.Request;
+                var response = context.Response;
+                string path = request.Url?.AbsolutePath ?? "/";
+
+                Debug.WriteLine($"[WebServer/Alerts] Запрос: {request.HttpMethod} {path}");
+
+                if (request.HttpMethod == "OPTIONS")
+                {
+                    response.StatusCode = 204;
+                    response.Close();
+                    return;
+                }
+
+                // ✅ Главная страница алертов
+                if (path == "/" || path == "/alerts" || path == "/alerts/")
+                {
+                    await ServeAlertsPageAsync(context);
+                    return;
+                }
+
+                // ✅ SSE-поток алертов
+                if (path == "/alerts/stream")
+                {
+                    await HandleAlertsStreamRequestAsync(context);
+                    return;
+                }
+
+                // ✅ SSE-поток статистики (топы внутри алертов)
+                if (path == "/stats/stream")
+                {
+                    await _statsStreamHandler.HandleConnectionAsync(context, _cts?.Token ?? CancellationToken.None);
+                    return;
+                }
+
+                // ✅ Статика (аватарки в топах, эмодзи и т.д.)
+                if (path.StartsWith("/SF_Data/"))
+                {
+                    await HandleSfDataRequestAsync(context);
+                    return;
+                }
+
+                if (path.StartsWith("/avatar/"))
+                {
+                    await HandleAvatarRequestAsync(context);
+                    return;
+                }
+
+                if (path.StartsWith("/emoji/"))
+                {
+                    await HandleEmojiRequestAsync(context);
+                    return;
+                }
+
+                if (path.StartsWith("/ranks/"))
+                {
+                    await HandleRankCssRequestAsync(context);
+                    return;
+                }
+
+                Debug.WriteLine($"[WebServer/Alerts] ⚠️ 404: {path}");
+                response.StatusCode = 404;
+                response.Close();
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[WebServer/Alerts] Ошибка: {ex.Message}");
+                try { context.Response.StatusCode = 500; context.Response.Close(); } catch { }
+            }
+        }
+
+        private async Task HandleTechPortRequestAsync(HttpListenerContext context)
+        {
+            try
+            {
+                var request = context.Request;
+                var response = context.Response;
+                string path = request.Url?.AbsolutePath ?? "/";
+
+                Debug.WriteLine($"[WebServer/Tech] Запрос: {request.HttpMethod} {path}");
+
+                if (request.HttpMethod == "OPTIONS")
+                {
+                    response.StatusCode = 204;
+                    response.Close();
+                    return;
+                }
+
+                // ✅ Главная страница тех-оверлея
+                if (path == "/" || path == "/tech" || path == "/tech/")
+                {
+                    await ServeTechPageAsync(context);
+                    return;
+                }
+
+                // ✅ SSE-поток тех-событий
+                if (path == "/tech/stream")
+                {
+                    await HandleTechStreamRequestAsync(context);
+                    return;
+                }
+
+                // ✅ Статика (аватарки, эмодзи, если нужны)
+                if (path.StartsWith("/SF_Data/")) { await HandleSfDataRequestAsync(context); return; }
+                if (path.StartsWith("/avatar/")) { await HandleAvatarRequestAsync(context); return; }
+                if (path.StartsWith("/emoji/")) { await HandleEmojiRequestAsync(context); return; }
+                if (path.StartsWith("/ranks/")) { await HandleRankCssRequestAsync(context); return; }
+
+                Debug.WriteLine($"[WebServer/Tech] ⚠️ 404: {path}");
+                response.StatusCode = 404;
+                response.Close();
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[WebServer/Tech] Ошибка: {ex.Message}");
+                try { context.Response.StatusCode = 500; context.Response.Close(); } catch { }
+            }
+        }
+        private async Task HandleMediaPortRequestAsync(HttpListenerContext context)
+        {
+            try
+            {
+                var request = context.Request;
+                var response = context.Response;
+                string path = request.Url?.AbsolutePath ?? "/";
+
+                Debug.WriteLine($"[WebServer/Media] Запрос: {request.HttpMethod} {path}");
+
+                if (request.HttpMethod == "OPTIONS")
+                {
+                    response.StatusCode = 204;
+                    response.Close();
+                    return;
+                }
+
+                // ✅ Главная страница медиа-чата
+                if (path == "/" || path == "/media" || path == "/media/")
+                {
+                    await ServeMediaPageAsync(context);
+                    return;
+                }
+
+                // ✅ SSE-поток медиа (стикеры, видео)
+                if (path == "/media/stream")
+                {
+                    await HandleMediaStreamRequestAsync(context);
+                    return;
+                }
+
+                // ✅ Статика — стикеры, видео, аватарки, эмодзи
+                if (path.StartsWith("/SF_Data/")) { await HandleSfDataRequestAsync(context); return; }
+                if (path.StartsWith("/avatar/")) { await HandleAvatarRequestAsync(context); return; }
+                if (path.StartsWith("/emoji/")) { await HandleEmojiRequestAsync(context); return; }
+                if (path.StartsWith("/ranks/")) { await HandleRankCssRequestAsync(context); return; }
+
+                Debug.WriteLine($"[WebServer/Media] ⚠️ 404: {path}");
+                response.StatusCode = 404;
+                response.Close();
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[WebServer/Media] Ошибка: {ex.Message}");
                 try { context.Response.StatusCode = 500; context.Response.Close(); } catch { }
             }
         }
@@ -384,12 +645,9 @@ namespace SmithForge.Main.Services
             _staticListener?.Close();
             Debug.WriteLine("[WebServer] Static остановлен");
 
-            // ✅ НОВОЕ
-            _isStreamRunning = false;
-            _streamCts?.Cancel();
-            _streamListener?.Stop();
-            _streamListener?.Close();
-            Debug.WriteLine("[WebServer] Stream остановлен");
+            // ✅ Останавливаем MultiPortServer (там чат)
+            _multiPortServer.Stop();
+            Debug.WriteLine("[WebServer] Stream (через MultiPortServer) остановлен");
         }
 
         private async Task ProcessRequestsAsync(CancellationToken cancellationToken)
@@ -457,102 +715,7 @@ namespace SmithForge.Main.Services
                     return;
                 }
 
-                // ============================================================
-                // ИНФОРМАЦИОННЫЙ ЧАТ (/info)
-                // ============================================================
 
-                if (path == "/info" || path == "/info/")
-                {
-                    Debug.WriteLine("[WebServer] ✅ Обработка /info запроса!");
-                    // ✅ Показываем index.html (сам чат), а не help
-                    await ServeInfoPageAsync(context, "index.html");
-                    return;
-                }
-
-                if (path == "/info/stream")
-                {
-                    Debug.WriteLine("[WebServer] ✅ Обработка /info/stream запроса!");
-                    await HandleInfoStreamRequestAsync(context);
-                    return;
-                }
-
-                if (path.StartsWith("/info/page/"))
-                {
-                    string pageName = path.Substring("/info/page/".Length);
-                    Debug.WriteLine($"[WebServer] ✅ Обработка /info/page/{pageName} запроса!");
-                    await HandleInfoPageRequestAsync(context, pageName);
-                    return;
-                }
-
-                if (path == "/info/search")
-                {
-                    string query = request.QueryString["q"] ?? "";
-                    Debug.WriteLine($"[WebServer] ✅ Обработка /info/search?q={query} запроса!");
-                    await HandleInfoSearchRequestAsync(context, query);
-                    return;
-                }
-
-                // ============================================================
-                // МЕДИА-ЧАТ
-                // ============================================================
-
-                if (path == "/media/stream")
-                {
-                    Debug.WriteLine("[WebServer] ✅ Обработка /media/stream запроса!");
-                    await HandleMediaStreamRequestAsync(context);
-                    return;
-                }
-
-                if (path == "/media" || path == "/media/")
-                {
-                    // Отдаём HTML-страницу для медиа-чата
-                    await ServeMediaPageAsync(context);
-                    return;
-                }
-
-                // ============================================================
-                // ALERTS (веб-оверлей алертов)
-                // ============================================================
-
-                if (path == "/alerts/stream")
-                {
-                    Debug.WriteLine("[WebServer] ✅ Обработка /alerts/stream запроса!");
-                    await HandleAlertsStreamRequestAsync(context);
-                    return;
-                }
-
-                if (path == "/alerts" || path == "/alerts/")
-                {
-                    Debug.WriteLine("[WebServer] ✅ Обработка /alerts запроса!");
-                    await ServeAlertsPageAsync(context);
-                    return;
-                }
-                // ============================================================
-                // STATS (ротация топов в оверлее алертов)
-                // ============================================================
-                if (path == "/stats/stream")
-                {
-                    Debug.WriteLine("[WebServer] ✅ Обработка /stats/stream запроса!");
-                    await _statsStreamHandler.HandleConnectionAsync(context, _cts?.Token ?? CancellationToken.None);
-                    return;
-                }
-                // ============================================================
-                // TECH EVENTS (технический оверлей)
-                // ============================================================
-
-                if (path == "/tech/stream")
-                {
-                    Debug.WriteLine("[WebServer] ✅ Обработка /tech/stream запроса!");
-                    await HandleTechStreamRequestAsync(context);
-                    return;
-                }
-
-                if (path == "/tech" || path == "/tech/")
-                {
-                    Debug.WriteLine("[WebServer] ✅ Обработка /tech запроса!");
-                    await ServeTechPageAsync(context);
-                    return;
-                }
                 // ============================================================
                 // ОБЩИЕ РЕСУРСЫ
                 // ============================================================
@@ -1228,7 +1391,7 @@ namespace SmithForge.Main.Services
         /// </summary>
         private async Task HandleAlertsStreamRequestAsync(HttpListenerContext context)
         {
-            using var client = new SseClient(context, heartbeatIntervalMs: 15000);
+            using var client = new SseClient(context, heartbeatIntervalMs: 5000);
             Debug.WriteLine($"[WebServer] 🔔 Alerts-клиент {client.Id} подключён");
 
             _alertsManager.Add(client);
@@ -1306,12 +1469,12 @@ namespace SmithForge.Main.Services
         /// Отправить алерт в веб-оверлей /alerts (SSE)
         /// </summary>
         public void SendAlertToWeb(
-string userName,
-string message,
-string displayAmount,
-string providerType,
-string providerName,
-int durationSeconds)
+     string userName,
+     string message,
+     string displayAmount,
+     string providerType,
+     string providerName,
+     int durationSeconds)
         {
             var payload = new
             {
@@ -1422,8 +1585,7 @@ int durationSeconds)
             _staticListener?.Close();   // ← НОВОЕ
             _staticListener = null;     // ← НОВОЕ
 
-            _streamListener?.Close();   // ← НОВОЕ
-            _streamListener = null;     // ← НОВОЕ
+            _multiPortServer.Dispose();
 
             Debug.WriteLine("[WebServer] Завершение выполнено");
         }

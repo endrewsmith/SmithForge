@@ -241,7 +241,7 @@ namespace SmithForge.Main.Services.WebServer.Handlers
                 var cssPath = Path.Combine(RanksCssDir, $"rank_{rank}.css");
 
                 if (File.Exists(cssPath))
-                    return await File.ReadAllTextAsync(cssPath);
+                    return await File.ReadAllTextAsync(cssPath).ConfigureAwait(false);
 
                 for (int r = rank - 1; r >= 0; r--)
                 {
@@ -249,7 +249,7 @@ namespace SmithForge.Main.Services.WebServer.Handlers
                     if (File.Exists(fallbackPath))
                     {
                         Debug.WriteLine($"[WebServer] CSS ранга {rank} не найден, используем rank_{r}.css");
-                        return await File.ReadAllTextAsync(fallbackPath);
+                        return await File.ReadAllTextAsync(fallbackPath).ConfigureAwait(false);
                     }
                 }
 

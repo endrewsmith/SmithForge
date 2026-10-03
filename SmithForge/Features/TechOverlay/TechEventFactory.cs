@@ -76,5 +76,46 @@ namespace SmithForge.Features.TechOverlay
         Karma = 0
     };
 
+        /// <summary>
+        /// Событие: зрителю начислен бонус кармы (например, за донат с указанием KarmaKey).
+        /// </summary>
+        public static TechEvent KarmaBonus(Chater target, double amount, string donorName)
+            => new()
+            {
+                UserName = target.EffectiveName,
+                UserLogin = target.Login,
+                Kind = TechEventKind.KarmaGrant,
+                Text = $"получил +{amount:F0} кармы ({donorName}, спасибо за поддержку)",
+                Karma = (int)amount
+            };
+
+        /// <summary>
+        /// Событие: получен донат.
+        /// </summary>
+        public static TechEvent Donation(string userName, decimal amount, string currency, string message)
+            => new()
+            {
+                UserName = userName,
+                UserLogin = userName,
+                Kind = TechEventKind.Donation,
+                Text = string.IsNullOrWhiteSpace(message)
+                    ? $"задонатил {amount:F0} {currency}"
+                    : $"задонатил {amount:F0} {currency}: {message}",
+                Karma = 0
+            };
+        /// <summary>
+        /// Событие: зритель перевёл карму другому зрителю.
+        /// </summary>
+        public static TechEvent KarmaTransfer(Chater from, Chater to, double received, double fee)
+            => new()
+            {
+                UserName = to.EffectiveName,
+                UserLogin = to.Login,
+                Kind = TechEventKind.KarmaGrant,
+                Text = fee > 0
+                    ? $"получил карму от {from.EffectiveName} (#{from.KarmaKey}), комиссия {fee:F2}"
+                    : $"получил карму от {from.EffectiveName} (#{from.KarmaKey})",
+                Karma = received
+            };
     }
 }

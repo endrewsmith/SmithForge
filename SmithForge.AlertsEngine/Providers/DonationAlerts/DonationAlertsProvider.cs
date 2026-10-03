@@ -126,9 +126,6 @@ namespace SmithForge.AlertsEngine.Providers.DonationAlerts
             {
                 if (donation == null) return;
 
-                // ✅ Парсим additional_data → is_commission_covered
-                bool isCommissionCovered = ParseCommissionFlag(donation.AdditionalData);
-
                 var alert = new IncomingAlert
                 {
                     ProviderId = donation.Id.ToString(),
@@ -139,7 +136,7 @@ namespace SmithForge.AlertsEngine.Providers.DonationAlerts
                     Amount = donation.Amount,
                     Currency = donation.Currency ?? "RUB",
                     Timestamp = DateTime.UtcNow,
-                    IsCommissionCovered = isCommissionCovered,
+                    IsCommissionCovered = false,   // DA не передаёт флаг, оставляем false
                     DisplayText = $"{donation.Username} задонатил {donation.Amount:F2} {donation.Currency}"
                 };
 
@@ -148,36 +145,12 @@ namespace SmithForge.AlertsEngine.Providers.DonationAlerts
 
                 AlertReceived?.Invoke(this, alert);
 
-                Debug.WriteLine($"[DA Provider] ✅ Алерт: {alert.DisplayText} (комиссия покрыта: {isCommissionCovered})");
+                Debug.WriteLine($"[DA Provider] ✅ Алерт: {alert.DisplayText}");
             }
             catch (Exception ex)
             {
                 Debug.WriteLine($"[DA Provider] Ошибка обработки доната: {ex.Message}");
             }
-        }
-
-        /// <summary>
-        /// Распарсить флаг is_commission_covered из строки additional_data
-        /// </summary>
-        private static bool ParseCommissionFlag(string? additionalData)
-        {
-            if (string.IsNullOrWhiteSpace(additionalData))
-                return false;
-
-            try
-            {
-                using var doc = JsonDocument.Parse(additionalData);
-                if (doc.RootElement.TryGetProperty("is_commission_covered", out var coveredProp))
-                {
-                    return coveredProp.GetInt32() == 1;
-                }
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine($"[DA Provider] Ошибка парсинга additional_data: {ex.Message}");
-            }
-
-            return false;
         }
 
         public void Dispose()

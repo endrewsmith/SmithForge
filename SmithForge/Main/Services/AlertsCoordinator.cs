@@ -2,6 +2,7 @@
 using CommunityToolkit.Mvvm.Input;
 using SmithForge.AlertsEngine.Core.Models;
 using SmithForge.Features.StatsRotation;
+using SmithForge.Features.TechOverlay;
 using SmithForge.Main.Models;
 using System;
 using System.Diagnostics;
@@ -27,6 +28,10 @@ namespace SmithForge.Main.Services
         // ============================================================
         [ObservableProperty]
         private int _importantQueueCount = 0;
+        /// <summary>
+        /// Реальный размер очереди important-сообщений (не UI-свойство).
+        /// </summary>
+        public int QueueSize => _overlayManager.QueueSize;
 
         [ObservableProperty]
         private ImportantPlaybackMode _importantPlaybackMode = ImportantPlaybackMode.Auto;
@@ -97,6 +102,11 @@ namespace SmithForge.Main.Services
             {
                 ImportantPlaybackMode = mode;
                 Debug.WriteLine($"[AlertsCoordinator] Режим принудительно установлен: {mode}");
+
+                if (mode == ImportantPlaybackMode.Auto)
+                {
+                    _overlayManager.TryResumeAutoPlayback();
+                }
             }
         }
 
@@ -136,6 +146,12 @@ namespace SmithForge.Main.Services
 
             Debug.WriteLine($"[AlertsCoordinator] Получен алерт: [{alert.ProviderType}] {alert.DisplayText}");
 
+            // ✅ Обработка донат-бонуса по KarmaKey
+            if (alert.Type == AlertType.Donation && alert.Amount > 0)
+            {
+                HandleDonationKarmaBonus(alert);
+            }
+
             Application.Current.Dispatcher.Invoke(() =>
             {
                 _overlayManager.ShowAlert(alert);
@@ -173,6 +189,43 @@ namespace SmithForge.Main.Services
                 {
                     Debug.WriteLine($"[AlertsCoordinator] Ошибка отправки алерта в веб: {ex.Message}");
                 }
+            }
+        }
+
+        /// <summary>
+        /// Обработка доната: ищем KarmaKey в сообщении, начисляем бонус кармы,
+        /// отправляем тех-событие с указанием конкретного получателя.
+        /// </summary>
+        private void HandleDonationKarmaBonus(IncomingAlert alert)
+        {
+            try
+            {
+                if (string.IsNullOrWhiteSpace(alert.Message))
+                    return;
+
+                var target = KarmaTransferService.FindChaterByMention(alert.Message);
+                if (target == null)
+                    return;
+
+                double bonus = (double)alert.Amount;
+
+                bool success = KarmaTransferService.GrantKarma(
+                    target, bonus,
+                    reason: $"донат {alert.Amount:F0} {alert.Currency} от {alert.UserName}");
+
+                if (success)
+                {
+                    Debug.WriteLine($"[AlertsCoordinator] 💰 Бонус кармы: {target.EffectiveName} получил +{bonus:F0} за донат");
+                    TechnicalLogService.Log($"Донат-бонус: {target.EffectiveName} +{bonus:F0} (от {alert.UserName})");
+
+                    // ✅ Тех-событие: получатель + благодарность донатеру
+                    WebServerService.Instance?.SendTechnicalEvent(
+                        TechEventFactory.KarmaBonus(target, bonus, alert.UserName));
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[AlertsCoordinator] Ошибка обработки донат-бонуса: {ex.Message}");
             }
         }
 
@@ -252,5 +305,46 @@ namespace SmithForge.Main.Services
                 MessageBox.Show($"Ошибка: {ex.Message}", "Ошибка", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
+
+        public void SimulateDonation(string userName, decimal amount, string currency, string message)
+        {
+            var fakeAlert = new IncomingAlert
+            {
+                ProviderId = $"test_{Guid.NewGuid():N}",
+                ProviderType = AlertProviderType.DonationAlerts,
+                Type = AlertType.Donation,
+                UserName = userName,
+                Message = message,
+                Amount = amount,
+                Currency = currency,
+                Timestamp = DateTime.UtcNow,
+                DisplayText = $"{userName} задонатил {amount:F2} {currency}"
+            };
+
+            Debug.WriteLine($"[TEST] Симуляция доната: {fakeAlert.DisplayText}, сообщение: '{message}'");
+            OnAlertReceived(this, fakeAlert);
+        }
+        /// <summary>
+        /// ТЕСТ: сымитировать входящий донат. Удалить после отладки!
+        /// </summary>
+        //public void SimulateDonation(string userName, decimal amount, string currency, string message)
+        //{
+        //    var fakeAlert = new IncomingAlert
+        //    {
+        //        ProviderId = $"test_{Guid.NewGuid():N}",
+        //        ProviderType = AlertProviderType.DonationAlerts,
+        //        Type = AlertType.Donation,
+        //        UserName = userName,
+        //        Message = message,
+        //        Amount = amount,
+        //        Currency = currency,
+        //        Timestamp = DateTime.UtcNow,
+        //        IsCommissionCovered = false,
+        //        DisplayText = $"{userName} задонатил {amount:F2} {currency}"
+        //    };
+
+        //    Debug.WriteLine($"[TEST] Симуляция доната: {fakeAlert.DisplayText}, сообщение: '{message}'");
+        //    OnAlertReceived(this, fakeAlert);
+        //}
     }
 }

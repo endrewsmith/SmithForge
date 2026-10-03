@@ -63,16 +63,23 @@ namespace SmithForge.Main.Views
                 // Левая клавиша Ctrl (код 0xA2)
                 if (vkCode == 0xA2)
                 {
-                    Debug.WriteLine("[Hotkey] Нажат левый Ctrl");
-
                     Application.Current.Dispatcher.Invoke(() =>
                     {
-                        var settings = ConfigService.Load();
-                        if (settings.ImportantPlaybackMode == ImportantPlaybackMode.Manual)
+                        var vm = Application.Current.MainWindow?.DataContext as MainViewModel;
+                        if (vm?.Alerts == null) return;
+
+                        bool isManualMode = vm.Alerts.ImportantPlaybackMode == ImportantPlaybackMode.Manual;
+                        int queueSize = vm.Alerts.QueueSize;
+
+                        if (!isManualMode || queueSize <= 0)
                         {
-                            var vm = Application.Current.MainWindow?.DataContext as MainViewModel;
-                            vm?.Alerts?.PlayNextImportantCommand?.Execute(null);
+                            Debug.WriteLine($"[Hotkey] Ctrl проигнорирован " +
+                                            $"(Manual={isManualMode}, queue={queueSize})");
+                            return;
                         }
+
+                        Debug.WriteLine($"[Hotkey] Нажат левый Ctrl — воспроизводим следующее (queue={queueSize})");
+                        vm.Alerts.PlayNextImportantCommand?.Execute(null);
                     });
                 }
             }
@@ -187,15 +194,18 @@ namespace SmithForge.Main.Views
 
             if (msg == WM_HOTKEY && wParam.ToInt32() == HOTKEY_ID)
             {
-                var settings = ConfigService.Load();
+                var vm = DataContext as MainViewModel;
+                if (vm?.Alerts == null) return IntPtr.Zero;
 
-                if (settings.ImportantPlaybackMode == ImportantPlaybackMode.Manual)
-                {
-                    var vm = DataContext as MainViewModel;
-                    vm?.Alerts?.PlayNextImportantCommand?.Execute(null);
-                    handled = true;
-                    Debug.WriteLine("[Hotkey] Глобальная комбинация сработала!");
-                }
+                if (vm.Alerts.ImportantPlaybackMode != ImportantPlaybackMode.Manual)
+                    return IntPtr.Zero;
+
+                if (vm.Alerts.QueueSize <= 0)
+                    return IntPtr.Zero;
+
+                vm.Alerts.PlayNextImportantCommand?.Execute(null);
+                handled = true;
+                Debug.WriteLine($"[Hotkey Ctrl+Alt+F8] Воспроизводим (queue={vm.Alerts.QueueSize})");
             }
             return IntPtr.Zero;
         }
@@ -347,16 +357,29 @@ namespace SmithForge.Main.Views
         protected override void OnKeyDown(KeyEventArgs e)
         {
             base.OnKeyDown(e);
-            var settings = ConfigService.Load();
 
-            if (settings.ImportantPlaybackMode == ImportantPlaybackMode.Manual)
+            var vm = DataContext as MainViewModel;
+            if (vm?.Alerts == null) return;
+
+            // Читаем hotkey из уже загруженного объекта, не с диска
+            string hotkey = vm.Settings.ImportantPlaybackHotkey;
+
+            // Мгновенный выход, если нажата не наша горячая клавиша
+            if (e.Key.ToString() != hotkey)
+                return;
+
+            bool isManualMode = vm.Alerts.ImportantPlaybackMode == ImportantPlaybackMode.Manual;
+            int queueSize = vm.Alerts.QueueSize;
+
+            if (!isManualMode || queueSize <= 0)
             {
-                if (e.Key.ToString() == settings.ImportantPlaybackHotkey)
-                {
-                    (DataContext as MainViewModel)?.Alerts?.PlayNextImportantCommand?.Execute(null);
-                    e.Handled = true;
-                }
+                Debug.WriteLine($"[Hotkey F8] Проигнорирован (Manual={isManualMode}, queue={queueSize})");
+                return;
             }
+
+            Debug.WriteLine($"[Hotkey F8] Воспроизводим (queue={queueSize})");
+            vm.Alerts.PlayNextImportantCommand?.Execute(null);
+            e.Handled = true;
         }
 
         private void OpenChatManager_Click(object sender, RoutedEventArgs e)

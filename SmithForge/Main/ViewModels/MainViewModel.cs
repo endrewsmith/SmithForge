@@ -235,74 +235,103 @@ namespace SmithForge.ViewModels
 
         private void OnMessageProcessed(Chater chater, CommonMessage msg, List<ChatCommandInfo> commands)
         {
-            string uiMessage = msg.Message;
-
-            if (msg.Message.Length >= Settings.MinMessageLength)
+            // ✅ КРИТИЧНО: сообщения из Twitch/GoodGame приходят в фоновых потоках.
+            // Всё, что дальше — работа с WPF UI (Dashboard, Overlay, TechOverlay).
+            // Если не в UI-потоке — перенаправляем себя же через Dispatcher.Invoke.
+            if (Application.Current != null && !Application.Current.Dispatcher.CheckAccess())
             {
-                Application.Current.Dispatcher.Invoke(() =>
+                Application.Current.Dispatcher.Invoke(() => OnMessageProcessed(chater, msg, commands));
+                return;
+            }
+
+            try
+            {
+                string uiMessage = msg.Message;
+
+                if (msg.Message.Length >= Settings.MinMessageLength)
                 {
                     LastMessageText = $"[#{chater.KarmaKey}] {chater.EffectiveName}: {uiMessage}";
-                });
-            }
+                }
 
-            Debug.WriteLine($"[MainViewModel] Получено сообщение от {chater.Login}:");
-            Debug.WriteLine($"   - Оригинальный номер: {msg.MessageNumber}");
-            Debug.WriteLine($"   - Текст: {uiMessage}");
-            Debug.WriteLine($"   - IsProcessedByCommand: {msg.IsProcessedByCommand}");
+                Debug.WriteLine($"[MainViewModel] Получено сообщение от {chater.Login}:");
+                Debug.WriteLine($"   - Оригинальный номер: {msg.MessageNumber}");
+                Debug.WriteLine($"   - Текст: {uiMessage}");
+                Debug.WriteLine($"   - IsProcessedByCommand: {msg.IsProcessedByCommand}");
 
-            bool isStickerAction = commands != null && commands.Any(c =>
-                c.Name.Equals("st", StringComparison.OrdinalIgnoreCase) ||
-                c.Name.Equals("стикер", StringComparison.OrdinalIgnoreCase) ||
-                c.Name.Equals("sticker", StringComparison.OrdinalIgnoreCase));
+                bool isStickerAction = commands != null && commands.Any(c =>
+                    c.Name.Equals("st", StringComparison.OrdinalIgnoreCase) ||
+                    c.Name.Equals("стикер", StringComparison.OrdinalIgnoreCase) ||
+                    c.Name.Equals("sticker", StringComparison.OrdinalIgnoreCase));
 
-            bool isImportantAction = commands != null && commands.Any(c =>
-                c.Name.Equals("important", StringComparison.OrdinalIgnoreCase) ||
-                c.Name.Equals("важно", StringComparison.OrdinalIgnoreCase));
+                bool isImportantAction = commands != null && commands.Any(c =>
+                    c.Name.Equals("important", StringComparison.OrdinalIgnoreCase) ||
+                    c.Name.Equals("важно", StringComparison.OrdinalIgnoreCase));
 
-            string cleanUiMessage = uiMessage;
-            if (isImportantAction)
-            {
-                cleanUiMessage = uiMessage.Replace("<important>", "").Replace("</important>", "").Trim();
-            }
-
-            var overlayMsg = new CommonMessage
-            {
-                User = chater,
-                Login = chater.Login,
-                Type = msg.Type.ToLower(),
-                Message = cleanUiMessage,
-                KarmaKeyDisplay = $"#{chater.KarmaKey}",
-                MessageNumber = msg.MessageNumber,
-                IsProcessedByCommand = msg.IsProcessedByCommand,
-                DisplayTimeMs = msg.DisplayTimeMs
-            };
-
-            _dashboardService.AddMessage(chater, overlayMsg);
-
-            if (isImportantAction)
-            {
-                Debug.WriteLine($"[Important] Сообщение от {chater.Login}");
-                Task.Run(async () =>
+                string cleanUiMessage = uiMessage;
+                if (isImportantAction)
                 {
-                    await Task.Delay(200);
-                    _overlayManager.AddImportantMessage(chater, overlayMsg);
-                });
-            }
-            else if (isStickerAction)
-            {
-                Debug.WriteLine($"[Stickers] Стикер от {chater.Login}");
-                Task.Run(async () =>
-                {
-                    await Task.Delay(200);
-                    _overlayManager.AddStickerMessage(chater, overlayMsg);
-                });
-            }
-            else
-            {
-                _overlayManager.AddMessage(chater, overlayMsg);
-            }
+                    cleanUiMessage = uiMessage.Replace("<important>", "").Replace("</important>", "").Trim();
+                }
 
-            InfoRotation?.NotifyUserActivity();
+                var overlayMsg = new CommonMessage
+                {
+                    User = chater,
+                    Login = chater.Login,
+                    Type = msg.Type.ToLower(),
+                    Message = cleanUiMessage,
+                    KarmaKeyDisplay = $"#{chater.KarmaKey}",
+                    MessageNumber = msg.MessageNumber,
+                    IsProcessedByCommand = msg.IsProcessedByCommand,
+                    DisplayTimeMs = msg.DisplayTimeMs
+                };
+
+                _dashboardService.AddMessage(chater, overlayMsg);
+
+                if (isImportantAction)
+                {
+                    Debug.WriteLine($"[Important] Сообщение от {chater.Login}");
+
+                    // ✅ УБРАЛИ Task.Run — мы уже в UI-потоке.
+                    // Задержку делаем через DispatcherTimer, чтобы не уходить в фон.
+                    var timer = new System.Windows.Threading.DispatcherTimer
+                    {
+                        Interval = TimeSpan.FromMilliseconds(200)
+                    };
+                    timer.Tick += (s, e) =>
+                    {
+                        timer.Stop();
+                        _overlayManager.AddImportantMessage(chater, overlayMsg);
+                    };
+                    timer.Start();
+                }
+                else if (isStickerAction)
+                {
+                    Debug.WriteLine($"[Stickers] Стикер от {chater.Login}");
+
+                    // ✅ То же самое для стикера
+                    var timer = new System.Windows.Threading.DispatcherTimer
+                    {
+                        Interval = TimeSpan.FromMilliseconds(200)
+                    };
+                    timer.Tick += (s, e) =>
+                    {
+                        timer.Stop();
+                        _overlayManager.AddStickerMessage(chater, overlayMsg);
+                    };
+                    timer.Start();
+                }
+                else
+                {
+                    _overlayManager.AddMessage(chater, overlayMsg);
+                }
+
+                InfoRotation?.NotifyUserActivity();
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[MainViewModel] Ошибка OnMessageProcessed: {ex.Message}");
+                Debug.WriteLine($"[MainViewModel] StackTrace: {ex.StackTrace}");
+            }
         }
 
         [RelayCommand(CanExecute = nameof(CanStart))]
@@ -516,6 +545,17 @@ namespace SmithForge.ViewModels
                 MessageBox.Show($"Не удалось открыть браузер: {ex.Message}", "Ошибка",
                                 MessageBoxButton.OK, MessageBoxImage.Warning);
             }
+        }
+
+        // В MainViewModel
+        [RelayCommand]
+        private void TestDonation()
+        {
+            Alerts?.SimulateDonation(
+                userName: "Тестер",
+                amount: 100,
+                currency: "RUB",
+                message: "Вася, лови #1 за стрим!");
         }
     }
 }

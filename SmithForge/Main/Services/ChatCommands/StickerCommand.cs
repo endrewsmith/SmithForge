@@ -20,25 +20,49 @@ namespace SmithForge.Main.Services.ChatCommands
             Debug.WriteLine($"[StickerCommand] НАЧАЛО - Аргументы: {string.Join(", ", info.Arguments)}");
             Debug.WriteLine($"[StickerCommand] Исходный текст: '{msg.Message}'");
 
-            int packId = 1;
-            string stickerIdStr = "1";
+            // ✅ Читаем аргументы как строки (могут быть "random" или число)
+            string packIdStr = info.Arguments.Count > 0 ? info.Arguments[0] : "1";
+            string stickerIdStr = info.Arguments.Count > 1 ? info.Arguments[1] : "1";
 
-            // ✅ Парсим пак (только число)
-            if (info.Arguments.Count > 0 && int.TryParse(info.Arguments[0], out int p))
+            int packId;
+            var random = new Random();
+
+            // ✅ ОБРАБОТКА "random" ДЛЯ ПАКА
+            if (packIdStr.Equals("random", StringComparison.OrdinalIgnoreCase))
+            {
+                var allPacks = StickerManager.GetAllPacks();
+
+                if (allPacks == null || allPacks.Count == 0)
+                {
+                    msg.Message = "❌ Нет доступных паков со стикерами";
+                    msg.IsProcessedByCommand = true;
+                    msg.ShouldChargeForCommand = false;
+                    Debug.WriteLine("[StickerCommand] Нет паков");
+                    return;
+                }
+
+                var randomPack = allPacks[random.Next(allPacks.Count)];
+                packId = randomPack.Id;
+
+                Debug.WriteLine($"[StickerCommand] 🎲 Рандомный пак: #{packId} ({randomPack.FolderName})");
+            }
+            else if (int.TryParse(packIdStr, out int p))
             {
                 packId = p;
             }
-
-            // ✅ Парсим стикер (число или random)
-            if (info.Arguments.Count > 1)
+            else
             {
-                stickerIdStr = info.Arguments[1];
+                msg.Message = $"❌ Неверный номер пака: '{packIdStr}'";
+                msg.IsProcessedByCommand = true;
+                msg.ShouldChargeForCommand = false;
+                Debug.WriteLine($"[StickerCommand] Неверный номер пака: {packIdStr}");
+                return;
             }
 
             string stickerPath = null;
             int finalStickerId = 1;
 
-            // ✅ ОБРАБОТКА "random" — случайный стикер из пака
+            // ✅ ОБРАБОТКА "random" ДЛЯ СТИКЕРА
             if (stickerIdStr.Equals("random", StringComparison.OrdinalIgnoreCase))
             {
                 var pack = StickerManager.GetPack(packId);
@@ -51,7 +75,6 @@ namespace SmithForge.Main.Services.ChatCommands
                     return;
                 }
 
-                var random = new Random();
                 int randomIndex = random.Next(pack.StickerFiles.Count);
                 stickerPath = pack.StickerFiles[randomIndex];
                 finalStickerId = randomIndex + 1;

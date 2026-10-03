@@ -202,7 +202,7 @@ namespace SmithForge.Main.Services.ChatCommands
             // ✅ Событие в технический оверлей
             int actualKarma = GetCostForRank(caller.Rank);
             WebServerService.Instance?.SendTechnicalEvent(
-                TechEventFactory.Avatar(caller, "YouTube", actualKarma));
+                TechEventFactory.Avatar(caller, "YouTube", -actualKarma));
         }
 
         private async Task LoadTwitchAvatar(string username, CommonMessage msg, Chater caller, bool forceUpdate = false)

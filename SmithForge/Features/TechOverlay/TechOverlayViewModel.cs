@@ -56,7 +56,8 @@ namespace SmithForge.Features.TechOverlay
             TechEventKind.Dislike => "👎",
             TechEventKind.Info => "📖",
             TechEventKind.Help => "❓",
-            TechEventKind.KarmaGrant => "🎁",      // ← НОВОЕ
+            TechEventKind.KarmaGrant => "🎁",
+            TechEventKind.Donation => "💰",
             _ => "⚙️"
         };
     }
@@ -72,10 +73,12 @@ namespace SmithForge.Features.TechOverlay
         public DateTime Timestamp { get; set; }
 
         // ✅ НОВОЕ
-        public int Karma { get; set; }
+        public double Karma { get; set; }
 
         // Удобные для XAML свойства
-        public string KarmaDisplay => Karma > 0 ? $"-{Karma} ⚡" : "";
+        public string KarmaDisplay => Karma != 0
+            ? (Karma > 0 ? $"+{Karma:F2} ⚡" : $"{Karma:F2} ⚡")
+            : "";
         public string TimeDisplay => Timestamp.ToString("HH:mm:ss");
         public bool HasKarma => Karma > 0;
     }

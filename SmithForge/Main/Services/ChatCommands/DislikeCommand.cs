@@ -97,7 +97,7 @@ namespace SmithForge.Main.Services.ChatCommands
                 // ✅ Событие в технический оверлей
                 int actualKarma = GetCostForRank(chater.Rank);
                 WebServerService.Instance?.SendTechnicalEvent(
-                    TechEventFactory.Dislike(chater, messageNumber, actualKarma));
+                    TechEventFactory.Dislike(chater, messageNumber, -actualKarma));
             }
             catch (Exception ex)
             {

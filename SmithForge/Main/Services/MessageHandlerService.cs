@@ -143,8 +143,21 @@ namespace SmithForge.Main.Services
 
                     if (!string.IsNullOrWhiteSpace(cleanUiMessage))
                     {
-                        Debug.WriteLine($"[Voice] 🎙️ Прямой вызов SayAsync('{cleanUiMessage}')");
-                        Task.Run(() => VoiceService.SayAsync(cleanUiMessage));
+                        Debug.WriteLine($"[Voice] 🎙️ Ставим в очередь important-оверлея: '{cleanUiMessage}'");
+
+                        var voiceMsg = new CommonMessage
+                        {
+                            User = chater,
+                            Login = chater.Login,
+                            Type = msg.Type.ToLower(),
+                            Message = cleanUiMessage,
+                            KarmaKeyDisplay = $"#{chater.KarmaKey}",
+                            MessageNumber = msg.MessageNumber,
+                            IsProcessedByCommand = true,
+                            DisplayTimeMs = msg.DisplayTimeMs
+                        };
+
+                        _overlayManager.AddImportantMessage(chater, voiceMsg);
                     }
                     else
                     {

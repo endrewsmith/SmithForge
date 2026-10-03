@@ -885,65 +885,65 @@
         <!-- ═══════════════════════════════════════════════════════════ -->
         <!-- РОТАЦИЯ СТАТИСТИКИ (ТОПЫ) В ОВЕРЛЕЕ АЛЕРТОВ               -->
         <!-- ═══════════════════════════════════════════════════════════ -->
-        <Border Grid.Row="6" Background="#F3E5F5" BorderBrush="#CE93D8" BorderThickness="0,1,0,1" Padding="10" Margin="0,5,0,0">
-            <StackPanel>
+            <Border Grid.Row="6" Background="#F3E5F5" BorderBrush="#CE93D8" BorderThickness="0,1,0,1" Padding="10" Margin="0,5,0,0">
+                <StackPanel>
 
-                <!-- Заголовок + статус + таймер -->
-                <Grid Margin="0,0,0,8">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="Auto"/>
-                        <ColumnDefinition Width="*"/>
-                        <ColumnDefinition Width="Auto"/>
-                    </Grid.ColumnDefinitions>
+                    <!-- Заголовок + статус + таймер -->
+                    <Grid Margin="0,0,0,8">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
 
-                    <TextBlock Grid.Column="0"
+                        <TextBlock Grid.Column="0"
                        Text="📊 Статистика (топы)"
                        FontSize="14" FontWeight="Bold" Foreground="#6A1B9A"/>
 
-                    <TextBlock Grid.Column="1"
+                        <TextBlock Grid.Column="1"
                        Text="{Binding Stats.Status}"
                        FontSize="11"
                        Foreground="#888"
                        VerticalAlignment="Center"
                        Margin="10,0,0,0"/>
 
-                    <Border Grid.Column="2"
+                        <Border Grid.Column="2"
                     Background="#FFF9C4"
                     BorderBrush="#FBC02D"
                     BorderThickness="1"
                     CornerRadius="4"
                     Padding="8,2">
-                        <StackPanel Orientation="Horizontal">
-                            <TextBlock Text="⏱ " FontSize="11" VerticalAlignment="Center"/>
-                            <TextBlock Text="{Binding Stats.CountdownText}"
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="⏱ " FontSize="11" VerticalAlignment="Center"/>
+                                <TextBlock Text="{Binding Stats.CountdownText}"
                                FontSize="14"
                                FontWeight="Bold"
                                Foreground="#F57F17"
                                VerticalAlignment="Center"/>
-                        </StackPanel>
-                    </Border>
-                </Grid>
+                            </StackPanel>
+                        </Border>
+                    </Grid>
 
-                <!-- Галка включения -->
-                <CheckBox Content="Включить ротацию статистики в оверлее алертов"
+                    <!-- Галка включения -->
+                    <CheckBox Content="Включить ротацию статистики в оверлее алертов"
                   IsChecked="{Binding Stats.IsEnabled}"
                   FontWeight="SemiBold"
                   Margin="0,0,0,8"/>
 
-                <!-- Слайдер интервала тишины -->
-                <Grid Margin="0,0,0,8">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="Auto"/>
-                        <ColumnDefinition Width="*"/>
-                        <ColumnDefinition Width="Auto"/>
-                    </Grid.ColumnDefinitions>
+                    <!-- Слайдер интервала тишины -->
+                    <Grid Margin="0,0,0,8">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
 
-                    <TextBlock Grid.Column="0"
+                        <TextBlock Grid.Column="0"
                        Text="⏱ Тишина (сек):"
                        VerticalAlignment="Center"
                        Margin="0,0,10,0"/>
 
-                    <Slider Grid.Column="1"
+                        <Slider Grid.Column="1"
                     Minimum="5"
                     Maximum="300"
                     Value="{Binding Stats.SilenceInterval, UpdateSourceTrigger=PropertyChanged}"
@@ -951,27 +951,27 @@
                     IsSnapToTickEnabled="True"
                     VerticalAlignment="Center"/>
 
-                    <TextBlock Grid.Column="2"
+                        <TextBlock Grid.Column="2"
                        Text="{Binding Stats.SilenceInterval, StringFormat={}{0}с}"
                        Width="40"
                        TextAlignment="Right"
                        VerticalAlignment="Center"
                        Margin="10,0,0,0"/>
-                </Grid>
+                    </Grid>
 
-                <!-- Прогресс-бар до следующего показа -->
-                <Grid Margin="0,0,0,8">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="Auto"/>
-                        <ColumnDefinition Width="*"/>
-                    </Grid.ColumnDefinitions>
+                    <!-- Прогресс-бар до следующего показа -->
+                    <Grid Margin="0,0,0,8">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
 
-                    <TextBlock Grid.Column="0"
+                        <TextBlock Grid.Column="0"
                        Text="⏳ До показа:"
                        VerticalAlignment="Center"
                        Margin="0,0,10,0"/>
 
-                    <ProgressBar Grid.Column="1"
+                        <ProgressBar Grid.Column="1"
                          Minimum="0"
                          Maximum="1"
                          Value="{Binding Stats.CountdownProgress, Mode=OneWay}"
@@ -979,10 +979,10 @@
                          VerticalAlignment="Center"
                          Background="#EDE7F6"
                          Foreground="#7E57C2"/>
-                </Grid>
+                    </Grid>
 
-                <!-- Активные правила -->
-                <TextBlock Text="Активные правила:"
+                    <!-- Активные правила -->
+                    <TextBlock Text="Активные правила:"
                    FontSize="12"
                    FontWeight="SemiBold"
                    Foreground="#5E35B1"
@@ -1001,9 +1001,7 @@
                     </ItemsControl>
 
                 </StackPanel>
-        </Border>
-       
-
-    </Grid>
+            </Border>
+        </Grid>
     </ScrollViewer>
 </Window>

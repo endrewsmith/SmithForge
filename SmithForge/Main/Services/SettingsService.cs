@@ -60,6 +60,13 @@ public class SettingsService
         _settings.ImportantPlaybackMode = value;
         ConfigService.Save(_settings);
         Debug.WriteLine($"[Settings] Режим: {(value == ImportantPlaybackMode.Auto ? "АВТО" : "РУЧНОЙ")}");
+
+        // ✅ Если переключились на Auto — попробуем возобновить очередь
+        if (value == ImportantPlaybackMode.Auto)
+        {
+            _overlayManager.TryResumeAutoPlayback();
+        }
+
         ImportantPlaybackModeChanged?.Invoke(value);
     }
 
@@ -239,4 +246,5 @@ public class SettingsService
         VoiceService.SetVoiceRate(_settings.VoiceRate);
         Debug.WriteLine($"[Settings] Скорость голоса: {_settings.VoiceRate}");
     }
+
 }

@@ -147,7 +147,6 @@ namespace SmithForge.AlertsEngine.Providers.DonationAlerts
 
         private void ProcessMessage(string jsonString, CancellationToken cancellationToken)
         {
-
             Log($"📥 Ответ сервера (длина {jsonString.Length}): {SafePreview(jsonString, 80)}");
 
             try
@@ -193,6 +192,28 @@ namespace SmithForge.AlertsEngine.Providers.DonationAlerts
                     dataProp.TryGetProperty("data", out var donationProp))
                 {
                     Log($"💰 Получен донат!");
+
+                    // ✅ ВЫВОДИМ ВЕСЬ JSON ДОНАТА ЦЕЛИКОМ
+                    Log("═══════════ [DA RAW] ПОЛНЫЙ JSON ДОНАТА ═══════════");
+                    Log(donationProp.GetRawText());
+                    Log("════════════════════════════════════════════════════");
+
+                    // ✅ Пофайловый дамп всех полей верхнего уровня
+                    try
+                    {
+                        Log("[DA RAW] Поля верхнего уровня:");
+                        foreach (var prop in donationProp.EnumerateObject())
+                        {
+                            string valuePreview = prop.Value.ValueKind == JsonValueKind.String
+                                ? $"\"{prop.Value.GetString()}\""
+                                : prop.Value.GetRawText();
+                            Log($"   '{prop.Name}' ({prop.Value.ValueKind}) = {valuePreview}");
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Log($"[DA RAW] Ошибка дампа полей: {ex.Message}");
+                    }
 
                     var donation = JsonSerializer.Deserialize<DonationAlertsMessage>(donationProp.GetRawText());
                     if (donation != null)

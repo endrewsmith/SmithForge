@@ -102,7 +102,7 @@ namespace SmithForge.Main.Services.ChatCommands
                 // ✅ Событие в технический оверлей
                 int actualKarma = GetCostForRank(chater.Rank);
                 WebServerService.Instance?.SendTechnicalEvent(
-                    TechEventFactory.Like(chater, messageNumber, actualKarma));
+                    TechEventFactory.Like(chater, messageNumber, -actualKarma));
             }
             catch (Exception ex)
             {

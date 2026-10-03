@@ -20,7 +20,7 @@
         }
 
         /* ============================================================
-           БЛОК АЛЕРТОВ (ДОНАТЫ) — плашка 800×130 сверху
+           БЛОК АЛЕРТОВ (ДОНАТЫ) — плашка 800×120 сверху
            ============================================================ */
         #alert-container {
             position: fixed;
@@ -28,7 +28,7 @@
             left: 50%;
             width: 800px;
             max-width: 100vw;
-            height: 130px;
+            height: 120px;
             transform: translateX(-50%) translateY(-100%);
             opacity: 0;
             pointer-events: none;
@@ -48,7 +48,7 @@
         .alert-box {
             width: 100%;
             height: 100%;
-            padding: 14px 30px;
+            padding: 10px 26px 10px 26px;
             border-radius: 0 0 16px 16px;
             border: 2px solid;
             border-top: none;
@@ -60,40 +60,32 @@
             overflow: hidden;
         }
 
-            /* DonationAlerts — золото */
             .alert-box.provider-donationalerts {
                 background: rgba(13, 13, 26, 0.92);
                 border-color: #FFD700;
                 box-shadow: 0 6px 40px rgba(255, 215, 0, 0.5), 0 0 80px rgba(255, 215, 0, 0.25);
             }
 
-                .alert-box.provider-donationalerts .provider-label {
-                    color: #FFD700;
-                }
-
+                .alert-box.provider-donationalerts .provider-label,
                 .alert-box.provider-donationalerts .user-name {
                     color: #FFD700;
                 }
 
-            /* DonationPay — синий */
             .alert-box.provider-donationpay {
                 background: rgba(13, 26, 46, 0.92);
                 border-color: #00BFFF;
                 box-shadow: 0 6px 40px rgba(0, 191, 255, 0.5), 0 0 80px rgba(0, 191, 255, 0.25);
             }
 
-                .alert-box.provider-donationpay .provider-label {
-                    color: #00BFFF;
-                }
-
+                .alert-box.provider-donationpay .provider-label,
                 .alert-box.provider-donationpay .user-name {
                     color: #00BFFF;
                 }
 
         .provider-label {
-            font-size: 12px;
+            font-size: 8px;
             opacity: 0.7;
-            margin-bottom: 4px;
+            margin-bottom: 2px;
             letter-spacing: 2px;
             text-transform: uppercase;
         }
@@ -103,11 +95,11 @@
             align-items: center;
             justify-content: center;
             gap: 12px;
-            margin-bottom: 4px;
+            margin-bottom: 6px;
         }
 
         .user-name {
-            font-size: 28px;
+            font-size: 22px;
             font-weight: bold;
             text-shadow: 0 0 20px currentColor;
             white-space: nowrap;
@@ -118,11 +110,11 @@
 
         .separator {
             color: #555;
-            font-size: 28px;
+            font-size: 22px;
         }
 
         .amount {
-            font-size: 28px;
+            font-size: 22px;
             font-weight: bold;
             color: #FFFFFF;
             text-shadow: 0 0 15px rgba(255,255,255,0.5);
@@ -130,21 +122,48 @@
         }
 
         .message {
-            font-size: 15px;
-            color: #DDD;
-            line-height: 1.3;
-            max-width: 720px;
-            margin: 0 auto;
+            font-size: 18px;
+            color: #E8E8E8;
+            line-height: 1.2;
+            max-width: 740px;
+            margin: 0 auto 2px auto;
             word-wrap: break-word;
             display: -webkit-box;
             -webkit-line-clamp: 2;
             -webkit-box-orient: vertical;
             overflow: hidden;
+            text-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
         }
 
             .message:empty {
                 display: none;
             }
+
+        /* Благодарность по сумме доната */
+        .thank-you {
+            font-size: 12px;
+            font-weight: 600;
+            color: #FFD700;
+            text-shadow: 0 0 10px rgba(255, 215, 0, 0.6), 0 0 20px rgba(255, 215, 0, 0.3);
+            letter-spacing: 0.5px;
+            margin-top: 1px;
+            display: none;
+            animation: thankYouPulse 2s ease-in-out infinite;
+        }
+
+            .thank-you.visible {
+                display: block;
+            }
+
+        @keyframes thankYouPulse {
+            0%, 100% {
+                opacity: 1;
+            }
+
+            50% {
+                opacity: 0.7;
+            }
+        }
 
         /* ============================================================
            БЛОК СТАТИСТИКИ — плашка 800×130 сверху
@@ -177,7 +196,6 @@
                 transform: translateX(-50%) translateY(0);
             }
 
-        /* ─── Заголовок ─────────────────────────────────────── */
         .stats-title {
             flex: 0 0 auto;
             font-size: 15px;
@@ -190,7 +208,6 @@
             text-overflow: ellipsis;
         }
 
-        /* ─── Ряд карточек ──────────────────────────────────── */
         .stats-list {
             flex: 1 1 auto;
             display: flex;
@@ -199,7 +216,6 @@
             min-height: 0;
         }
 
-        /* ─── Одна карточка ─────────────────────────────────── */
         .stats-card {
             flex: 1 1 0;
             min-width: 0;
@@ -214,7 +230,6 @@
             overflow: hidden;
         }
 
-            /* ─── Квадратик аватарки ───────────────────────────── */
             .stats-card .avatar {
                 flex: 0 0 auto;
                 width: 48px;
@@ -224,7 +239,6 @@
                 background: #333;
             }
 
-            /* ─── Текстовая часть карточки ─────────────────────── */
             .stats-card .info {
                 flex: 1 1 auto;
                 min-width: 0;
@@ -254,7 +268,6 @@
                 line-height: 1.1;
             }
 
-            /* ─── Цвета места (1-е, 2-е, 3-е) ──────────────────── */
             .stats-card.rank-1 {
                 border-color: rgba(255, 215, 0, 0.55);
                 box-shadow: 0 0 12px rgba(255, 215, 0, 0.25) inset;
@@ -295,6 +308,7 @@
                 <span class="amount" id="amount"></span>
             </div>
             <div class="message" id="message"></div>
+            <div class="thank-you" id="thank-you"></div>
         </div>
     </div>
 
@@ -316,17 +330,36 @@
         const userNameEl = document.getElementById('user-name');
         const amountEl = document.getElementById('amount');
         const messageEl = document.getElementById('message');
+        const thankYouEl = document.getElementById('thank-you');
 
-        let es = null;                  // EventSource для алертов
+        let es = null;
         let queue = [];
         let isShowing = false;
-        let isShowingAlert = false;     // идёт ли сейчас показ доната
+        let isShowingAlert = false;
 
         let hideTimer = null;
         let hidingEndTimer = null;
         let nextAlertTimer = null;
 
         const MAX_QUEUE = 20;
+
+        // ✅ Возвращает текст благодарности по сумме доната
+        function getThankYouText(alert) {
+        let amount = 0;
+        if (alert.displayAmount) {
+        const match = alert.displayAmount.match(/[\d.,]+/);
+        if (match) {
+        amount = parseFloat(match[0].replace(',', '.'));
+        }
+        }
+
+        if (!amount || amount <= 0) return '';
+
+        if (amount >= 1000) return '👑 Легендарная поддержка! Спасибо!';
+        if (amount >= 500)  return '🔥 Огромное спасибо за поддержку!';
+        if (amount >= 100)  return '💛 Большое спасибо за поддержку!';
+        return '💛 Спасибо за поддержку!';
+        }
 
         function connect() {
         if (es) {
@@ -400,7 +433,6 @@
         isShowing = true;
         isShowingAlert = true;
 
-        // ✅ Донат всегда главнее — прячем статистику
         hideStatsImmediate();
 
         const alert = queue.shift();
@@ -419,6 +451,16 @@
         } else {
         messageEl.textContent = '';
         messageEl.style.display = 'none';
+        }
+
+        // ✅ Показ/скрытие благодарности по сумме
+        const thanksText = getThankYouText(alert);
+        if (thanksText) {
+        thankYouEl.textContent = thanksText;
+        thankYouEl.classList.add('visible');
+        } else {
+        thankYouEl.textContent = '';
+        thankYouEl.classList.remove('visible');
         }
 
         alertContainer.className = 'visible';
@@ -440,10 +482,8 @@
         nextAlertTimer = setTimeout(() => {
         nextAlertTimer = null;
 
-        // ✅ Донат закончился
         isShowingAlert = false;
 
-        // ✅ Если во время доната пришла статистика — показываем её
         if (statsPending) {
         const pending = statsPending;
         statsPending = null;
@@ -468,7 +508,7 @@
 
         let statsSource = null;
         let statsHideTimer = null;
-        let statsPending = null;    // отложенная статистика (одна ячейка)
+        let statsPending = null;
 
         function clearStatsHideTimer() {
         if (statsHideTimer) {
@@ -477,13 +517,11 @@
         }
         }
 
-        // Решение: показать сейчас или отложить до конца доната
         function showStats(data) {
         if (!data || !Array.isArray(data.entries) || data.entries.length === 0) {
         return;
         }
 
-        // ✅ Если идёт донат — откладываем
         if (isShowingAlert) {
         statsPending = data;
         console.log('[Stats] отложена, идёт донат');
@@ -493,7 +531,6 @@
         renderStats(data);
         }
 
-        // Собственно отрисовка карточек
         function renderStats(data) {
         statsTitle.textContent = data.title || '';
         statsList.innerHTML = '';
@@ -502,7 +539,6 @@
         const card = document.createElement('div');
         card.className = 'stats-card rank-' + e.rank;
 
-        // Аватарка
         if (e.avatarUrl) {
         const img = document.createElement('img');
         img.className = 'avatar';
@@ -511,13 +547,11 @@
         img.onerror = function () { this.style.visibility = 'hidden'; };
         card.appendChild(img);
         } else {
-        // Заглушка, чтобы карточка не «прыгала» по ширине
         const stub = document.createElement('div');
         stub.className = 'avatar';
         card.appendChild(stub);
         }
 
-        // Текстовый блок
         const info = document.createElement('div');
         info.className = 'info';
 
@@ -551,7 +585,6 @@
         statsBlock.classList.remove('visible');
         }
 
-        // Мгновенное скрытие — используется, когда пришёл донат
         function hideStatsImmediate() {
         clearStatsHideTimer();
         statsBlock.classList.remove('visible');

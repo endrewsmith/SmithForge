@@ -43,9 +43,9 @@ namespace SmithForge.Features.ImportantOverlay
             // Сразу создаем окно "в тени", как в работающем сервисе стикеров
             CreateOverlay();
         }
+
         private void CreateOverlay()
         {
-
             if (_window == null)
             {
                 _viewModel = new ImportantOverlayViewModel();
@@ -53,20 +53,15 @@ namespace SmithForge.Features.ImportantOverlay
                 _window = new ImportantOverlayWindow
                 {
                     DataContext = _viewModel,
-                    Visibility = Visibility.Collapsed  // ← НЕ Show()/Hide(), просто Collapsed
+                    Visibility = Visibility.Collapsed
                 };
                 _window.Show();
                 _window.Hide();
 
-                //_isInitialized = true;
-                //// Убираем _window.Show(); _window.Hide();
-                //// Просто создаём окно, но не показываем
-                //_window.Visibility = Visibility.Collapsed;
-
                 Debug.WriteLine("[ImportantService] Окно создано (скрыто)");
             }
-
         }
+
         public void Initialize(double top, double left, double width, double height, bool isSetupMode)
         {
             if (_window == null) return;
@@ -109,6 +104,7 @@ namespace SmithForge.Features.ImportantOverlay
                 _isInitialized = true;
             });
         }
+
         public void SetSetupMode(bool isSetupMode)
         {
             if (_window == null || _viewModel == null) return;
@@ -121,7 +117,9 @@ namespace SmithForge.Features.ImportantOverlay
             _currentMode = mode;
             _viewModel?.SetMode(mode);
         }
-        private bool _isAutoSwitchingEnabled = false;
+
+        // ✅ По умолчанию true, чтобы без явной установки всё работало как раньше
+        private bool _isAutoSwitchingEnabled = true;
 
         public bool IsAutoSwitchingEnabled
         {
@@ -132,6 +130,7 @@ namespace SmithForge.Features.ImportantOverlay
                 Debug.WriteLine($"[ImportantService] IsAutoSwitchingEnabled = {value}");
             }
         }
+
         public void SetHidden(bool isHidden)
         {
             if (_window == null) return;
@@ -140,11 +139,9 @@ namespace SmithForge.Features.ImportantOverlay
 
             if (isHidden && !_isHidden)
             {
-                // Сохраняем позицию
                 _savedTop = _window.Top;
                 _savedLeft = _window.Left;
 
-                // Убираем окно за экран
                 _window.Top = 1 - _window.Height;
                 _window.Left = 1 - _window.Width;
 
@@ -153,12 +150,10 @@ namespace SmithForge.Features.ImportantOverlay
             }
             else if (!isHidden && _isHidden)
             {
-                // Возвращаем на сохраненную позицию
                 _window.Top = _savedTop;
                 _window.Left = _savedLeft;
                 _isHidden = false;
 
-                // ✅ ПОКАЗЫВАЕМ ОКНО (если оно должно быть видимым)
                 if (_settings.ImportantOverlayVisible)
                 {
                     _window.Visibility = Visibility.Visible;
@@ -167,6 +162,7 @@ namespace SmithForge.Features.ImportantOverlay
                 Debug.WriteLine($"[ImportantService] Окно возвращено на позицию: Top={_savedTop}, Left={_savedLeft}");
             }
         }
+
         public void ShowImportantMessage(Chater chater, CommonMessage message)
         {
             string importantText = $"{chater.EffectiveName} пишет: {message.Message}";
@@ -205,28 +201,26 @@ namespace SmithForge.Features.ImportantOverlay
 
             if (!_isAutoSwitchingEnabled)
             {
+                // Авто-переключение выключено — просто читаем в текущем режиме
                 shouldPlay = settings.ImportantPlaybackMode == ImportantPlaybackMode.Auto && !_isAutoPlaying;
                 Debug.WriteLine($"[ImportantOverlay] Режим чтения ВЫКЛ, shouldPlay={shouldPlay}");
             }
             else
             {
-                // Если уже идет воспроизведение И пришло новое сообщение
+                // Авто-переключение включено
                 if (_isPlaying && newCount > 1)
                 {
                     Debug.WriteLine("[ImportantOverlay] Идет воспроизведение, пришло новое сообщение - переключаем на ручной режим");
                     shouldPlay = false;
 
-                    // Переключаем режим на ручной
                     Application.Current.Dispatcher.BeginInvoke(new Action(() =>
                     {
                         var mainVm = Application.Current.MainWindow?.DataContext as MainViewModel;
                         mainVm?.Alerts?.SetImportantPlaybackMode(ImportantPlaybackMode.Manual);
                     }));
 
-                    // Останавливаем текущее авто-воспроизведение
                     _isAutoPlaying = false;
                 }
-                // Если очередь пуста (была 0, стало 1) - воспроизводим
                 else if (newCount == 1 && !_isPlaying)
                 {
                     shouldPlay = settings.ImportantPlaybackMode == ImportantPlaybackMode.Auto && !_isAutoPlaying;
@@ -249,6 +243,7 @@ namespace SmithForge.Features.ImportantOverlay
                 Debug.WriteLine("[ImportantOverlay] Не запускаем авто-воспроизведение");
             }
         }
+
         private async Task ProcessAutoQueueAsync()
         {
             try
@@ -260,24 +255,32 @@ namespace SmithForge.Features.ImportantOverlay
                 }
 
                 _isAutoPlaying = true;
+                Debug.WriteLine($"[ProcessAutoQueue] ▶️ СТАРТ. _isProcessing=true, _isAutoPlaying=true");
 
                 while (true)
                 {
-                    // Проверяем режим
                     var settings = ConfigService.Load();
-                    if (_isAutoSwitchingEnabled && settings.ImportantPlaybackMode != ImportantPlaybackMode.Auto)
+                    Debug.WriteLine($"[ProcessAutoQueue] 🔍 Итерация. Режим из файла: {settings.ImportantPlaybackMode}, " +
+                                    $"в очереди: {_messageQueue.Count}, _isAutoPlaying={_isAutoPlaying}");
+
+                    if (settings.ImportantPlaybackMode != ImportantPlaybackMode.Auto)
                     {
-                        Debug.WriteLine("[ProcessAutoQueue] Режим изменился на ручной, останавливаем");
+                        Debug.WriteLine("[ProcessAutoQueue] ⏹ Режим не Auto, выходим");
                         break;
                     }
 
                     (Chater chater, CommonMessage message, string text) item;
                     lock (_queueLock)
                     {
-                        if (_messageQueue.Count == 0) break;
+                        if (_messageQueue.Count == 0)
+                        {
+                            Debug.WriteLine("[ProcessAutoQueue] ⏹ Очередь пуста, выходим");
+                            break;
+                        }
                         item = _messageQueue.Peek();
                     }
 
+                    Debug.WriteLine($"[ProcessAutoQueue] 🔊 Воспроизводим: {item.text}");
                     await ShowAndSpeakAsync(item.chater, item.message, item.text);
 
                     int newCount;
@@ -285,26 +288,26 @@ namespace SmithForge.Features.ImportantOverlay
                     {
                         _messageQueue.Dequeue();
                         newCount = _messageQueue.Count;
-                        Debug.WriteLine($"[Queue] Воспроизведено. Осталось: {newCount}");
+                        Debug.WriteLine($"[ProcessAutoQueue] ✅ Воспроизведено. Осталось: {newCount}");
                     }
 
-                    // Вызываем событие обновления счетчика
                     Application.Current.Dispatcher.BeginInvoke(new Action(() =>
                     {
                         QueueCountChanged?.Invoke(this, newCount);
                     }), System.Windows.Threading.DispatcherPriority.Normal);
 
-                    // Если режим чтения включен, останавливаемся после воспроизведения одного сообщения
-                    if (_isAutoSwitchingEnabled)
+                    var currentSettings = ConfigService.Load();
+                    Debug.WriteLine($"[ProcessAutoQueue] 🔍 После воспроизведения режим: {currentSettings.ImportantPlaybackMode}");
+
+                    if (currentSettings.ImportantPlaybackMode != ImportantPlaybackMode.Auto)
                     {
-                        Debug.WriteLine("[ProcessAutoQueue] Режим чтения ВКЛ, останавливаем авто-воспроизведение после одного сообщения");
+                        Debug.WriteLine("[ProcessAutoQueue] ⏹ Режим стал Manual, выходим");
                         break;
                     }
 
-                    // Если очередь пуста, выходим
                     if (newCount == 0)
                     {
-                        Debug.WriteLine("[ProcessAutoQueue] Очередь пуста, останавливаем");
+                        Debug.WriteLine("[ProcessAutoQueue] ⏹ Очередь пуста, выходим");
                         break;
                     }
                 }
@@ -317,8 +320,10 @@ namespace SmithForge.Features.ImportantOverlay
             {
                 _isAutoPlaying = false;
                 lock (_queueLock) { _isProcessing = false; }
+                Debug.WriteLine($"[ProcessAutoQueue] ⏹ СТОП. _isProcessing=false, _isAutoPlaying=false");
             }
         }
+
         private async Task ShowAndSpeakAsync(Chater chater, CommonMessage message, string text)
         {
             try
@@ -342,7 +347,6 @@ namespace SmithForge.Features.ImportantOverlay
 
                 Debug.WriteLine("[ShowAndSpeak] Сообщение отработано");
 
-                // После воспроизведения проверяем очередь
                 int remainingCount;
                 lock (_queueLock)
                 {
@@ -351,14 +355,14 @@ namespace SmithForge.Features.ImportantOverlay
 
                 Debug.WriteLine($"[ShowAndSpeak] После воспроизведения, осталось в очереди: {remainingCount}");
 
-                // Если очередь пуста, вызываем событие для переключения режима
                 Application.Current.Dispatcher.BeginInvoke(new Action(() =>
                 {
                     QueueCountChanged?.Invoke(this, remainingCount);
                     Debug.WriteLine($"[ShowAndSpeak] QueueCountChanged вызван с count={remainingCount}");
 
                     // ✅ Принудительная синхронизация, если очередь пуста и режим ручной
-                    if (remainingCount == 0)
+                    //    (только когда авто-переключение ВКЛЮЧЕНО)
+                    if (remainingCount == 0 && _isAutoSwitchingEnabled)
                     {
                         var mainVm = Application.Current.MainWindow?.DataContext as MainViewModel;
                         if (mainVm?.Alerts != null
@@ -380,6 +384,7 @@ namespace SmithForge.Features.ImportantOverlay
                 _isPlaying = false;
             }
         }
+
         public async Task PlayNextFromQueueAsync()
         {
             if (_isPlayingManual)
@@ -396,21 +401,68 @@ namespace SmithForge.Features.ImportantOverlay
                     Debug.WriteLine("[ManualQueue] Очередь пуста");
                     return;
                 }
-                item = _messageQueue.Dequeue();
+                item = _messageQueue.Peek();
             }
 
             _isPlayingManual = true;
 
             try
             {
-                QueueCountChanged?.Invoke(this, _messageQueue.Count);
+                Debug.WriteLine($"[ManualQueue] Воспроизводим: {item.text}");
                 await ShowAndSpeakAsync(item.chater, item.message, item.text);
-                Debug.WriteLine("[ManualQueue] Воспроизведение завершено");
+
+                int newCount;
+                lock (_queueLock)
+                {
+                    _messageQueue.Dequeue();
+                    newCount = _messageQueue.Count;
+                }
+                QueueCountChanged?.Invoke(this, newCount);
+
+                Debug.WriteLine($"[ManualQueue] Воспроизведение завершено, осталось {newCount}");
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[ManualQueue] Ошибка: {ex.Message}");
             }
             finally
             {
                 _isPlayingManual = false;
             }
+        }
+
+        /// <summary>
+        /// Запустить авто-воспроизведение, если режим Auto и очередь не пуста.
+        /// Вызывается при переключении Manual → Auto.
+        /// </summary>
+        public void TryResumeAutoPlayback()
+        {
+            var settings = ConfigService.Load();
+
+            if (settings.ImportantPlaybackMode != ImportantPlaybackMode.Auto)
+            {
+                Debug.WriteLine("[TryResume] Режим не Auto, выход");
+                return;
+            }
+
+            int queueCount;
+            lock (_queueLock) { queueCount = _messageQueue.Count; }
+
+            if (queueCount == 0)
+            {
+                Debug.WriteLine("[TryResume] Очередь пуста, выход");
+                return;
+            }
+
+            if (_isAutoPlaying || _isProcessing)
+            {
+                Debug.WriteLine($"[TryResume] Уже воспроизводится " +
+                                $"(auto={_isAutoPlaying}, processing={_isProcessing})");
+                return;
+            }
+
+            Debug.WriteLine($"[TryResume] ▶️ Запускаем авто-воспроизведение, в очереди {queueCount}");
+            _ = Task.Run(async () => await ProcessAutoQueueAsync());
         }
 
         public void ClearQueue()
@@ -423,13 +475,13 @@ namespace SmithForge.Features.ImportantOverlay
                 Debug.WriteLine("[Queue] Очередь очищена");
             }
 
-            // Вызываем событие в UI потоке
             Application.Current.Dispatcher.BeginInvoke(new Action(() =>
             {
                 QueueCountChanged?.Invoke(this, newCount);
                 Debug.WriteLine($"[ImportantOverlay] QueueCountChanged вызван после очистки, новый счетчик: {newCount}");
             }), System.Windows.Threading.DispatcherPriority.Normal);
         }
+
         public void SavePosition(AppSettings settings)
         {
             if (_window == null) return;

@@ -14,7 +14,8 @@ namespace SmithForge.Features.TechOverlay
         Dislike,
         Info,
         Help,
-        KarmaGrant          
+        KarmaGrant,
+        Donation
     }
 
     /// <summary>
@@ -28,6 +29,6 @@ namespace SmithForge.Features.TechOverlay
         public string Text { get; set; } = "";
         public DateTime Timestamp { get; set; } = DateTime.Now;
 
-        public int Karma { get; set; } = 0;
+        public double Karma { get; set; } = 0;
     }
 }

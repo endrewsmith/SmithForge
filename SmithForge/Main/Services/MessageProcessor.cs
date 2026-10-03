@@ -1,6 +1,8 @@
 ﻿using SmithForge.Features.InfoSystem;
 using SmithForge.Main.Models;
 using SmithForge.Main.Services.ChatCommands;
+using SmithForge.Main.Services.Shortcuts;
+using SmithForge.Main.Services.Shortcuts.Rules;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -12,6 +14,7 @@ namespace SmithForge.Main.Services
 {
     public class MessageProcessor
     {
+        private readonly ShortcutProcessor _shortcutProcessor;
         private readonly AppSettings _settings;
         private readonly StickerPageService _stickerPageService;
         private string? _currentSessionId;
@@ -70,6 +73,7 @@ namespace SmithForge.Main.Services
                 new AvatarCommand(),
                 new HiddenCommand(),
                 new VideoCommand(),
+                new KarmaCommand(),
             };
 
             foreach (var cmd in commandsList)
@@ -86,226 +90,60 @@ namespace SmithForge.Main.Services
 
             Debug.WriteLine($"[MessageProcessor] Всего команд в _commandMap: {_commandMap.Count}");
             Debug.WriteLine($"[MessageProcessor] Ключи: {string.Join(", ", _commandMap.Keys)}");
+
+            // ✅ Настраиваем процессор сокращений
+            var pagesDir = Path.Combine(
+                AppDomain.CurrentDomain.BaseDirectory,
+                "Html", "InfoPages");
+
+            _shortcutProcessor = new ShortcutProcessor();
+            _shortcutProcessor.RegisterRange(new IShortcutRule[]
+            {
+        // Порядок ВАЖЕН: сначала специфичные, потом общие
+        new KarmaTransferRule(),                          // id1:10, карма1:10
+        new StickerRandomRule(),                          // ссс
+        new StickerListRule(),                            // сс0
+        new StickerPackInfoRule(stickerPageService),      // ссN
+        new StickerConcreteRule(),                        // с2с3
+        new StickerRandomFromPackRule(),                  // с2с
+        new InfoByNumberRule(pagesDir),                   // ii1
+        new AboutPageRule(pagesDir),                      // ab4, про4
+            });
         }
 
         public event Action<Chater, CommonMessage, List<ChatCommandInfo>>? OnProcessed;
         public void SetSession(string sessionId) => _currentSessionId = sessionId;
         public string? GetSessionId() => _currentSessionId;
-
-        // ДОБАВЛЯЕМ: метод замены сокращений
         private string ReplaceShortcuts(string message)
         {
             if (string.IsNullOrWhiteSpace(message))
                 return message;
-            // ✅ ШАГ 1e: Паттерн iiN / ииN → !!info:NN_xxx (открыть страницу по номеру)
-            // ii1 → !!info:01_profile
-            // ии1 → !!info:01_profile
-            message = System.Text.RegularExpressions.Regex.Replace(
-                message,
-                @"\b[іiи]{2}(\d+)\b",
-                match =>
-                {
-                    string numStr = match.Groups[1].Value;
 
-                    if (!int.TryParse(numStr, out int pageNumber) || pageNumber <= 0)
-                    {
-                        Debug.WriteLine($"[Shortcuts] iiN: неверный номер '{numStr}'");
-                        return match.Value;
-                    }
+            // ✅ ШАГ 1: системные сокращения (id1:10, ссс, с2с3, ii1, ab4 и т.д.)
+            message = _shortcutProcessor.Process(message);
 
-                    string prefix = pageNumber.ToString("D2");  // 1 → "01"
-
-                    var pagesDir = Path.Combine(
-                        AppDomain.CurrentDomain.BaseDirectory,
-                        "Html", "InfoPages");
-
-                    if (!Directory.Exists(pagesDir))
-                    {
-                        Debug.WriteLine($"[Shortcuts] iiN: папка не найдена: {pagesDir}");
-                        return match.Value;
-                    }
-
-                    var candidates = Directory.GetFiles(pagesDir, $"{prefix}_*.html")
-                        .OrderBy(f => f)
-                        .ToArray();
-
-                    if (candidates.Length > 0)
-                    {
-                        string fileName = Path.GetFileNameWithoutExtension(candidates[0]);
-                        string replacement = $"!!info:{fileName}";
-                        Debug.WriteLine($"[Shortcuts] ПАТТЕРН (iiN/ииN)! '{match.Value}' -> '{replacement}'");
-                        return replacement;
-                    }
-
-                    Debug.WriteLine($"[Shortcuts] iiN: страница с номером {pageNumber} (префикс {prefix}_) не найдена");
-                    return match.Value;
-                },
-                System.Text.RegularExpressions.RegexOptions.IgnoreCase);
-            // ✅ ШАГ 1c: Паттерн ссс → !!info:stickers (общая страница паков)
-            // ссс → !!info:stickers
-            message = System.Text.RegularExpressions.Regex.Replace(
-                message,
-                @"\b[сc][сc][сc]\b",
-                match =>
-                {
-                    string replacement = "!!info:stickers";
-                    Debug.WriteLine($"[Shortcuts] ПАТТЕРН (справка общая)! '{match.Value}' -> '{replacement}'");
-                    return replacement;
-                },
-                System.Text.RegularExpressions.RegexOptions.IgnoreCase);
-            // ✅ ШАГ 1d: Паттерн ссN → !!info:stickers:N (конкретный пак)
-            // сс86 → !!info:stickers:86
-            // сс98 → !!info:stickers (если пак №98 не существует, открываем общий список)
-            message = System.Text.RegularExpressions.Regex.Replace(
-                message,
-                @"\b[сc][сc](\d+)\b",
-                match =>
-                {
-                    string packNumberStr = match.Groups[1].Value;
-
-                    if (!int.TryParse(packNumberStr, out int packNumber))
-                    {
-                        Debug.WriteLine($"[Shortcuts] Не удалось распарсить номер: '{packNumberStr}'");
-                        return match.Value;
-                    }
-
-                    // ✅ Проверяем, существует ли пак с таким номером
-                    string packId = _stickerPageService?.GetPackIdByNumber(packNumber);
-
-                    if (!string.IsNullOrEmpty(packId))
-                    {
-                        string replacement = $"!!info:stickers:{packNumber}";
-                        Debug.WriteLine($"[Shortcuts] ПАТТЕРН (пак #{packNumber})! '{match.Value}' -> '{replacement}'");
-                        return replacement;
-                    }
-                    else
-                    {
-                        // Пак не найден — открываем общий список паков
-                        string replacement = "!!info:stickers";
-                        Debug.WriteLine($"[Shortcuts] ПАТТЕРН (пак #{packNumber} НЕ НАЙДЕН, общая)! '{match.Value}' -> '{replacement}'");
-                        return replacement;
-                    }
-                },
-                System.Text.RegularExpressions.RegexOptions.IgnoreCase);
-            // ✅ ШАГ 1a: Паттерн сXсY → !!st:X:Y (конкретный стикер)
-            // с2с2 → !!st:2:2
-            message = System.Text.RegularExpressions.Regex.Replace(
-                message,
-                @"\b[сc](\d+)[сc](\d+)\b",
-                match =>
-                {
-                    string packNumber = match.Groups[1].Value;
-                    string stickerNumber = match.Groups[2].Value;
-                    string replacement = $"!!st:{packNumber}:{stickerNumber}";
-                    Debug.WriteLine($"[Shortcuts] ПАТТЕРН! '{match.Value}' -> '{replacement}'");
-                    return replacement;
-                },
-                System.Text.RegularExpressions.RegexOptions.IgnoreCase);
-
-            // ✅ ШАГ 1b: Паттерн сXс → !!st:X:random (рандомный стикер)
-            // с2с → !!st:2:random
-            message = System.Text.RegularExpressions.Regex.Replace(
-                message,
-                @"\b[сc](\d+)[сc]\b",
-                match =>
-                {
-                    string packNumber = match.Groups[1].Value;
-                    string replacement = $"!!st:{packNumber}:random";
-                    Debug.WriteLine($"[Shortcuts] ПАТТЕРН (рандом)! '{match.Value}' -> '{replacement}'");
-                    return replacement;
-                },
-                System.Text.RegularExpressions.RegexOptions.IgnoreCase);
-            // ✅ ШАГ 1c: Паттерн abN → !!info:about:{файл с префиксом NN_}
-            // ab4 → about/04_*.html
-            message = System.Text.RegularExpressions.Regex.Replace(
-                message,
-                @"\bab(\d+)\b",
-                match =>
-                {
-                    string numStr = match.Groups[1].Value;
-
-                    // Формируем двузначный префикс: 4 → "04"
-                    string prefix = numStr.PadLeft(2, '0');
-
-                    string aboutDir = Path.Combine(
-                        AppDomain.CurrentDomain.BaseDirectory,
-                        "Html", "InfoPages", "about");
-
-                    if (Directory.Exists(aboutDir))
-                    {
-                        // Ищем файл, начинающийся на "04_"
-                        var files = Directory.GetFiles(aboutDir, $"{prefix}_*.html");
-                        if (files.Length > 0)
-                        {
-                            string fileName = Path.GetFileNameWithoutExtension(files[0]);
-                            string replacement = $"!!info:about:{fileName}";
-                            Debug.WriteLine($"[Shortcuts] ПАТТЕРН! '{match.Value}' -> '{replacement}'");
-                            return replacement;
-                        }
-                    }
-
-                    Debug.WriteLine($"[Shortcuts] Страница ab{numStr} (префикс {prefix}_) не найдена");
-                    return "!!info:about";
-                },
-                System.Text.RegularExpressions.RegexOptions.IgnoreCase);
-            // ✅ ПАТТЕРН (русский): проN → !!info:about:{файл с префиксом NN_}
-            // про4 → about/04_*.html
-            message = System.Text.RegularExpressions.Regex.Replace(
-                message,
-                @"\b[пp][рr][оo](\d+)\b",
-                match =>
-                {
-                    string numStr = match.Groups[1].Value;
-
-                    string prefix = numStr.PadLeft(2, '0');
-
-                    string aboutDir = Path.Combine(
-                        AppDomain.CurrentDomain.BaseDirectory,
-                        "Html", "InfoPages", "about");
-
-                    if (Directory.Exists(aboutDir))
-                    {
-                        var files = Directory.GetFiles(aboutDir, $"{prefix}_*.html");
-                        if (files.Length > 0)
-                        {
-                            string fileName = Path.GetFileNameWithoutExtension(files[0]);
-                            string replacement = $"!!info:about:{fileName}";
-                            Debug.WriteLine($"[Shortcuts] ПАТТЕРН (рус)! '{match.Value}' -> '{replacement}'");
-                            return replacement;
-                        }
-                    }
-
-                    Debug.WriteLine($"[Shortcuts] Страница про{numStr} (префикс {prefix}_) не найдена");
-                    return "!!info:about";
-                },
-                System.Text.RegularExpressions.RegexOptions.IgnoreCase);
-            // ✅ ШАГ 2: Обычные сокращения из словаря
-            if (_shortcuts.Count == 0)
-                return message;
-
-            var words = message.Split(' ');
-            bool changed = false;
-
-            for (int i = 0; i < words.Length; i++)
+            // ✅ ШАГ 2: словарные сокращения из настроек (ввв → !!voice, вж → !!voice и т.д.)
+            if (_shortcuts.Count > 0)
             {
-                string word = words[i].ToLower();
-                Debug.WriteLine($"[Shortcuts] Проверяем слово: '{word}'");
+                var words = message.Split(' ');
+                bool changed = false;
 
-                if (_shortcuts.TryGetValue(word, out string? replacement))
+                for (int i = 0; i < words.Length; i++)
                 {
-                    words[i] = replacement;
-                    changed = true;
-                    Debug.WriteLine($"[Shortcuts] ЗАМЕНА! '{word}' -> '{replacement}'");
+                    string word = words[i].ToLower();
+                    if (_shortcuts.TryGetValue(word, out string? replacement))
+                    {
+                        words[i] = replacement;
+                        changed = true;
+                        Debug.WriteLine($"[Shortcuts] Словарь: '{word}' -> '{replacement}'");
+                    }
                 }
-                else
-                {
-                    Debug.WriteLine($"[Shortcuts] Слово '{word}' не найдено в словаре");
-                }
+
+                if (changed)
+                    message = string.Join(" ", words);
             }
 
-            string result = changed ? string.Join(" ", words) : message;
-            Debug.WriteLine($"[Shortcuts] Результат: '{result}'");
-            return result;
+            return message;
         }
         public void Process(CommonMessage msg)
         {
